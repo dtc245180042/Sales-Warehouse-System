@@ -1,4 +1,4 @@
-﻿# THƯ MỤC: backend/app/services/
+# THƯ MỤC: backend/app/services/
 MỤC ĐÍCH:
 - Tầng xử lý logic nghiệp vụ chính (Business Logic Layer).
 - Tính toán doanh thu, xử lý tồn kho, giao dịch chuyển kho, xác thực thông tin tài khoản.

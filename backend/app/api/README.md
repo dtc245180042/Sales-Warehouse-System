@@ -1,4 +1,4 @@
-﻿# THƯ MỤC: backend/app/api/
+# THƯ MỤC: backend/app/api/
 MỤC ĐÍCH:
 - Chứa các Router/Endpoints tiếp nhận request HTTP từ Frontend (GET, POST, PUT, DELETE).
 - Xác thực dữ liệu đầu vào bằng Schema và gọi xuống tầng Services để xử lý nghiệp vụ.

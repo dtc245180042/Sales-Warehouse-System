@@ -406,16 +406,19 @@ def seed_default_admin(db: Session) -> Dict[str, Any]:
 
 
 def seed_all(db: Session) -> Dict[str, Any]:
-    """Thực thi toàn bộ quy trình khởi tạo CSDL, quyền và vai trò mặc định."""
+    """Thực thi toàn bộ quy trình khởi tạo CSDL, quyền, vai trò mặc định và cây menu điều hướng."""
+    from app.services.menu_service import seed_menus
     perm_stats = seed_permissions(db)
     role_stats = seed_roles(db)
     mapping_stats = assign_default_permissions_to_roles(db)
     admin_stats = seed_default_admin(db)
+    menu_stats = seed_menus(db)
 
     return {
         "status": "success",
         "permissions": perm_stats,
         "roles": role_stats,
         "role_permissions": mapping_stats,
-        "default_admin": admin_stats
+        "default_admin": admin_stats,
+        "menus": menu_stats
     }

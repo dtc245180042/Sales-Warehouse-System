@@ -35,6 +35,7 @@ def run_seed():
         for role, count in result['role_permissions'].items():
             print(f"     + {role:<12}: {count} quyền")
         print(f"   - Tài khoản Admin mặc định: {result['default_admin']['username']} ({result['default_admin']['email']})")
+        print(f"   - Danh mục Menu điều hướng (Navigation): Đã khởi tạo {result['menus']['created']} menu mới, {result['menus']['updated']} cập nhật")
         print("=" * 60)
     except Exception as e:
         print(f"[LỖI] Khởi tạo dữ liệu thất bại: {e}")

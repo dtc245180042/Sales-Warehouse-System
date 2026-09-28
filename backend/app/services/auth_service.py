@@ -1,12 +1,15 @@
 import os
 import secrets
 from datetime import datetime, timedelta, timezone
+from typing import Optional
 from fastapi import BackgroundTasks, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.models.auth import User, PasswordResetToken
-from app.core.security import get_password_hash
+from app.core.security import get_password_hash, verify_password
 from app.services.email_service import send_password_reset_email
+from app.services.menu_service import get_user_navigation_menu
+from app.schemas.auth import UserClaimsResponse
 
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
 RESET_TOKEN_EXPIRE_MINUTES = int(os.getenv("RESET_PASSWORD_TOKEN_EXPIRE_MINUTES", "15"))
@@ -93,3 +96,42 @@ def reset_password_with_token(db: Session, token: str, new_password: str) -> str
 
     db.commit()
     return "Đặt lại mật khẩu thành công. Bạn có thể đăng nhập bằng mật khẩu mới."
+
+
+def authenticate_user(db: Session, username: str, password: str) -> Optional[User]:
+    """Xác thực người dùng qua username/email và mật khẩu."""
+    user = db.query(User).filter(
+        (User.username == username) | (User.email == username.lower())
+    ).first()
+    if not user:
+        return None
+    if not verify_password(password, user.hashed_password):
+        return None
+    if not user.is_active:
+        return None
+    return user
+
+
+def build_user_claims_response(user: User, db: Session) -> UserClaimsResponse:
+    """Tạo cấu trúc dữ liệu phản hồi bao gồm User profile, roles, permissions, context kho/địa bàn và cây menu tương ứng (SCRUM-301)."""
+    roles = user.get_roles_list()
+    permissions = user.get_permissions_list()
+
+    # Xác định vai trò chính để lọc cây menu
+    primary_role = roles[0] if roles else None
+    menus = get_user_navigation_menu(db=db, role_name=primary_role, permission_codes=permissions)
+
+    return UserClaimsResponse(
+        id=user.id,
+        username=user.username,
+        email=user.email,
+        full_name=user.full_name,
+        phone_number=user.phone_number,
+        is_active=user.is_active,
+        warehouse_id=user.warehouse_id,
+        warehouse_name=user.warehouse_name,
+        region=user.region,
+        roles=roles,
+        permissions=permissions,
+        navigation_menus=menus
+    )

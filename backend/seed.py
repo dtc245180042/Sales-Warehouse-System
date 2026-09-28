@@ -8,7 +8,7 @@ if sys.platform == "win32":
     except Exception:
         pass
 
-from app.core.database import engine, Base, SessionLocal
+from app.core.database import engine, init_db, SessionLocal
 from app.services.seed_service import seed_all
 import app.models  # Đảm bảo các models được nạp vào metadata
 
@@ -18,9 +18,9 @@ def run_seed():
     print(" BẮT ĐẦU KHỞI TẠO CSDL VÀ DỮ LIỆU SEED (ROLES & PERMISSIONS)")
     print("=" * 60)
 
-    # 1. Tạo các bảng nếu chưa có
+    # 1. Tạo các bảng nếu chưa có và đồng bộ cột mới
     print("-> Đang kiểm tra và tạo các bảng trong cơ sở dữ liệu...")
-    Base.metadata.create_all(bind=engine)
+    init_db()
     print("-> Đã tạo/đồng bộ các bảng thành công.")
 
     # 2. Khởi tạo dữ liệu seed
@@ -34,7 +34,10 @@ def run_seed():
         print("   - Số quyền được gán cho từng vai trò:")
         for role, count in result['role_permissions'].items():
             print(f"     + {role:<12}: {count} quyền")
-        print(f"   - Tài khoản Admin mặc định: {result['default_admin']['username']} ({result['default_admin']['email']})")
+        print("   - Tài khoản mẫu khởi tạo theo kho & địa bàn (SCRUM-301):")
+        print("     + admin        : Quản trị viên (Phạm vi: Toàn quốc - Kho Tổng)")
+        print("     + sales_hn     : Nhân viên bán hàng (Địa bàn: Hà Nội - Chi nhánh Hà Nội)")
+        print("     + warehouse_dn : Thủ kho (Địa bàn: Đà Nẵng - Kho Miền Trung)")
         print(f"   - Danh mục Menu điều hướng (Navigation): Đã khởi tạo {result['menus']['created']} menu mới, {result['menus']['updated']} cập nhật")
         print("=" * 60)
     except Exception as e:

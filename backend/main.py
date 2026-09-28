@@ -1,7 +1,7 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.core.database import engine, Base, SessionLocal
+from app.core.database import init_db, SessionLocal
 from app.api import api_router
 from app.services.seed_service import seed_all
 import app.models  # Nạp toàn bộ models vào metadata
@@ -10,7 +10,7 @@ import app.models  # Nạp toàn bộ models vào metadata
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Khởi tạo tables và seed dữ liệu mặc định khi ứng dụng khởi động
-    Base.metadata.create_all(bind=engine)
+    init_db()
     db = SessionLocal()
     try:
         seed_all(db)

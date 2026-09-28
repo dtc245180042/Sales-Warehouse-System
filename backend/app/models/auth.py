@@ -75,11 +75,29 @@ class User(Base):
     full_name = Column(String(100), nullable=True)
     phone_number = Column(String(20), nullable=True)
     is_active = Column(Boolean, default=True)
+    
+    # Thông tin phân vùng kho và địa bàn công tác
+    warehouse_id = Column(Integer, nullable=True, index=True)
+    warehouse_name = Column(String(100), nullable=True)
+    region = Column(String(100), nullable=True)
+
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 
     # Quan hệ với Role
     roles = relationship("Role", secondary=user_roles, back_populates="users")
+
+    def get_roles_list(self) -> list:
+        """Lấy danh sách mã vai trò của người dùng."""
+        return [r.name for r in self.roles]
+
+    def get_permissions_list(self) -> list:
+        """Lấy danh sách phẳng tất cả các mã quyền hạn của người dùng."""
+        perms = set()
+        for role in self.roles:
+            for p in role.permissions:
+                perms.add(p.code)
+        return sorted(list(perms))
 
     def has_permission(self, permission_code: str) -> bool:
         """Kiểm tra người dùng có quyền cụ thể hay không."""

@@ -378,31 +378,74 @@ def assign_default_permissions_to_roles(db: Session) -> Dict[str, int]:
     return role_mapping_stats
 
 
-def seed_default_admin(db: Session) -> Dict[str, Any]:
-    """Tạo tài khoản quản trị viên Admin mặc định nếu chưa tồn tại."""
-    admin_user = db.query(User).filter(User.username == "admin").first()
+def seed_default_users(db: Session) -> Dict[str, Any]:
+    """Tạo các tài khoản mẫu cho các vai trò kèm địa bàn và kho phụ trách (SCRUM-301)."""
     admin_role = db.query(Role).filter(Role.name == "ADMIN").first()
+    sales_role = db.query(Role).filter(Role.name == "SALES").first()
+    warehouse_role = db.query(Role).filter(Role.name == "WAREHOUSE").first()
 
+    created_users = []
+
+    # 1. Quản trị viên (Toàn quyền, phạm vi Toàn quốc)
+    admin_user = db.query(User).filter(User.username == "admin").first()
     if not admin_user:
         admin_user = User(
             username="admin",
             email="admin@saleswarehouse.com",
             full_name="System Administrator",
             hashed_password=get_password_hash("Admin@123456"),
+            region="Toàn quốc",
+            warehouse_name="Kho Tổng",
             is_active=True
         )
         if admin_role:
             admin_user.roles.append(admin_role)
         db.add(admin_user)
-        db.commit()
-        db.refresh(admin_user)
-        return {"created": True, "username": admin_user.username, "email": admin_user.email}
+        created_users.append("admin")
     else:
-        # Đảm bảo admin có role ADMIN
+        admin_user.region = "Toàn quốc"
+        admin_user.warehouse_name = "Kho Tổng"
         if admin_role and admin_role not in admin_user.roles:
             admin_user.roles.append(admin_role)
-            db.commit()
-        return {"created": False, "username": admin_user.username, "email": admin_user.email}
+
+    # 2. Nhân viên bán hàng chi nhánh Hà Nội
+    sales_user = db.query(User).filter(User.username == "sales_hn").first()
+    if not sales_user:
+        sales_user = User(
+            username="sales_hn",
+            email="sales_hn@saleswarehouse.com",
+            full_name="Nhân viên Bán hàng Hà Nội",
+            hashed_password=get_password_hash("Sales@123456"),
+            warehouse_id=1,
+            warehouse_name="Chi nhánh Hà Nội",
+            region="Hà Nội",
+            is_active=True
+        )
+        if sales_role:
+            sales_user.roles.append(sales_role)
+        db.add(sales_user)
+        created_users.append("sales_hn")
+
+    # 3. Thủ kho kho Miền Trung - Đà Nẵng
+    wh_user = db.query(User).filter(User.username == "warehouse_dn").first()
+    if not wh_user:
+        wh_user = User(
+            username="warehouse_dn",
+            email="warehouse_dn@saleswarehouse.com",
+            full_name="Thủ kho Miền Trung",
+            hashed_password=get_password_hash("Warehouse@123456"),
+            warehouse_id=2,
+            warehouse_name="Kho Miền Trung",
+            region="Đà Nẵng",
+            is_active=True
+        )
+        if warehouse_role:
+            wh_user.roles.append(warehouse_role)
+        db.add(wh_user)
+        created_users.append("warehouse_dn")
+
+    db.commit()
+    return {"created_users": created_users, "total_seeded": len(created_users)}
 
 
 def seed_all(db: Session) -> Dict[str, Any]:
@@ -411,7 +454,7 @@ def seed_all(db: Session) -> Dict[str, Any]:
     perm_stats = seed_permissions(db)
     role_stats = seed_roles(db)
     mapping_stats = assign_default_permissions_to_roles(db)
-    admin_stats = seed_default_admin(db)
+    user_stats = seed_default_users(db)
     menu_stats = seed_menus(db)
 
     return {
@@ -419,6 +462,6 @@ def seed_all(db: Session) -> Dict[str, Any]:
         "permissions": perm_stats,
         "roles": role_stats,
         "role_permissions": mapping_stats,
-        "default_admin": admin_stats,
+        "default_users": user_stats,
         "menus": menu_stats
     }

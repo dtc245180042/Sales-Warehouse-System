@@ -1,0 +1,264 @@
+/* Container thông tin người dùng trong Header/Navbar */
+.user-info-container {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  position: relative;
+  font-family: inherit;
+}
+
+/* User Card / Wrapper */
+.user-badge {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 12px;
+  border-radius: 12px;
+  background-color: var(--social-bg, rgba(244, 243, 236, 0.5));
+  border: 1px solid var(--border, #e5e4e7);
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.user-badge:hover {
+  border-color: var(--accent-border, rgba(170, 59, 255, 0.5));
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+/* Avatar */
+.user-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6, #d946ef);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 15px;
+  box-shadow: 0 2px 4px rgba(99, 102, 241, 0.2);
+  flex-shrink: 0;
+}
+
+/* Chi tiết văn bản */
+.user-details {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+  gap: 3px;
+}
+
+/* Hàng trên: Tên + Role Badge */
+.user-primary-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  line-height: 1.2;
+}
+
+.user-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-h, #08060d);
+  max-width: 150px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Role badge */
+.role-badge {
+  font-size: 11px;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  line-height: 1;
+  text-transform: capitalize;
+}
+
+.role-badge.role-admin {
+  background-color: #fee2e2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+}
+
+.role-badge.role-manager {
+  background-color: #e0e7ff;
+  color: #4338ca;
+  border: 1px solid #c7d2fe;
+}
+
+.role-badge.role-sales {
+  background-color: #dcfce7;
+  color: #15803d;
+  border: 1px solid #bbf7d0;
+}
+
+.role-badge.role-default {
+  background-color: #f3f4f6;
+  color: #4b5563;
+  border: 1px solid #e5e7eb;
+}
+
+/* Hàng dưới: Kho / Địa bàn làm việc */
+.warehouse-info {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+/* Trạng thái đã chọn kho */
+.warehouse-selected {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text, #6b6375);
+  font-weight: 500;
+}
+
+.warehouse-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #3b82f6;
+  font-size: 13px;
+}
+
+.warehouse-name {
+  max-width: 170px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Trạng thái CHƯA CHỌN KHO/ĐỊA BÀN */
+.warehouse-unselected {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background-color: #fffbeb;
+  color: #b45309;
+  border: 1px solid #fde68a;
+  font-weight: 600;
+  font-size: 11px;
+  animation: pulseWarning 2s infinite ease-in-out;
+}
+
+@keyframes pulseWarning {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.75;
+  }
+}
+
+.warning-icon {
+  font-size: 11px;
+}
+
+/* Nút chọn/đổi kho nhanh */
+.quick-warehouse-select {
+  background: transparent;
+  border: 1px dashed var(--border, #e5e4e7);
+  padding: 4px 8px;
+  border-radius: 8px;
+  font-size: 12px;
+  color: var(--text, #6b6375);
+  cursor: pointer;
+  transition: all 0.2s;
+  outline: none;
+}
+
+.quick-warehouse-select:hover {
+  border-color: var(--accent, #aa3bff);
+  color: var(--text-h, #08060d);
+}
+
+/* SKELETON LOADER */
+.user-skeleton-container {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 12px;
+  border-radius: 12px;
+  background-color: var(--social-bg, rgba(244, 243, 236, 0.5));
+  border: 1px solid var(--border, #e5e4e7);
+  min-width: 180px;
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(220, 220, 220, 0.25) 0%,
+    rgba(220, 220, 220, 0.5) 50%,
+    rgba(220, 220, 220, 0.25) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: 4px;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.skeleton-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.skeleton-text-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+}
+
+.skeleton-name {
+  width: 110px;
+  height: 14px;
+}
+
+.skeleton-subtext {
+  width: 140px;
+  height: 11px;
+}
+
+/* Empty State / Not logged in */
+.user-empty {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text, #6b6375);
+}
+
+.btn-login-quick {
+  background-color: var(--accent, #aa3bff);
+  color: #fff;
+  border: none;
+  padding: 5px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.btn-login-quick:hover {
+  opacity: 0.9;
+}

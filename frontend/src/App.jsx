@@ -1,10 +1,15 @@
-import Hello from './pages/Hello';
+import { AuthProvider } from './context';
+import Navbar from './components/Navbar';
+import Hello from './pages/hello';
 
 function App() {
   return (
-    <main>
-      <Hello />
-    </main>
+    <AuthProvider>
+      <Navbar />
+      <main>
+        <Hello />
+      </main>
+    </AuthProvider>
   );
 }
 

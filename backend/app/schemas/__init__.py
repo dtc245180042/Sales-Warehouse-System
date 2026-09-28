@@ -1,16 +1,32 @@
 from app.schemas.permission import PermissionBase, PermissionCreate, PermissionUpdate, PermissionResponse
 from app.schemas.role import RoleBase, RoleCreate, RoleUpdate, RoleResponse, RoleAssignPermissions
-from app.schemas.user import UserBase, UserCreate, UserResponse
+from app.schemas.user import (
+    UserBase,
+    UserCreate,
+    UserUpdate,
+    UserLockRequest,
+    UserResponse,
+    UserPaginatedResponse,
+)
 from app.schemas.auth import (
+    LoginRequest,
+    LoginResponse,
+    TokenResponse,
+    UserClaimsResponse,
+    ChangePasswordRequest,
     ForgotPasswordRequest,
     ForgotPasswordResponse,
     ResetPasswordRequest,
     ResetPasswordResponse,
-    LoginRequest,
-    LoginResponse,
-    UserClaimsResponse
+    MessageResponse,
 )
-from app.schemas.navigation import MenuItemBase, MenuItemCreate, MenuItemUpdate, MenuItemResponse, UserMenuResponse
+from app.schemas.navigation import (
+    MenuItemBase,
+    MenuItemCreate,
+    MenuItemUpdate,
+    MenuItemResponse,
+    UserMenuResponse,
+)
 
 __all__ = [
     "PermissionBase",
@@ -24,14 +40,20 @@ __all__ = [
     "RoleAssignPermissions",
     "UserBase",
     "UserCreate",
+    "UserUpdate",
+    "UserLockRequest",
     "UserResponse",
+    "UserPaginatedResponse",
+    "LoginRequest",
+    "LoginResponse",
+    "TokenResponse",
+    "UserClaimsResponse",
+    "ChangePasswordRequest",
     "ForgotPasswordRequest",
     "ForgotPasswordResponse",
     "ResetPasswordRequest",
     "ResetPasswordResponse",
-    "LoginRequest",
-    "LoginResponse",
-    "UserClaimsResponse",
+    "MessageResponse",
     "MenuItemBase",
     "MenuItemCreate",
     "MenuItemUpdate",

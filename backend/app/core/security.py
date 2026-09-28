@@ -1,69 +1,81 @@
-import os
+from datetime import datetime, timedelta, timezone
+from typing import Any, Optional, Dict
 import hashlib
 import secrets
-from datetime import datetime, timedelta, timezone
-from typing import Optional, Dict, Any
-import jwt
-
+import bcrypt
 try:
-    import bcrypt
-    HAS_BCRYPT = True
+    from jose import jwt, JWTError
 except ImportError:
-    HAS_BCRYPT = False
+    import jwt
+    JWTError = Exception
 
-SECRET_KEY = os.getenv("SECRET_KEY", "sales_warehouse_super_secret_key_2026")
-ALGORITHM = os.getenv("ALGORITHM", "HS256")
-ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
+from app.core.config import settings
 
-
-def get_password_hash(password: str) -> str:
-    """Tạo chuỗi hash an toàn cho mật khẩu.
-    Sử dụng bcrypt nếu đã cài đặt, hoặc fallback sang PBKDF2-HMAC-SHA256 (chuẩn Python built-in).
-    """
-    if HAS_BCRYPT:
-        salt = bcrypt.gensalt()
-        return bcrypt.hashpw(password.encode("utf-8"), salt).decode("utf-8")
-
-    salt = secrets.token_hex(16)
-    key = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("utf-8"), 100000)
-    return f"pbkdf2:sha256:100000${salt}${key.hex()}"
+SECRET_KEY = settings.SECRET_KEY
+ALGORITHM = settings.ALGORITHM
+ACCESS_TOKEN_EXPIRE_MINUTES = settings.ACCESS_TOKEN_EXPIRE_MINUTES
 
 
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Xác thực mật khẩu plain-text với chuỗi hash."""
-    if hashed_password.startswith("pbkdf2:"):
-        parts = hashed_password.split("$")
+def kiem_tra_mat_khau(mat_khau_thuan: str, mat_khau_bam: str) -> bool:
+    """Xác thực mật khẩu thô so với chuỗi hash (hỗ trợ cả bcrypt và pbkdf2)."""
+    if mat_khau_bam.startswith("pbkdf2:"):
+        parts = mat_khau_bam.split("$")
         if len(parts) == 3:
             salt = parts[1]
             key_hex = parts[2]
-            computed = hashlib.pbkdf2_hmac("sha256", plain_password.encode("utf-8"), salt.encode("utf-8"), 100000).hex()
+            computed = hashlib.pbkdf2_hmac("sha256", mat_khau_thuan.encode("utf-8"), salt.encode("utf-8"), 100000).hex()
             return secrets.compare_digest(key_hex, computed)
 
-    if HAS_BCRYPT:
-        try:
-            return bcrypt.checkpw(plain_password.encode("utf-8"), hashed_password.encode("utf-8"))
-        except Exception:
-            return False
-
-    return False
-
-
-def create_access_token(data: Dict[str, Any], expires_delta: Optional[timedelta] = None) -> str:
-    """Tạo JWT access token chứa claims danh tính và quyền hạn."""
-    to_encode = data.copy()
-    if expires_delta:
-        expire = datetime.now(timezone.utc) + expires_delta
-    else:
-        expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-    return encoded_jwt
-
-
-def decode_access_token(token: str) -> Optional[Dict[str, Any]]:
-    """Giải mã và xác thực JWT token."""
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        return payload
-    except jwt.PyJWTError:
+        chuoi_byte_thuan = mat_khau_thuan.encode("utf-8")[:72]
+        chuoi_byte_bam = mat_khau_bam.encode("utf-8")
+        return bcrypt.checkpw(chuoi_byte_thuan, chuoi_byte_bam)
+    except Exception:
+        return False
+
+
+def bam_mat_khau(mat_khau: str) -> str:
+    """Băm mật khẩu sử dụng thuật toán bcrypt (giới hạn an toàn 72 bytes)."""
+    chuoi_byte = mat_khau.encode("utf-8")[:72]
+    muoi = bcrypt.gensalt()
+    return bcrypt.hashpw(chuoi_byte, muoi).decode("utf-8")
+
+
+def tao_token_truy_cap(
+    du_lieu: Dict[str, Any],
+    thoi_gian_het_han: Optional[timedelta] = None
+) -> str:
+    """Tạo JWT access token chứa payload data và thời hạn hết hạn."""
+    du_lieu_ma_hoa = du_lieu.copy()
+    thoi_diem_hien_tai = datetime.now(timezone.utc)
+    if thoi_gian_het_han:
+        han_dung = thoi_diem_hien_tai + thoi_gian_het_han
+    else:
+        han_dung = thoi_diem_hien_tai + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+
+    du_lieu_ma_hoa.update({
+        "exp": han_dung,
+        "iat": thoi_diem_hien_tai
+    })
+    token_jwt = jwt.encode(du_lieu_ma_hoa, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+    return token_jwt
+
+
+def giai_ma_token_truy_cap(chuoi_token: str) -> Optional[Dict[str, Any]]:
+    """Giải mã JWT token và trả về payload, hoặc None nếu không hợp lệ / hết hạn."""
+    try:
+        tai_trong = jwt.decode(
+            chuoi_token,
+            settings.SECRET_KEY,
+            algorithms=[settings.ALGORITHM]
+        )
+        return tai_trong
+    except (JWTError, Exception):
         return None
+
+
+# Bí danh tương thích ngược (aliases)
+verify_password = kiem_tra_mat_khau
+get_password_hash = bam_mat_khau
+create_access_token = tao_token_truy_cap
+decode_access_token = giai_ma_token_truy_cap

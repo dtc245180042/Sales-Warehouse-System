@@ -5,7 +5,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.core.database import Base, get_db
+from app.core.database import Base, lay_phien_db
 from app.core.security import verify_password, get_password_hash
 from app.models.auth import User, PasswordResetToken
 from app.services.auth_service import GENERIC_FORGOT_PASSWORD_MESSAGE
@@ -46,7 +46,7 @@ def client(db_session):
         finally:
             pass
 
-    app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[lay_phien_db] = override_get_db
     with TestClient(app) as c:
         yield c
     app.dependency_overrides.clear()

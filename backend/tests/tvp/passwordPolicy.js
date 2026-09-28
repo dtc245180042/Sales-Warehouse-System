@@ -96,8 +96,9 @@ async function runPasswordPolicyTests() {
   }
 }
 
-// Chạy test
-runPasswordPolicyTests();
+if (require.main === module) {
+  runPasswordPolicyTests();
+}
 
 module.exports = {
   validatePasswordStrength,

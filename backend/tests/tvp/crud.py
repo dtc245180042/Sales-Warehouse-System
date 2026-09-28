@@ -1,5 +1,5 @@
-from database import SessionLocal
-from models import User, PasswordReset
+from .database import SessionLocal
+from .models import User
 
 def create_user(username: str, email: str, password_hash: str):
     db = SessionLocal()
@@ -14,9 +14,9 @@ def create_user(username: str, email: str, password_hash: str):
         db.refresh(new_user)
         print(f"Đã tạo User thành công với ID: {new_user.id}")
         return new_user
-    except Exception as e:
+    except Exception:
         db.rollback()
-        print(f"Lỗi khi tạo user: {e}")
+        raise
     finally:
         db.close()
 
@@ -32,8 +32,4 @@ def get_all_users():
         db.close()
 
 if __name__ == "__main__":
-    # Thử nghiệm tạo 1 user mới
-    create_user("admin_tvp", "admin@gmail.com", "hashed_password_xyz")
-    
-    # Lấy danh sách user ra hiển thị
     get_all_users()

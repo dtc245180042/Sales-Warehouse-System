@@ -17,11 +17,13 @@ const mockDatabase = {
       fullName: 'Tran Van B',
       email: 'tranvanb@example.com',
       roles: ['WAREHOUSE'],
-      assignedWarehouses: ['KHO_HA_NOI'], // Bắt buộc gắn ít nhất 1 kho khi là WAREHOUSE
+      assignedWarehouses: ['KHO_HN_01'], // Bắt buộc gắn ít nhất 1 kho khi là WAREHOUSE
       createdAt: new Date('2026-01-02')
     }
   ]
 };
+const { VALID_WAREHOUSE_IDS } = require('./warehouseData');
+const VALID_ROLES = ['ADMIN', 'MANAGER', 'WAREHOUSE', 'SALES', 'ACCOUNTANT', 'CUSTOMER', 'GUEST'];
 
 /**
  * 1. API TRUY VẤN (READ): Lấy danh sách gán vai trò và kho/địa bàn phụ trách của người dùng
@@ -54,7 +56,8 @@ function getUserRoleAssignmentAPI(userId = null) {
  */
 function assignUserRoleAndWarehouseAPI(userId, roles, assignedWarehouses = []) {
   // Kiểm tra đầu vào cơ bản
-  if (!userId || !Array.isArray(roles) || roles.length === 0) {
+  if (!userId || !Array.isArray(roles) || roles.length === 0 ||
+      roles.some(role => !VALID_ROLES.includes(role))) {
     return { status: 400, data: null, message: 'Thông tin userId hoặc danh sách vai trò không hợp lệ.' };
   }
 
@@ -66,6 +69,16 @@ function assignUserRoleAndWarehouseAPI(userId, roles, assignedWarehouses = []) {
         status: 400,
         data: null,
         message: 'Lỗi ràng buộc: Người dùng thuộc vai trò KHO phải được gắn với ít nhất một kho/địa bàn phụ trách.'
+      };
+    }
+    const invalidWarehouses = assignedWarehouses.filter(
+      warehouseId => !VALID_WAREHOUSE_IDS.includes(warehouseId)
+    );
+    if (invalidWarehouses.length > 0) {
+      return {
+        status: 400,
+        data: null,
+        message: `Mã kho không hợp lệ: ${invalidWarehouses.join(', ')}.`
       };
     }
   }
@@ -122,7 +135,7 @@ function runAPITests() {
 
   // Test 3: Cập nhật hợp lệ cho USR_001 giữ nhiều vai trò (SALES + WAREHOUSE) kèm 2 kho phụ trách
   console.log('\n[Test 3] Cập nhật hợp lệ cho USR_001 (Nhiều vai trò + Gắn kho Hà Nội & Đà Nẵng):');
-  const successRes = assignUserRoleAndWarehouseAPI('USR_001', ['SALES', 'WAREHOUSE'], ['KHO_HA_NOI', 'KHO_DA_NANG']);
+  const successRes = assignUserRoleAndWarehouseAPI('USR_001', ['SALES', 'WAREHOUSE'], ['KHO_HN_01', 'KHO_DN_01']);
   console.log('- Status:', successRes.status);
   console.log('- Dữ liệu cập nhật:', successRes.data);
 
@@ -133,7 +146,9 @@ function runAPITests() {
 }
 
 // Chạy test
-runAPITests();
+if (require.main === module) {
+  runAPITests();
+}
 
 module.exports = {
   getUserRoleAssignmentAPI,

@@ -8,6 +8,10 @@
  * @returns {object} { allowed: boolean, message: string }
  */
 function validateRoleUpdatePermission(currentUserId, targetUserId, currentRoles = [], newRoles = []) {
+  if (!Array.isArray(currentRoles) || !Array.isArray(newRoles) ||
+      [...currentRoles, ...newRoles].some(role => typeof role !== 'string')) {
+    return { allowed: false, message: 'Danh sách vai trò không hợp lệ.' };
+  }
   // 1. Kiểm tra thao tác có phải do chính user thực hiện trên tài khoản của mình không
   const isSelfUpdate = (currentUserId === targetUserId);
 
@@ -35,6 +39,14 @@ function validateRoleUpdatePermission(currentUserId, targetUserId, currentRoles 
  * Mô phỏng API cập nhật vai trò người dùng
  */
 function updateUserRolesAPI(operatorId, targetUserId, currentRoles, newRoles) {
+  if (!Array.isArray(currentRoles) || !Array.isArray(newRoles) ||
+      [...currentRoles, ...newRoles].some(role => typeof role !== 'string')) {
+    return {
+      status: 400,
+      success: false,
+      error: 'Danh sách vai trò không hợp lệ.'
+    };
+  }
   const permissionCheck = validateRoleUpdatePermission(operatorId, targetUserId, currentRoles, newRoles);
 
   if (!permissionCheck.allowed) {
@@ -51,7 +63,7 @@ function updateUserRolesAPI(operatorId, targetUserId, currentRoles, newRoles) {
     message: 'Cập nhật vai trò thành công.',
     updatedUser: {
       userId: targetUserId,
-      roles: newRoles,
+      roles: Array.from(new Set(newRoles)),
       updatedAt: new Date()
     }
   };
@@ -83,7 +95,9 @@ function runSelfRevocationTests() {
 }
 
 // Chạy test
-runSelfRevocationTests();
+if (require.main === module) {
+  runSelfRevocationTests();
+}
 
 module.exports = {
   validateRoleUpdatePermission,

@@ -6,8 +6,13 @@
  * @param {string} action - Hành động thực hiện (ví dụ: 'READ', 'CREATE', 'UPDATE', 'DELETE')
  * @returns {object} { allowed: boolean, message: string }
  */
+const VALID_ACTIONS_BY_ROLE = {
+  WAREHOUSE: ['READ', 'CREATE', 'UPDATE'],
+  SALES: ['READ']
+};
+
 function checkWarehouseScopePermission(user, targetWarehouseId, action = 'READ') {
-  if (!user || !user.roles) {
+  if (!user || !Array.isArray(user.roles) || typeof targetWarehouseId !== 'string') {
     return { allowed: false, message: 'Người dùng chưa được xác thực hoặc thiếu thông tin vai trò.' };
   }
 
@@ -21,7 +26,11 @@ function checkWarehouseScopePermission(user, targetWarehouseId, action = 'READ')
   const isSalesStaff = user.roles.includes('SALES');
 
   if (isWarehouseStaff || isSalesStaff) {
-    const assignedWarehouses = user.assignedWarehouses || [];
+    const permittedActions = user.roles.flatMap(role => VALID_ACTIONS_BY_ROLE[role] || []);
+    if (!permittedActions.includes(action)) {
+      return { allowed: false, message: `Vai trò người dùng không có quyền [${action}].` };
+    }
+    const assignedWarehouses = Array.isArray(user.assignedWarehouses) ? user.assignedWarehouses : [];
 
     // Kiểm tra xem kho đích có nằm trong danh sách kho người dùng được phân công không
     const hasScopeAccess = assignedWarehouses.includes(targetWarehouseId);
@@ -72,29 +81,31 @@ function runScopePermissionTests() {
 
   // Khai báo dữ liệu user mẫu
   const adminUser = { userId: 'admin_1', roles: ['ADMIN'], assignedWarehouses: [] };
-  const warehouseStaff = { userId: 'staff_1', roles: ['WAREHOUSE'], assignedWarehouses: ['KHO_HA_NOI', 'KHO_DA_NANG'] };
+  const warehouseStaff = { userId: 'staff_1', roles: ['WAREHOUSE'], assignedWarehouses: ['KHO_HN_01', 'KHO_DN_01'] };
 
-  // Test 1: Thủ kho thao tác trên kho mình phụ trách (KHO_HA_NOI) -> Được phép
-  console.log('\n[Test 1] Thủ kho thao tác trên kho được phân công (KHO_HA_NOI):');
-  const res1 = performWarehouseOperation(warehouseStaff, 'KHO_HA_NOI', { itemId: 'SP001', qty: 50 });
+  // Test 1: Thủ kho thao tác trên kho mình phụ trách -> Được phép
+  console.log('\n[Test 1] Thủ kho thao tác trên kho được phân công (KHO_HN_01):');
+  const res1 = performWarehouseOperation(warehouseStaff, 'KHO_HN_01', { itemId: 'SP001', qty: 50 });
   console.log('- Status:', res1.status);
   console.log('- Thông báo:', res1.message || res1.error);
 
-  // Test 2: Thủ kho thao tác trên kho KHÔNG thuộc thẩm quyền (KHO_HCM) -> Bị từ chối
-  console.log('\n[Test 2] Thủ kho thao tác trên kho KHÔNG phụ trách (KHO_HCM):');
-  const res2 = performWarehouseOperation(warehouseStaff, 'KHO_HCM', { itemId: 'SP002', qty: 100 });
+  // Test 2: Thủ kho thao tác trên kho KHÔNG thuộc thẩm quyền -> Bị từ chối
+  console.log('\n[Test 2] Thủ kho thao tác trên kho KHÔNG phụ trách (KHO_HCM_01):');
+  const res2 = performWarehouseOperation(warehouseStaff, 'KHO_HCM_01', { itemId: 'SP002', qty: 100 });
   console.log('- Status:', res2.status);
   console.log('- Thông báo:', res2.error);
 
-  // Test 3: Admin thao tác trên bất kỳ kho nào (KHO_HCM) -> Được phép
-  console.log('\n[Test 3] ADMIN thao tác trên kho bất kỳ (KHO_HCM):');
-  const res3 = performWarehouseOperation(adminUser, 'KHO_HCM', { itemId: 'SP003', qty: 200 });
+  // Test 3: Admin thao tác trên bất kỳ kho nào -> Được phép
+  console.log('\n[Test 3] ADMIN thao tác trên kho bất kỳ (KHO_HCM_01):');
+  const res3 = performWarehouseOperation(adminUser, 'KHO_HCM_01', { itemId: 'SP003', qty: 200 });
   console.log('- Status:', res3.status);
   console.log('- Thông báo:', res3.message);
 }
 
 // Chạy test
-runScopePermissionTests();
+if (require.main === module) {
+  runScopePermissionTests();
+}
 
 module.exports = {
   checkWarehouseScopePermission,

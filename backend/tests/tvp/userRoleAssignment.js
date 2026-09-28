@@ -8,6 +8,7 @@ const ROLES = {
   WAREHOUSE_STAFF: 'WAREHOUSE',
   SALES_STAFF: 'SALES'
 };
+const { VALID_WAREHOUSE_IDS } = require('./warehouseData');
 
 /**
  * Hàm gán vai trò và danh sách kho phụ trách cho người dùng
@@ -23,6 +24,9 @@ function assignRolesAndWarehouses(currentAdminId, targetUserId, newRoles, assign
   // 1. Kiểm tra mảng vai trò hợp lệ
   if (!Array.isArray(newRoles) || newRoles.length === 0) {
     return { success: false, updatedUser: null, message: 'Người dùng phải có ít nhất một vai trò.' };
+  }
+  if (newRoles.some(role => !Object.values(ROLES).includes(role))) {
+    return { success: false, updatedUser: null, message: 'Danh sách vai trò chứa giá trị không hợp lệ.' };
   }
 
   // 2. RÀNG BUỘC: Không thể tự thu hồi vai trò Quản trị (ADMIN) của chính mình
@@ -46,6 +50,16 @@ function assignRolesAndWarehouses(currentAdminId, targetUserId, newRoles, assign
         success: false, 
         updatedUser: null, 
         message: 'Thủ kho phải được gắn với ít nhất một kho cụ thể.' 
+      };
+    }
+    const invalidWarehouses = assignedWarehouseIds.filter(
+      warehouseId => !VALID_WAREHOUSE_IDS.includes(warehouseId)
+    );
+    if (invalidWarehouses.length > 0) {
+      return {
+        success: false,
+        updatedUser: null,
+        message: `Mã kho không hợp lệ: ${invalidWarehouses.join(', ')}.`
       };
     }
   }
@@ -72,14 +86,14 @@ function assignRolesAndWarehouses(currentAdminId, targetUserId, newRoles, assign
  * @returns {boolean}
  */
 function canAccessWarehouse(user, warehouseId) {
-  if (!user || !user.roles) return false;
+  if (!user || !Array.isArray(user.roles) || typeof warehouseId !== 'string') return false;
 
   // Admin có quyền xem tất cả kho
   if (user.roles.includes(ROLES.ADMIN)) return true;
 
   // Thủ kho chỉ thao tác được trên kho mình phụ trách
-  if (user.roles.includes(ROLES.WAREHOUSE_STAFF)) {
-    return user.assignedWarehouses && user.assignedWarehouses.includes(warehouseId);
+  if (user.roles.includes(ROLES.WAREHOUSE_STAFF) || user.roles.includes(ROLES.SALES_STAFF)) {
+    return Array.isArray(user.assignedWarehouses) && user.assignedWarehouses.includes(warehouseId);
   }
 
   return false;
@@ -96,7 +110,7 @@ function runAssignmentTests() {
 
   // Test Case 1: Gán nhiều vai trò cùng lúc cho 1 user (Thành công)
   console.log('\n[Test 1] Gán nhiều vai trò cùng lúc (Bán hàng + Thủ kho kho KHO_A):');
-  const res1 = assignRolesAndWarehouses('admin_01', 'user_02', [ROLES.SALES_STAFF, ROLES.WAREHOUSE_STAFF], ['KHO_A', 'KHO_B'], targetUser);
+  const res1 = assignRolesAndWarehouses('admin_01', 'user_02', [ROLES.SALES_STAFF, ROLES.WAREHOUSE_STAFF], ['KHO_HN_01', 'KHO_DN_01'], targetUser);
   console.log('- Kết quả:', res1.message);
   console.log('- User Record:', res1.updatedUser);
 
@@ -113,12 +127,14 @@ function runAssignmentTests() {
   // Test Case 4: Kiểm tra quyền truy cập kho của thủ kho
   console.log('\n[Test 4] Kiểm tra thủ kho truy cập đúng/sai kho phụ trách:');
   const staff = res1.updatedUser;
-  console.log('- Thao tác trên KHO_A (đã gán):', canAccessWarehouse(staff, 'KHO_A') ? 'CHO PHÉP' : 'TỪ CHỐI');
-  console.log('- Thao tác trên KHO_C (chưa gán):', canAccessWarehouse(staff, 'KHO_C') ? 'CHO PHÉP' : 'TỪ CHỐI');
+  console.log('- Thao tác trên KHO_HN_01 (đã gán):', canAccessWarehouse(staff, 'KHO_HN_01') ? 'CHO PHÉP' : 'TỪ CHỐI');
+  console.log('- Thao tác trên KHO_HCM_01 (chưa gán):', canAccessWarehouse(staff, 'KHO_HCM_01') ? 'CHO PHÉP' : 'TỪ CHỐI');
 }
 
 // Chạy test
-runAssignmentTests();
+if (require.main === module) {
+  runAssignmentTests();
+}
 
 module.exports = {
   assignRolesAndWarehouses,

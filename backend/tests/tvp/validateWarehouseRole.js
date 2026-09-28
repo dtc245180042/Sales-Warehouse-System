@@ -1,7 +1,7 @@
 /**
  * Mô phỏng danh sách kho/địa bàn hợp lệ trong hệ thống
  */
-const VALID_WAREHOUSES = ['KHO_HA_NOI', 'KHO_DA_NANG', 'KHO_HCM'];
+const { VALID_WAREHOUSE_IDS } = require('./warehouseData');
 
 /**
  * Hàm validation kiểm tra ràng buộc vai trò kho
@@ -14,6 +14,9 @@ function validateWarehouseRoleConstraint(userData) {
   }
 
   const { roles = [], assignedWarehouses = [] } = userData;
+  if (!Array.isArray(roles) || !Array.isArray(assignedWarehouses)) {
+    return { isValid: false, message: 'Vai trò và danh sách kho phải có định dạng mảng.' };
+  }
 
   // Kiểm tra xem người dùng có giữ vai trò KHO (WAREHOUSE) hay không
   const isWarehouseRole = roles.includes('WAREHOUSE');
@@ -29,7 +32,7 @@ function validateWarehouseRoleConstraint(userData) {
 
     // 2. Kiểm tra xem các kho được gắn có nằm trong danh sách kho hợp lệ của hệ thống hay không
     const invalidWarehouses = assignedWarehouses.filter(
-      warehouseId => !VALID_WAREHOUSES.includes(warehouseId)
+      warehouseId => !VALID_WAREHOUSE_IDS.includes(warehouseId)
     );
 
     if (invalidWarehouses.length > 0) {
@@ -93,14 +96,16 @@ function runValidationTests() {
   console.log('- Thông báo:', res3.error);
 
   // Test 4: Vai trò KHO kèm kho hợp lệ -> Thành công
-  console.log('\n[Test 4] User vai trò WAREHOUSE kèm kho hợp lệ (KHO_HA_NOI):');
-  const res4 = saveUser({ roles: ['WAREHOUSE'], assignedWarehouses: ['KHO_HA_NOI'] });
+  console.log('\n[Test 4] User vai trò WAREHOUSE kèm kho hợp lệ (KHO_HN_01):');
+  const res4 = saveUser({ roles: ['WAREHOUSE'], assignedWarehouses: ['KHO_HN_01'] });
   console.log('- Kết quả:', res4.success ? 'PASSED' : 'FAILED');
   console.log('- Thông báo:', res4.message);
 }
 
 // Chạy test
-runValidationTests();
+if (require.main === module) {
+  runValidationTests();
+}
 
 module.exports = {
   validateWarehouseRoleConstraint,

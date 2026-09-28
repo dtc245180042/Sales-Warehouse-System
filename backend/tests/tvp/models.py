@@ -1,6 +1,7 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String
 from datetime import datetime
-from database import Base, engine
+
+from .database import Base, engine
 
 class User(Base):
     __tablename__ = "users"
@@ -17,7 +18,9 @@ class PasswordReset(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    token = Column(String(255), nullable=False, index=True)
+    token_hash = Column(String(64), nullable=False, unique=True, index=True)
+    expires_at = Column(DateTime, nullable=False)
+    is_used = Column(Boolean, nullable=False, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 if __name__ == "__main__":

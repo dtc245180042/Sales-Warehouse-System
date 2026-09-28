@@ -6,6 +6,9 @@ const crypto = require('crypto');
  * @returns {object} { rawToken, tokenRecord }
  */
 function createPasswordResetToken(userId) {
+  if (typeof userId !== 'string' || userId.trim() === '') {
+    throw new TypeError('userId phải là chuỗi không rỗng.');
+  }
   // Tạo token ngẫu nhiên (dùng để gửi qua email cho user)
   const rawToken = crypto.randomBytes(32).toString('hex');
 
@@ -41,7 +44,7 @@ function createPasswordResetToken(userId) {
  * @returns {object} { isValid: boolean, message: string }
  */
 function verifyAndConsumeToken(inputToken, storedRecord) {
-  if (!storedRecord) {
+  if (typeof inputToken !== 'string' || !storedRecord) {
     return { isValid: false, message: 'Token không tồn tại.' };
   }
 
@@ -51,7 +54,10 @@ function verifyAndConsumeToken(inputToken, storedRecord) {
     .update(inputToken)
     .digest('hex');
 
-  if (hashedInput !== storedRecord.tokenHash) {
+  const expectedHash = Buffer.from(storedRecord.tokenHash || '', 'hex');
+  const actualHash = Buffer.from(hashedInput, 'hex');
+  if (expectedHash.length !== actualHash.length ||
+      !crypto.timingSafeEqual(actualHash, expectedHash)) {
     return { isValid: false, message: 'Token không chính xác.' };
   }
 
@@ -61,7 +67,7 @@ function verifyAndConsumeToken(inputToken, storedRecord) {
   }
 
   // Ràng buộc 2: Kiểm tra thời hạn 30 phút
-  if (new Date() > new Date(storedRecord.expiresAt)) {
+  if (new Date() >= new Date(storedRecord.expiresAt)) {
     return { isValid: false, message: 'Token đã hết hạn (quá 30 phút).' };
   }
 
@@ -79,7 +85,7 @@ function runTests() {
   const userId = 'user_12345';
   const { rawToken, tokenRecord } = createPasswordResetToken(userId);
   console.log('\n[1] Tạo token thành công:');
-  console.log('- Raw Token (gửi mail):', rawToken);
+  console.log('- Raw Token được tạo (chỉ hiển thị trong test):', Boolean(rawToken));
   console.log('- Record lưu DB:', tokenRecord);
 
   // Test Case 2: Verify đúng token (Lần 1 - Thành công)
@@ -96,7 +102,9 @@ function runTests() {
 }
 
 // Chạy test nếu gọi trực tiếp file này
-runTests();
+if (require.main === module) {
+  runTests();
+}
 
 module.exports = {
   createPasswordResetToken,

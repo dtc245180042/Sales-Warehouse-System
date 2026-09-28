@@ -1,6 +1,12 @@
 /**
  * Mô phỏng bảng lưu trữ danh sách các phiên đăng nhập (Sessions)
  */
+const bcrypt = require('bcryptjs');
+
+const mockUsers = [
+  { userId: 'usr_101', passwordHash: bcrypt.hashSync('OldPass123', 10) }
+];
+
 const mockSessions = [
   { sessionId: 'sess_current_123', userId: 'usr_101', device: 'Chrome - Windows', status: 'ACTIVE', createdAt: new Date('2026-09-28T08:00:00') },
   { sessionId: 'sess_other_456', userId: 'usr_101', device: 'Safari - iPhone', status: 'ACTIVE', createdAt: new Date('2026-09-27T10:00:00') },
@@ -52,10 +58,32 @@ function revokeOtherUserSessions(userId, currentSessionId, keepCurrentSession = 
 /**
  * Mô phỏng API Đổi Mật Khẩu kèm Thu Hồi Phiên
  */
-function changePasswordAPI(userId, currentSessionId, oldPassword, newPassword) {
-  // 1. Giả định xác thực mật khẩu cũ thành công & cập nhật mật khẩu mới thành công...
-  
-  // 2. Thu hồi các phiên đăng nhập khác trên thiết bị khác
+async function changePasswordAPI(userId, currentSessionId, oldPassword, newPassword) {
+  if (!userId || !currentSessionId || !oldPassword || !newPassword) {
+    return { status: 400, success: false, message: 'Thiếu thông tin đổi mật khẩu.' };
+  }
+  const user = mockUsers.find(candidate => candidate.userId === userId);
+  if (!user) {
+    return { status: 404, success: false, message: 'Không tìm thấy người dùng.' };
+  }
+  const currentSession = mockSessions.find(session =>
+    session.userId === userId &&
+    session.sessionId === currentSessionId &&
+    session.status === 'ACTIVE'
+  );
+  if (!currentSession) {
+    return { status: 401, success: false, message: 'Phiên hiện tại không hợp lệ.' };
+  }
+  if (!(await bcrypt.compare(oldPassword, user.passwordHash))) {
+    return { status: 400, success: false, message: 'Mật khẩu hiện tại không chính xác.' };
+  }
+  if (typeof newPassword !== 'string' || newPassword.length < 8 ||
+      !/[a-zA-Z]/.test(newPassword) || !/[0-9]/.test(newPassword)) {
+    return { status: 400, success: false, message: 'Mật khẩu mới chưa đạt yêu cầu.' };
+  }
+
+  const newPasswordHash = await bcrypt.hash(newPassword, 10);
+  user.passwordHash = newPasswordHash;
   const revocationResult = revokeOtherUserSessions(userId, currentSessionId, true);
 
   return {
@@ -69,7 +97,7 @@ function changePasswordAPI(userId, currentSessionId, oldPassword, newPassword) {
 // ==========================================
 // TEST CASES CHẠY THỬ NGHIỆM
 // ==========================================
-function runRevocationTests() {
+async function runRevocationTests() {
   console.log('--- BẮT ĐẦU TEST THU HỒI PHIÊN ĐĂNG NHẬP SAU KHỔI ĐỔI MẬT KHẨU ---');
 
   console.log('\n[Trước khi đổi mật khẩu] Các phiên ACTIVE của usr_101:');
@@ -77,7 +105,7 @@ function runRevocationTests() {
 
   // Thực hiện đổi mật khẩu từ phiên current_123
   console.log('\n[Thực hiện đổi mật khẩu] Từ phiên "sess_current_123":');
-  const res = changePasswordAPI('usr_101', 'sess_current_123', 'OldPass123', 'NewPass2026');
+  const res = await changePasswordAPI('usr_101', 'sess_current_123', 'OldPass123', 'NewPass2026');
 
   console.log('- Response status:', res.status);
   console.log('- Response message:', res.message);
@@ -90,7 +118,9 @@ function runRevocationTests() {
 }
 
 // Chạy test
-runRevocationTests();
+if (require.main === module) {
+  runRevocationTests();
+}
 
 module.exports = {
   revokeOtherUserSessions,

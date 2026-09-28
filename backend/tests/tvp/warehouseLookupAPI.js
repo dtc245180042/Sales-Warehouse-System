@@ -1,6 +1,8 @@
 /**
  * Dữ liệu mẫu danh sách kho và địa bàn trong hệ thống
  */
+const { VALID_WAREHOUSE_IDS } = require('./warehouseData');
+
 const mockWarehouses = [
   { id: 'KHO_HN_01', name: 'Kho Trung Tâm Hà Nội', region: 'MIEN_BAC', status: 'ACTIVE' },
   { id: 'KHO_HN_02', name: 'Kho Từ Liêm - Hà Nội', region: 'MIEN_BAC', status: 'ACTIVE' },
@@ -17,6 +19,12 @@ const mockWarehouses = [
  */
 function getWarehouseLookupAPI(queryParams = {}) {
   const { keyword = '', region = '', status = 'ACTIVE' } = queryParams;
+  if (typeof keyword !== 'string' || typeof region !== 'string' || typeof status !== 'string') {
+    throw new TypeError('Từ khóa, khu vực và trạng thái phải là chuỗi.');
+  }
+  if (mockWarehouses.some(warehouse => !VALID_WAREHOUSE_IDS.includes(warehouse.id))) {
+    throw new Error('Danh sách kho tra cứu không khớp với danh sách mã kho hợp lệ.');
+  }
 
   let filteredList = [...mockWarehouses];
 
@@ -73,7 +81,9 @@ function runLookupTests() {
 }
 
 // Chạy test
-runLookupTests();
+if (require.main === module) {
+  runLookupTests();
+}
 
 module.exports = {
   getWarehouseLookupAPI

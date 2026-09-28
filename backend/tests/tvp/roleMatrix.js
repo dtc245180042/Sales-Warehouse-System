@@ -85,23 +85,21 @@ const ROLE_PERMISSIONS_MATRIX = {
 
 /**
  * 4. Hàm kiểm tra quyền theo nguyên tắc Default Deny (Từ chối nếu không được cấp)
- * @param {string} userRole - Vai trò của người dùng
+ * @param {string|string[]} userRole - Một hoặc nhiều vai trò của người dùng
  * @param {string} requiredPermission - Quyền cần có để thực hiện thao tác
  * @returns {boolean} true nếu có quyền, false nếu bị từ chối
  */
 function hasPermission(userRole, requiredPermission) {
   // Nguyên tắc từ chối mặc định
-  if (!userRole || !requiredPermission) {
+  if (!requiredPermission ||
+      !(typeof userRole === 'string' || Array.isArray(userRole)) ||
+      (Array.isArray(userRole) &&
+        (userRole.length === 0 || userRole.some(role => typeof role !== 'string')))) {
     return false;
   }
 
-  const allowedPermissions = ROLE_PERMISSIONS_MATRIX[userRole];
-
-  if (!allowedPermissions || !Array.isArray(allowedPermissions)) {
-    return false; // Vai trò không tồn tại trong ma trận -> Deny
-  }
-
-  return allowedPermissions.includes(requiredPermission);
+  const roles = Array.isArray(userRole) ? userRole : [userRole];
+  return roles.some(role => ROLE_PERMISSIONS_MATRIX[role]?.includes(requiredPermission));
 }
 
 // ==========================================
@@ -115,6 +113,7 @@ function runRoleMatrixTests() {
     { role: ROLES.SALES_STAFF, perm: PERMISSIONS.ORDER_CREATE, expected: true },
     { role: ROLES.SALES_STAFF, perm: PERMISSIONS.INVENTORY_IMPORT, expected: false }, // Từ chối
     { role: ROLES.WAREHOUSE_STAFF, perm: PERMISSIONS.INVENTORY_IMPORT, expected: true },
+    { role: [ROLES.SALES_STAFF, ROLES.WAREHOUSE_STAFF], perm: PERMISSIONS.INVENTORY_IMPORT, expected: true },
     { role: ROLES.GUEST, perm: PERMISSIONS.ORDER_CREATE, expected: false },           // Từ chối
     { role: 'UNKNOWN_ROLE', perm: PERMISSIONS.INVENTORY_READ, expected: false }        // Default Deny
   ];
@@ -129,7 +128,9 @@ function runRoleMatrixTests() {
 }
 
 // Chạy test
-runRoleMatrixTests();
+if (require.main === module) {
+  runRoleMatrixTests();
+}
 
 module.exports = {
   ROLES,

@@ -4,23 +4,31 @@ const bcrypt = require('bcryptjs');
 // Mô phỏng Cơ sở dữ liệu tạm thời
 const mockDatabase = {
   users: [
-    { id: 'user_101', email: 'user@example.com', passwordHash: '$2a$10$oldHash123456789' }
+    { id: 'user_101', email: 'user@example.com', passwordHash: bcrypt.hashSync('OldPass123', 10) }
   ],
-  resetTokens: [
-    {
-      userId: 'user_101',
-      tokenHash: crypto.createHash('sha256').update('valid_token_123').digest('hex'),
-      expiresAt: new Date(Date.now() + 30 * 60 * 1000), // Hạn 30 phút
-      isUsed: false
-    }
-  ]
+  resetTokens: []
 };
+
+function createResetToken(userId) {
+  if (typeof userId !== 'string' || userId.trim() === '') {
+    throw new TypeError('userId phải là chuỗi không rỗng.');
+  }
+  const rawToken = crypto.randomBytes(32).toString('hex');
+  const tokenRecord = {
+    userId,
+    tokenHash: crypto.createHash('sha256').update(rawToken).digest('hex'),
+    expiresAt: new Date(Date.now() + 30 * 60 * 1000),
+    isUsed: false
+  };
+  mockDatabase.resetTokens.push(tokenRecord);
+  return { rawToken, tokenRecord };
+}
 
 /**
  * Hàm kiểm tra độ mạnh mật khẩu cơ bản (tối thiểu 8 ký tự, có chữ và số)
  */
 function validatePassword(password) {
-  if (!password || password.length < 8) return false;
+  if (typeof password !== 'string' || password.length < 8) return false;
   const hasLetter = /[a-zA-Z]/.test(password);
   const hasNumber = /[0-9]/.test(password);
   return hasLetter && hasNumber;
@@ -35,7 +43,7 @@ function validatePassword(password) {
  */
 async function handleResetPasswordAPI(rawToken, newPassword) {
   // 1. Kiểm tra đầu vào
-  if (!rawToken || !newPassword) {
+  if (typeof rawToken !== 'string' || typeof newPassword !== 'string' || !rawToken || !newPassword) {
     return { status: 400, message: 'Thiếu token hoặc mật khẩu mới.' };
   }
 
@@ -48,7 +56,12 @@ async function handleResetPasswordAPI(rawToken, newPassword) {
   const hashedInputToken = crypto.createHash('sha256').update(rawToken).digest('hex');
 
   // Tìm bản ghi token trong Database
-  const tokenRecord = mockDatabase.resetTokens.find(t => t.tokenHash === hashedInputToken);
+  const hashedBuffer = Buffer.from(hashedInputToken, 'hex');
+  const tokenRecord = mockDatabase.resetTokens.find(t => {
+    const expectedBuffer = Buffer.from(t.tokenHash, 'hex');
+    return expectedBuffer.length === hashedBuffer.length &&
+      crypto.timingSafeEqual(expectedBuffer, hashedBuffer);
+  });
 
   // 3. Kiểm tra token có tồn tại không
   if (!tokenRecord) {
@@ -61,7 +74,7 @@ async function handleResetPasswordAPI(rawToken, newPassword) {
   }
 
   // 5. Kiểm tra thời hạn token
-  if (new Date() > new Date(tokenRecord.expiresAt)) {
+  if (new Date() >= new Date(tokenRecord.expiresAt)) {
     return { status: 400, message: 'Liên kết đặt lại mật khẩu đã hết hạn (quá 30 phút).' };
   }
 
@@ -72,14 +85,16 @@ async function handleResetPasswordAPI(rawToken, newPassword) {
   }
 
   // 7. Băm (hash) mật khẩu mới bằng bcrypt
-  const newHashedPassword = await bcrypt.hash(newPassword, 10);
-
-  // 8. Cập nhật mật khẩu mới vào cơ sở dữ liệu
-  user.passwordHash = newHashedPassword;
-
-  // 9. ĐÁNH DẤU TOKEN ĐÃ DÙNG (Ngăn tái sử dụng liên kết)
   tokenRecord.isUsed = true;
+  let newHashedPassword;
+  try {
+    newHashedPassword = await bcrypt.hash(newPassword, 10);
+  } catch (error) {
+    tokenRecord.isUsed = false;
+    throw error;
+  }
 
+  user.passwordHash = newHashedPassword;
   return { 
     status: 200, 
     message: 'Đặt lại mật khẩu thành công. Bạn có thể đăng nhập bằng mật khẩu mới.' 
@@ -94,13 +109,14 @@ async function runAPITests() {
 
   // Test 1: Đổi mật khẩu thành công bằng token hợp lệ
   console.log('\n[Test 1] Đổi mật khẩu thành công:');
-  const res1 = await handleResetPasswordAPI('valid_token_123', 'NewPass2026');
+  const { rawToken, tokenRecord } = createResetToken('user_101');
+  const res1 = await handleResetPasswordAPI(rawToken, 'NewPass2026');
   console.log('- Status Code:', res1.status);
   console.log('- Response Message:', res1.message);
 
   // Test 2: Tái sử dụng lại đúng token đó lần thứ 2 (Phải thất bại)
   console.log('\n[Test 2] Thử dùng lại token đã xài rồi:');
-  const res2 = await handleResetPasswordAPI('valid_token_123', 'AnotherPass2026');
+  const res2 = await handleResetPasswordAPI(rawToken, 'AnotherPass2026');
   console.log('- Status Code:', res2.status);
   console.log('- Response Message:', res2.message);
 
@@ -112,8 +128,11 @@ async function runAPITests() {
 }
 
 // Chạy test
-runAPITests();
+if (require.main === module) {
+  runAPITests();
+}
 
 module.exports = {
-  handleResetPasswordAPI
+  handleResetPasswordAPI,
+  createResetToken
 };

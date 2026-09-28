@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { AuthProvider } from './context';
 import Navbar from './components/Navbar';
-import Hello from './pages/hello';
+import Scrum300Demo from './pages/Scrum300Demo';
 
 // =========================================================================
 // MOCK DATA CỐ ĐỊNH CHỈ DÙNG ĐỂ HIỂN THỊ KHUNG GIAO DIỆN FRONTEND
@@ -291,43 +291,43 @@ function App({
             <div style={styles.omsNavList}>
               {roleActive === 'customer' && (
                 <>
-                  <div style={{ ...styles.omsNavItem, ...styles.omsNavItemActive, ...(hoveredBlock === 'nav-c1' ? styles.elevatedBlockDark : {}) }} onMouseEnter={() => setHoveredBlock('nav-c1')} onMouseLeave={() => setHoveredBlock(null)}>
+                  <a href="#dat-hang" style={{ ...styles.omsNavItem, ...styles.omsNavItemActive, textDecoration: 'none', ...(hoveredBlock === 'nav-c1' ? styles.elevatedBlockDark : {}) }} onMouseEnter={() => setHoveredBlock('nav-c1')} onMouseLeave={() => setHoveredBlock(null)}>
                     <span>🛒</span> Cổng Đặt hàng Đại lý
-                  </div>
-                  <div style={{ ...styles.omsNavItem, ...(hoveredBlock === 'nav-c2' ? styles.elevatedBlockDark : {}) }} onMouseEnter={() => setHoveredBlock('nav-c2')} onMouseLeave={() => setHoveredBlock(null)}>
+                  </a>
+                  <a href="#cong-no" style={{ ...styles.omsNavItem, textDecoration: 'none', ...(hoveredBlock === 'nav-c2' ? styles.elevatedBlockDark : {}) }} onMouseEnter={() => setHoveredBlock('nav-c2')} onMouseLeave={() => setHoveredBlock(null)}>
                     <span>📜</span> Tra cứu Công nợ
-                  </div>
+                  </a>
                 </>
               )}
 
               {roleActive === 'staff' && (
                 <>
-                  <div style={{ ...styles.omsNavItem, ...styles.omsNavItemActive, ...(hoveredBlock === 'nav-s1' ? styles.elevatedBlockDark : {}) }} onMouseEnter={() => setHoveredBlock('nav-s1')} onMouseLeave={() => setHoveredBlock(null)}>
+                  <a href="#pos" style={{ ...styles.omsNavItem, ...styles.omsNavItemActive, textDecoration: 'none', ...(hoveredBlock === 'nav-s1' ? styles.elevatedBlockDark : {}) }} onMouseEnter={() => setHoveredBlock('nav-s1')} onMouseLeave={() => setHoveredBlock(null)}>
                     <span>⚡</span> Bán hàng & Xuất kho (POS)
-                  </div>
-                  <div style={{ ...styles.omsNavItem, ...(hoveredBlock === 'nav-s2' ? styles.elevatedBlockDark : {}) }} onMouseEnter={() => setHoveredBlock('nav-s2')} onMouseLeave={() => setHoveredBlock(null)}>
+                  </a>
+                  <a href="#kiem-don" style={{ ...styles.omsNavItem, textDecoration: 'none', ...(hoveredBlock === 'nav-s2' ? styles.elevatedBlockDark : {}) }} onMouseEnter={() => setHoveredBlock('nav-s2')} onMouseLeave={() => setHoveredBlock(null)}>
                     <span>📋</span> Tiếp nhận & Kiểm đơn
-                  </div>
-                  <div style={{ ...styles.omsNavItem, ...(hoveredBlock === 'nav-s3' ? styles.elevatedBlockDark : {}) }} onMouseEnter={() => setHoveredBlock('nav-s3')} onMouseLeave={() => setHoveredBlock(null)}>
+                  </a>
+                  <a href="#ton-kho" style={{ ...styles.omsNavItem, textDecoration: 'none', ...(hoveredBlock === 'nav-s3' ? styles.elevatedBlockDark : {}) }} onMouseEnter={() => setHoveredBlock('nav-s3')} onMouseLeave={() => setHoveredBlock(null)}>
                     <span>📦</span> Kiểm kê Tồn kho
-                  </div>
+                  </a>
                 </>
               )}
 
               {roleActive === 'admin' && (
                 <>
-                  <div style={{ ...styles.omsNavItem, ...styles.omsNavItemActive, ...(hoveredBlock === 'nav-a1' ? styles.elevatedBlockDark : {}) }} onMouseEnter={() => setHoveredBlock('nav-a1')} onMouseLeave={() => setHoveredBlock(null)}>
+                  <a href="#tong-quan" style={{ ...styles.omsNavItem, ...styles.omsNavItemActive, textDecoration: 'none', ...(hoveredBlock === 'nav-a1' ? styles.elevatedBlockDark : {}) }} onMouseEnter={() => setHoveredBlock('nav-a1')} onMouseLeave={() => setHoveredBlock(null)}>
                     <span>📊</span> Tổng quan Quản trị
-                  </div>
-                  <div style={{ ...styles.omsNavItem, ...(hoveredBlock === 'nav-a2' ? styles.elevatedBlockDark : {}) }} onMouseEnter={() => setHoveredBlock('nav-a2')} onMouseLeave={() => setHoveredBlock(null)}>
+                  </a>
+                  <a href="#dai-ly" style={{ ...styles.omsNavItem, textDecoration: 'none', ...(hoveredBlock === 'nav-a2' ? styles.elevatedBlockDark : {}) }} onMouseEnter={() => setHoveredBlock('nav-a2')} onMouseLeave={() => setHoveredBlock(null)}>
                     <span>🏢</span> Quản lý Hệ thống Đại lý
-                  </div>
-                  <div style={{ ...styles.omsNavItem, ...(hoveredBlock === 'nav-a3' ? styles.elevatedBlockDark : {}) }} onMouseEnter={() => setHoveredBlock('nav-a3')} onMouseLeave={() => setHoveredBlock(null)}>
+                  </a>
+                  <a href="#tin-dung" style={{ ...styles.omsNavItem, textDecoration: 'none', ...(hoveredBlock === 'nav-a3' ? styles.elevatedBlockDark : {}) }} onMouseEnter={() => setHoveredBlock('nav-a3')} onMouseLeave={() => setHoveredBlock(null)}>
                     <span>💳</span> Duyệt Hạn mức Tín dụng
-                  </div>
-                  <div style={{ ...styles.omsNavItem, ...(hoveredBlock === 'nav-a4' ? styles.elevatedBlockDark : {}) }} onMouseEnter={() => setHoveredBlock('nav-a4')} onMouseLeave={() => setHoveredBlock(null)}>
+                  </a>
+                  <a href="#bao-cao" style={{ ...styles.omsNavItem, textDecoration: 'none', ...(hoveredBlock === 'nav-a4' ? styles.elevatedBlockDark : {}) }} onMouseEnter={() => setHoveredBlock('nav-a4')} onMouseLeave={() => setHoveredBlock(null)}>
                     <span>📈</span> Báo cáo Doanh thu & Kho
-                  </div>
+                  </a>
                 </>
               )}
             </div>
@@ -376,10 +376,15 @@ function App({
                 </select>
               </div>
 
-              <div
-                onClick={() => setScreen('profile')}
+              <a
+                href="#profile"
+                onClick={(e) => {
+                  e.preventDefault();
+                  setScreen('profile');
+                }}
                 style={{
                   ...styles.omsUserAvatarPill,
+                  textDecoration: 'none',
                   ...(hoveredBlock === 'header-profile' ? styles.elevatedCardLight : {}),
                 }}
                 onMouseEnter={() => setHoveredBlock('header-profile')}
@@ -391,7 +396,7 @@ function App({
                   <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#1e293b' }}>{user?.fullName || 'Demo Account'}</div>
                   <div style={{ fontSize: '10px', color: '#64748b' }}>{roleActive}</div>
                 </div>
-              </div>
+              </a>
             </div>
           </header>
 
@@ -563,13 +568,27 @@ function App({
       return (
         <div style={{ minHeight: '100vh', width: '100vw', backgroundColor: '#1C2758', padding: '40px 20px', fontFamily: 'Arial, sans-serif', display: 'flex', justifyContent: 'center', alignItems: 'center', boxSizing: 'border-box' }}>
           <div style={{ maxWidth: '850px', width: '100%' }}>
-            <button
-              type="button"
-              onClick={() => setScreen('dashboard')}
-              style={{ marginBottom: '20px', padding: '8px 18px', borderRadius: '20px', border: 'none', backgroundColor: 'rgba(255,255,255,0.15)', color: '#ffffff', cursor: 'pointer', fontWeight: 'bold' }}
+            <a
+              href="#dashboard"
+              onClick={(e) => {
+                e.preventDefault();
+                setScreen('dashboard');
+              }}
+              style={{
+                display: 'inline-block',
+                textDecoration: 'none',
+                marginBottom: '20px',
+                padding: '8px 18px',
+                borderRadius: '20px',
+                border: 'none',
+                backgroundColor: 'rgba(255,255,255,0.15)',
+                color: '#ffffff',
+                cursor: 'pointer',
+                fontWeight: 'bold',
+              }}
             >
               ← Quay lại Dashboard
-            </button>
+            </a>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px' }}>
               <div
@@ -658,9 +677,17 @@ function App({
                       </button>
                     </form>
                     <div style={{ textAlign: 'center', marginTop: '15px' }}>
-                      <span onClick={() => { setShowForgotInProfile(true); setResetStep(1); }} style={{ fontSize: '12px', color: '#ef4444', cursor: 'pointer', fontWeight: 'bold' }}>
+                      <a
+                        href="#forgot-password-otp"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          setShowForgotInProfile(true);
+                          setResetStep(1);
+                        }}
+                        style={{ fontSize: '12px', color: '#ef4444', cursor: 'pointer', fontWeight: 'bold', textDecoration: 'none' }}
+                      >
                         Quên mật khẩu? Khôi phục qua OTP
-                      </span>
+                      </a>
                     </div>
                   </div>
                 ) : (
@@ -686,7 +713,16 @@ function App({
                       </form>
                     )}
                     <div style={{ textAlign: 'center', marginTop: '15px' }}>
-                      <span onClick={() => setShowForgotInProfile(false)} style={{ fontSize: '12px', cursor: 'pointer' }}>← Quay lại</span>
+                      <a
+                        href="#profile-main"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          setShowForgotInProfile(false);
+                        }}
+                        style={{ fontSize: '12px', cursor: 'pointer', color: '#64748b', textDecoration: 'none' }}
+                      >
+                        ← Quay lại
+                      </a>
                     </div>
                   </div>
                 )}
@@ -768,8 +804,26 @@ function App({
               </button>
 
               <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', fontSize: '12px', marginTop: '8px' }}>
-                <span onClick={() => setScreen('register')} style={styles.linkText}>+ Tạo tài khoản</span>
-                <span onClick={() => setScreen('forgot')} style={styles.linkText}>Quên mật khẩu?</span>
+                <a
+                  href="#register"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setScreen('register');
+                  }}
+                  style={{ ...styles.linkText, textDecoration: 'none' }}
+                >
+                  + Tạo tài khoản
+                </a>
+                <a
+                  href="#forgot"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setScreen('forgot');
+                  }}
+                  style={{ ...styles.linkText, textDecoration: 'none' }}
+                >
+                  Quên mật khẩu?
+                </a>
               </div>
             </form>
           )}
@@ -853,7 +907,16 @@ function App({
               >
                 TẠO TÀI KHOẢN
               </button>
-              <span onClick={() => setScreen('login')} style={{ ...styles.linkText, marginTop: '10px' }}>← Đã có tài khoản? Đăng nhập</span>
+              <a
+                href="#login"
+                onClick={(e) => {
+                  e.preventDefault();
+                  setScreen('login');
+                }}
+                style={{ ...styles.linkText, textDecoration: 'none', marginTop: '10px', display: 'inline-block' }}
+              >
+                ← Đã có tài khoản? Đăng nhập
+              </a>
             </form>
           )}
 
@@ -862,7 +925,16 @@ function App({
               <h3 style={styles.formTitle}>KHÔI PHỤC MẬT KHẨU</h3>
               <input type="email" placeholder="ENTER YOUR EMAIL" style={styles.input} />
               <button type="submit" style={{ ...styles.actionBtn, marginTop: '12px' }}>SEND RESET LINK</button>
-              <span onClick={() => setScreen('login')} style={{ ...styles.linkText, marginTop: '10px' }}>Quay lại Đăng nhập</span>
+              <a
+                href="#login"
+                onClick={(e) => {
+                  e.preventDefault();
+                  setScreen('login');
+                }}
+                style={{ ...styles.linkText, textDecoration: 'none', marginTop: '10px', display: 'inline-block' }}
+              >
+                Quay lại Đăng nhập
+              </a>
             </form>
           )}
 
@@ -874,41 +946,60 @@ function App({
         {/* BÊN PHẢI GIAO DIỆN CỦ BAN ĐẦU */}
         <div style={styles.rightPanelFullWidth}>
           <div style={styles.navHeader}>
-            <span
-              onClick={() => setScreen(screen === 'about' ? 'login' : 'about')}
+            <a
+              href="#about"
+              onClick={(e) => {
+                e.preventDefault();
+                setScreen(screen === 'about' ? 'login' : 'about');
+              }}
               style={{
                 ...styles.navLink,
+                textDecoration: 'none',
+                cursor: 'pointer',
                 ...(hoveredBlock === 'nav-about' ? styles.elevatedText : {}),
               }}
               onMouseEnter={() => setHoveredBlock('nav-about')}
               onMouseLeave={() => setHoveredBlock(null)}
             >
               ABOUT
-            </span>
-            <span
-              onClick={() => setScreen(screen === 'contact' ? 'login' : 'contact')}
+            </a>
+            <a
+              href="#contact"
+              onClick={(e) => {
+                e.preventDefault();
+                setScreen(screen === 'contact' ? 'login' : 'contact');
+              }}
               style={{
                 ...styles.navLink,
+                textDecoration: 'none',
+                cursor: 'pointer',
                 ...(hoveredBlock === 'nav-contact' ? styles.elevatedText : {}),
               }}
               onMouseEnter={() => setHoveredBlock('nav-contact')}
               onMouseLeave={() => setHoveredBlock(null)}
             >
               CONTACT
-            </span>
+            </a>
 
-            <button
-              type="button"
-              onClick={() => setScreen('register')}
+            <a
+              href="#register"
+              onClick={(e) => {
+                e.preventDefault();
+                setScreen('register');
+              }}
               style={{
                 ...styles.signInPillBtn,
+                display: 'inline-block',
+                textDecoration: 'none',
+                textAlign: 'center',
+                lineHeight: '34px',
                 ...(hoveredBlock === 'btn-signup-pill' ? styles.elevatedBtnPill : {}),
               }}
               onMouseEnter={() => setHoveredBlock('btn-signup-pill')}
               onMouseLeave={() => setHoveredBlock(null)}
             >
               SIGN UP
-            </button>
+            </a>
           </div>
 
           <div style={styles.centerContainer}>
@@ -963,9 +1054,16 @@ function App({
   return (
     <AuthProvider>
       <div style={{ position: 'fixed', bottom: '16px', right: '16px', zIndex: 999999, display: 'flex', gap: '8px' }}>
-        <button
-          onClick={() => setViewMode(viewMode === 'oms' ? 'scrum300' : 'oms')}
+        <a
+          href={viewMode === 'oms' ? '#scrum300-demo' : '#oms-pro'}
+          role="button"
+          onClick={(e) => {
+            e.preventDefault();
+            setViewMode(viewMode === 'oms' ? 'scrum300' : 'oms');
+          }}
           style={{
+            textDecoration: 'none',
+            display: 'inline-block',
             padding: '10px 18px',
             backgroundColor: '#2563eb',
             color: '#ffffff',
@@ -979,14 +1077,14 @@ function App({
           }}
         >
           {viewMode === 'oms' ? '🔍 Xem Demo SCRUM-300 (Header & Kho)' : '📦 Về Giao Diện OMS Pro'}
-        </button>
+        </a>
       </div>
 
       {viewMode === 'scrum300' ? (
         <div>
           <Navbar />
           <main>
-            <Hello />
+            <Scrum300Demo />
           </main>
         </div>
       ) : (

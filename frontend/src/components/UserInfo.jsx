@@ -36,14 +36,19 @@ export default function UserInfo() {
     return (
       <div className="user-empty" aria-label="Chưa đăng nhập">
         <span style={{ fontSize: '13px', color: 'var(--text)' }}>Khách</span>
-        <button
-          type="button"
+        <a
+          href="#login"
+          role="button"
           className="btn-login-quick"
-          onClick={() => login()}
+          onClick={(e) => {
+            e.preventDefault();
+            login();
+          }}
           title="Đăng nhập lại tài khoản mẫu"
+          style={{ textDecoration: 'none', display: 'inline-block' }}
         >
           Đăng nhập
-        </button>
+        </a>
       </div>
     );
   }

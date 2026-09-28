@@ -1,6 +1,6 @@
 import { useAuth } from '../context/useAuth';
 
-export default function Hello() {
+export default function Scrum300Demo() {
   const {
     user,
     loading,

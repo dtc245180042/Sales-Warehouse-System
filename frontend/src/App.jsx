@@ -74,15 +74,15 @@ function App({
   });
 
   const handleLockAccountDemo = (targetUsername) => {
-    const reason = window.prompt("Nhập lý do khóa tài khoản (Bắt buộc theo SCRUM-207):");
+    const reason = window.prompt("Nhập lý do khóa tài khoản (Bắt buộc):");
     if (!reason || !reason.trim()) {
-      alert("Lỗi: Bắt buộc phải ghi rõ lý do khóa tài khoản theo yêu cầu SCRUM-207!");
+      alert("Lỗi: Bắt buộc phải ghi rõ lý do khóa tài khoản!");
       return;
     }
     const target = userList.find(u => u.username === targetUsername);
     let warningMsg = `Tài khoản '${targetUsername}' đã bị khóa và lập tức thu hồi toàn bộ phiên đăng nhập đang mở phía server.\nLý do: "${reason}".`;
     if (target && (target.role === 'sales_rep' || target.role === 'sales_mgr')) {
-      warningMsg += `\n\n⚠️ CẢNH BÁO BÀN GIAO: Nhân viên kinh doanh '${target.fullName}' phụ trách danh sách đại lý địa bàn. Yêu cầu phân công bàn giao ngay lập tức cho nhân viên khác! (SCRUM-207)`;
+      warningMsg += `\n\n⚠️ CẢNH BÁO BÀN GIAO: Nhân viên kinh doanh '${target.fullName}' phụ trách danh sách đại lý địa bàn. Yêu cầu phân công bàn giao ngay lập tức cho nhân viên khác!`;
     }
     setUserList(prev => prev.map(u => u.username === targetUsername ? { ...u, isLocked: true, lockReason: reason } : u));
     setPopup({
@@ -104,6 +104,10 @@ function App({
       onConfirm: () => setPopup({ ...popup, show: false })
     });
   };
+
+  // STATE DỮ LIỆU ĐĂNG NHẬP
+  const [loginUsername, setLoginUsername] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
 
   // STATE DỮ LIỆU FORM ĐĂNG KÝ
   const [regForm, setRegForm] = useState({
@@ -202,21 +206,54 @@ function App({
     localStorage.setItem('auth_user', JSON.stringify(matched));
   };
 
-  const handleQuickLoginAs = (account) => {
-    setUser(account);
-    setCurrentRole(account.role);
-    localStorage.setItem('auth_user', JSON.stringify(account));
-    setScreen('dashboard');
-  };
-
   const handleLoginSubmit = (e) => {
     e.preventDefault();
-    onLoginSubmit({});
+    onLoginSubmit({ username: loginUsername, password: loginPassword });
 
-    const loggedUser = MOCK_ACCOUNTS.find(a => a.role === currentRole) || MOCK_ACCOUNTS[0];
-    setUser(loggedUser);
-    localStorage.setItem('auth_user', JSON.stringify(loggedUser));
+    const trimmedUser = loginUsername.trim();
+    if (!trimmedUser || !loginPassword) {
+      setPopup({
+        show: true,
+        title: 'Đăng nhập không thành công',
+        message: 'Vui lòng nhập đầy đủ tên đăng nhập và mật khẩu!',
+        type: 'error',
+        onConfirm: () => setPopup(p => ({ ...p, show: false }))
+      });
+      return;
+    }
+
+    const foundAccount = userList.find(
+      (a) => a.username.toLowerCase() === trimmedUser.toLowerCase()
+    );
+
+    if (!foundAccount || foundAccount.password !== loginPassword) {
+      setPopup({
+        show: true,
+        title: 'Đăng nhập thất bại',
+        message: 'Tên đăng nhập hoặc mật khẩu không chính xác. Vui lòng kiểm tra lại!',
+        type: 'error',
+        onConfirm: () => setPopup(p => ({ ...p, show: false }))
+      });
+      return;
+    }
+
+    if (foundAccount.isLocked) {
+      setPopup({
+        show: true,
+        title: 'Tài khoản đã bị khóa',
+        message: `Tài khoản này hiện đang bị khóa bởi Quản trị viên.\nLý do: "${foundAccount.lockReason || 'Không có'}"`,
+        type: 'error',
+        onConfirm: () => setPopup(p => ({ ...p, show: false }))
+      });
+      return;
+    }
+
+    setUser(foundAccount);
+    setCurrentRole(foundAccount.role);
+    localStorage.setItem('auth_user', JSON.stringify(foundAccount));
     setScreen('dashboard');
+    setLoginUsername('');
+    setLoginPassword('');
   };
 
   const handleRegisterSubmit = (e) => {
@@ -251,9 +288,11 @@ function App({
       email: regForm.email,
       phone: regForm.phone,
       role: 'customer',
+      roleTitle: 'Đại lý cấp 1 (Customer)',
       createdAt: new Date().toLocaleDateString('vi-VN')
     };
 
+    setUserList(prev => [newCustomerUser, ...prev]);
     onRegisterSubmit(newCustomerUser);
 
     setPopup({
@@ -371,7 +410,7 @@ function App({
                     <span>📊</span> Tổng quan Doanh thu
                   </a>
                   <a href="#gia-von-bien-loi-nhuan" style={{ ...styles.omsNavItem, textDecoration: 'none', ...(hoveredBlock === 'nav-sm2' ? styles.elevatedBlockDark : {}) }} onMouseEnter={() => setHoveredBlock('nav-sm2')} onMouseLeave={() => setHoveredBlock(null)}>
-                    <span>💎</span> Giá vốn & Biên LN (SCRUM-202)
+                    <span>💎</span> Giá vốn & Biên lợi nhuận
                   </a>
                   <a href="#duyet-han-muc-mgr" style={{ ...styles.omsNavItem, textDecoration: 'none', ...(hoveredBlock === 'nav-sm3' ? styles.elevatedBlockDark : {}) }} onMouseEnter={() => setHoveredBlock('nav-sm3')} onMouseLeave={() => setHoveredBlock(null)}>
                     <span>💳</span> Phê duyệt Hạn mức Tín dụng
@@ -427,13 +466,13 @@ function App({
                     <span>📊</span> Tổng quan Quản trị
                   </a>
                   <a href="#quan-ly-user" style={{ ...styles.omsNavItem, textDecoration: 'none', ...(hoveredBlock === 'nav-a2' ? styles.elevatedBlockDark : {}) }} onMouseEnter={() => setHoveredBlock('nav-a2')} onMouseLeave={() => setHoveredBlock(null)}>
-                    <span>👥</span> Quản lý Người dùng (SCRUM-205)
+                    <span>👥</span> Quản lý Người dùng
                   </a>
                   <a href="#khoa-tai-khoan" style={{ ...styles.omsNavItem, textDecoration: 'none', ...(hoveredBlock === 'nav-a3' ? styles.elevatedBlockDark : {}) }} onMouseEnter={() => setHoveredBlock('nav-a3')} onMouseLeave={() => setHoveredBlock(null)}>
-                    <span>🔒</span> Khóa tài khoản & Bàn giao (SCRUM-207)
+                    <span>🔒</span> Khóa tài khoản & Bàn giao
                   </a>
                   <a href="#phan-quyen-7-vai-tro" style={{ ...styles.omsNavItem, textDecoration: 'none', ...(hoveredBlock === 'nav-a4' ? styles.elevatedBlockDark : {}) }} onMouseEnter={() => setHoveredBlock('nav-a4')} onMouseLeave={() => setHoveredBlock(null)}>
-                    <span>🎭</span> Phân quyền 7 vai trò (SCRUM-202, 206)
+                    <span>🎭</span> Phân quyền vai trò hệ thống
                   </a>
                 </>
               )}
@@ -470,7 +509,7 @@ function App({
               <div style={styles.omsLogoSquare}>O</div>
               <div>
                 <h3 style={{ margin: 0, fontSize: '16px', color: '#0f172a', fontWeight: '800' }}>OMS Pro</h3>
-                <span style={{ fontSize: '11px', color: '#64748b' }}>Hệ thống Quản lý Bán hàng & Kho (Sprint 1)</span>
+                <span style={{ fontSize: '11px', color: '#64748b' }}>Hệ thống Quản lý Bán hàng & Kho</span>
               </div>
             </div>
 
@@ -542,7 +581,7 @@ function App({
               </h2>
               <p style={{ margin: 0, fontSize: '13px', opacity: 0.9 }}>
                 {user?.fullName || "Người dùng hệ thống"} • Vai trò: <strong>{user?.roleTitle || roleActive.toUpperCase()}</strong>
-                {user?.warehouse && <span> | 🏢 Kho gán: <strong>{user.warehouse}</strong> (SCRUM-206)</span>}
+                {user?.warehouse && <span> | 🏢 Kho gán: <strong>{user.warehouse}</strong></span>}
               </p>
             </div>
 
@@ -568,7 +607,7 @@ function App({
               {roleActive === 'sales_mgr' && (
                 <div>
                   <div style={{ fontSize: '11px', textTransform: 'uppercase', opacity: 0.8 }}>BIÊN LỢI NHUẬN TB</div>
-                  <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#86efac' }}>26.1% (SCRUM-202)</div>
+                  <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#86efac' }}>26.1%</div>
                 </div>
               )}
               {(roleActive === 'warehouse' || roleActive === 'wh_mgr') && (
@@ -668,7 +707,7 @@ function App({
                 </div>
                 <div style={styles.staffStatCard}>
                   <span style={{ fontSize: '12px', color: '#64748b' }}>Quy định an ninh nhân sự</span>
-                  <h3 style={{ margin: '5px 0', fontSize: '14px', color: '#d97706' }}>Bàn giao khi khóa (SCRUM-207)</h3>
+                  <h3 style={{ margin: '5px 0', fontSize: '14px', color: '#d97706' }}>Yêu cầu bàn giao khi khóa</h3>
                 </div>
               </div>
 
@@ -685,7 +724,7 @@ function App({
                   ))}
                 </div>
                 <div style={{ marginTop: '16px', padding: '12px', backgroundColor: '#fffbeb', borderRadius: '8px', border: '1px dashed #f59e0b', fontSize: '12px', color: '#b45309' }}>
-                  ⚠️ <strong>Quy định an ninh [SCRUM-207]:</strong> Danh sách đại lý do nhân viên kinh doanh này phụ trách sẽ tự động được cảnh báo cần bàn giao gấp khi tài khoản bị Quản trị viên khóa.
+                  ⚠️ <strong>Quy định an ninh:</strong> Danh sách đại lý do nhân viên kinh doanh này phụ trách sẽ tự động được cảnh báo cần bàn giao gấp khi tài khoản bị Quản trị viên khóa.
                 </div>
               </div>
             </div>
@@ -703,7 +742,7 @@ function App({
                   <h3 style={{ margin: '5px 0', fontSize: '22px', color: '#2563eb' }}>117.450.000 đ</h3>
                 </div>
                 <div style={styles.staffStatCard}>
-                  <span style={{ fontSize: '12px', color: '#64748b' }}>Quyền xem giá vốn (SCRUM-202)</span>
+                  <span style={{ fontSize: '12px', color: '#64748b' }}>Quyền xem giá vốn</span>
                   <h3 style={{ margin: '5px 0', fontSize: '14px', color: '#7c3aed' }}>Đặc quyền Sales Manager</h3>
                 </div>
               </div>
@@ -711,7 +750,7 @@ function App({
               <div style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '16px', padding: '24px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                   <h3 style={{ margin: 0, fontSize: '16px', color: '#1e293b' }}>
-                    💎 Bảng Tra Cứu Giá Vốn & Biên Lợi Nhuận (SCRUM-202)
+                    💎 Bảng Tra Cứu Giá Vốn & Biên Lợi Nhuận
                   </h3>
                   <span style={{ fontSize: '12px', color: '#7c3aed', backgroundColor: '#f5f3ff', border: '1px solid #ddd6fe', padding: '4px 10px', borderRadius: '12px', fontWeight: 'bold' }}>
                     🔒 Bảo mật Server: GET /api/v1/auth/financial/cost-and-margin
@@ -755,7 +794,7 @@ function App({
             <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '15px' }}>
                 <div style={styles.staffStatCard}>
-                  <span style={{ fontSize: '12px', color: '#64748b' }}>Kho phụ trách (SCRUM-206)</span>
+                  <span style={{ fontSize: '12px', color: '#64748b' }}>Kho phụ trách</span>
                   <h3 style={{ margin: '5px 0', fontSize: '18px', color: '#2563eb' }}>Kho Tổng Hà Nội</h3>
                 </div>
                 <div style={styles.staffStatCard}>
@@ -778,7 +817,7 @@ function App({
             <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '15px' }}>
                 <div style={styles.staffStatCard}>
-                  <span style={{ fontSize: '12px', color: '#64748b' }}>Kho phụ trách (SCRUM-206)</span>
+                  <span style={{ fontSize: '12px', color: '#64748b' }}>Kho phụ trách</span>
                   <h3 style={{ margin: '5px 0', fontSize: '18px', color: '#2563eb' }}>Kho Đà Nẵng</h3>
                 </div>
                 <div style={styles.staffStatCard}>
@@ -828,7 +867,7 @@ function App({
                   <h2 style={{ margin: '4px 0', color: '#1e293b' }}>{userList.length}</h2>
                 </div>
                 <div style={styles.adminStatCard}>
-                  <span style={{ fontSize: '11px', color: '#64748b' }}>VAI TRÒ NGHIỆP VỤ (SCRUM-202)</span>
+                  <span style={{ fontSize: '11px', color: '#64748b' }}>VAI TRÒ NGHIỆP VỤ</span>
                   <h2 style={{ margin: '4px 0', color: '#2563eb' }}>7 Vai trò</h2>
                 </div>
                 <div style={styles.adminStatCard}>
@@ -837,7 +876,7 @@ function App({
                 </div>
                 <div style={{ ...styles.adminStatCard, borderLeft: '4px solid #d97706' }}>
                   <span style={{ fontSize: '11px', color: '#64748b' }}>QUY ĐỊNH KHÓA TÀI KHOẢN</span>
-                  <h2 style={{ margin: '4px 0', fontSize: '18px', color: '#d97706' }}>SCRUM-207</h2>
+                  <h2 style={{ margin: '4px 0', fontSize: '18px', color: '#d97706' }}>Bắt buộc lý do</h2>
                 </div>
               </div>
 
@@ -845,7 +884,7 @@ function App({
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                   <div>
                     <h3 style={{ margin: 0, fontSize: '16px', color: '#1e293b' }}>
-                      👥 Quản Lý Tài Khoản & Khóa/Mở Khóa (SCRUM-205, SCRUM-207)
+                      👥 Quản Lý Tài Khoản & Khóa/Mở Khóa
                     </h3>
                     <span style={{ fontSize: '12px', color: '#64748b' }}>Bắt buộc ghi lý do khóa • Thu hồi phiên tức thì • Cảnh báo bàn giao đại lý</span>
                   </div>
@@ -858,7 +897,7 @@ function App({
                         <th style={{ padding: '10px 12px' }}>Họ và tên</th>
                         <th style={{ padding: '10px 12px' }}>Tài khoản</th>
                         <th style={{ padding: '10px 12px' }}>Vai trò</th>
-                        <th style={{ padding: '10px 12px' }}>Kho gán (SCRUM-206)</th>
+                        <th style={{ padding: '10px 12px' }}>Kho gán</th>
                         <th style={{ padding: '10px 12px' }}>Trạng thái</th>
                         <th style={{ padding: '10px 12px', textAlign: 'center' }}>Thao tác</th>
                       </tr>
@@ -889,7 +928,7 @@ function App({
                           </td>
                           <td style={{ padding: '10px 12px', textAlign: 'center' }}>
                             {u.role === 'admin' ? (
-                              <span style={{ fontSize: '11px', color: '#94a3b8' }} title="Không thể tự khóa tài khoản Admin (SCRUM-206)">Admin gốc</span>
+                              <span style={{ fontSize: '11px', color: '#94a3b8' }} title="Không thể tự khóa tài khoản Admin">Admin gốc</span>
                             ) : u.isLocked ? (
                               <button
                                 type="button"
@@ -1119,7 +1158,14 @@ function App({
                 onMouseEnter={() => setHoveredBlock('inp-user')}
                 onMouseLeave={() => setHoveredBlock(null)}
               >
-                <input type="text" placeholder="USERNAME" style={styles.input} />
+                <input
+                  type="text"
+                  placeholder="USERNAME"
+                  value={loginUsername}
+                  onChange={(e) => setLoginUsername(e.target.value)}
+                  style={styles.input}
+                  required
+                />
               </div>
 
               <div
@@ -1130,40 +1176,15 @@ function App({
                 onMouseEnter={() => setHoveredBlock('inp-pass')}
                 onMouseLeave={() => setHoveredBlock(null)}
               >
-                <input type={showLoginPass ? "text" : "password"} placeholder="MẬT KHẨU" style={styles.inputWithEye} />
+                <input
+                  type={showLoginPass ? "text" : "password"}
+                  placeholder="MẬT KHẨU"
+                  value={loginPassword}
+                  onChange={(e) => setLoginPassword(e.target.value)}
+                  style={styles.inputWithEye}
+                  required
+                />
                 <TogglePassBtn isVisible={showLoginPass} onToggle={() => setShowLoginPass(!showLoginPass)} />
-              </div>
-
-              <div style={{ margin: '12px 0', textAlign: 'left' }}>
-                <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 'bold', marginBottom: '8px' }}>
-                  ⚡ CHỌN NHANH TÀI KHOẢN THỬ NGHIỆM (7 VAI TRÒ):
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '6px' }}>
-                  {MOCK_ACCOUNTS.map((acc) => (
-                    <button
-                      key={acc.username}
-                      type="button"
-                      onClick={() => handleQuickLoginAs(acc)}
-                      style={{
-                        padding: '6px 8px',
-                        borderRadius: '6px',
-                        border: '1px solid #cbd5e1',
-                        backgroundColor: '#f8fafc',
-                        fontSize: '11px',
-                        cursor: 'pointer',
-                        color: '#1e293b',
-                        fontWeight: '500',
-                        textAlign: 'left'
-                      }}
-                      title={`Đăng nhập vai trò: ${acc.roleTitle} | Username: ${acc.username}`}
-                    >
-                      <strong style={{ color: '#2563eb' }}>{acc.username}</strong>
-                      <div style={{ fontSize: '10px', color: '#64748b', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {acc.role}
-                      </div>
-                    </button>
-                  ))}
-                </div>
               </div>
 
               <button
@@ -1430,7 +1451,7 @@ function App({
     <AuthProvider>
       <div style={{ position: 'fixed', bottom: '16px', right: '16px', zIndex: 999999, display: 'flex', gap: '8px' }}>
         <a
-          href={viewMode === 'oms' ? '#scrum300-demo' : '#oms-pro'}
+          href={viewMode === 'oms' ? '#header-kho-demo' : '#oms-pro'}
           role="button"
           onClick={(e) => {
             e.preventDefault();
@@ -1451,7 +1472,7 @@ function App({
             transition: 'all 0.2s ease',
           }}
         >
-          {viewMode === 'oms' ? '🔍 Xem Demo SCRUM-300 (Header & Kho)' : '📦 Về Giao Diện OMS Pro'}
+          {viewMode === 'oms' ? '🔍 Xem Giao Diện Header & Kho' : '📦 Về Giao Diện OMS Pro'}
         </a>
       </div>
 

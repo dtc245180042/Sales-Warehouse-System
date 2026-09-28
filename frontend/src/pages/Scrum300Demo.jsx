@@ -28,11 +28,11 @@ export default function Scrum300Demo() {
           Hệ Thống Quản Lý Bán Hàng & Kho
         </h1>
         <p style={{ color: 'var(--text)', fontSize: '16px' }}>
-          Nhiệm vụ <strong>[SCRUM-300]</strong>: Hiển thị tên người dùng, vai trò và kho/địa bàn đang làm việc.
+          Tính năng: Hiển thị tên người dùng, vai trò và kho/địa bàn đang làm việc.
         </p>
       </div>
 
-      {/* Bảng điều khiển thử nghiệm các kịch bản SCRUM-300 */}
+      {/* Bảng điều khiển thử nghiệm các kịch bản Header & Kho */}
       <div
         style={{
           border: '1px solid var(--border)',
@@ -232,10 +232,10 @@ export default function Scrum300Demo() {
         )}
       </div>
 
-      {/* Thông tin mô tả yêu cầu SCRUM-300 */}
+      {/* Thông tin mô tả tính năng Header & Kho */}
       <div style={{ marginTop: '28px', fontSize: '13px', color: 'var(--text)', lineHeight: '1.6' }}>
         <h3 style={{ fontSize: '15px', color: 'var(--text-h)', marginBottom: '8px' }}>
-          📋 Checklist kiểm tra nhiệm vụ [SCRUM-300]:
+          📋 Checklist kiểm tra hiển thị Header & Kho:
         </h3>
         <ul style={{ paddingLeft: '20px', margin: 0 }}>
           <li>

@@ -33,7 +33,7 @@ export default function Navbar() {
         </ul>
       </nav>
 
-      {/* Bên phải: Khu vực Thông tin người dùng [SCRUM-300] */}
+      {/* Bên phải: Khu vực Thông tin người dùng */}
       <div className="navbar-right">
         <UserInfo />
       </div>

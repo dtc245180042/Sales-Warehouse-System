@@ -19,6 +19,8 @@ class UserCreate(UserBase):
 
 class UserResponse(UserBase):
     id: int
+    role: Optional[str] = None
+    token_version: Optional[int] = 1
     created_at: Optional[datetime] = None
     roles: List[RoleResponse] = []
 

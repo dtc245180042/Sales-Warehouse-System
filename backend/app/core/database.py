@@ -1,25 +1,31 @@
-import os
-from dotenv import load_dotenv
+from typing import Generator
 from sqlalchemy import create_engine
-from sqlalchemy.orm import declarative_base, sessionmaker
+from sqlalchemy.orm import declarative_base, sessionmaker, Session
+from app.core.config import settings
 
-load_dotenv()
+DATABASE_URL = settings.DATABASE_URL
 
-# Mặc định lấy từ biến môi trường DATABASE_URL trong file .env
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./sales_warehouse.db")
-
-# Nếu dùng SQLite thì cần cờ check_same_thread=False
-connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
-
-engine = create_engine(DATABASE_URL, connect_args=connect_args)
+# Cấu hình engine: nếu sử dụng SQLite thì cần check_same_thread=False
+la_sqlite = DATABASE_URL.startswith("sqlite")
+engine = create_engine(
+    DATABASE_URL,
+    connect_args={"check_same_thread": False} if la_sqlite else {},
+    pool_pre_ping=True
+)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()
 
-def get_db():
-    db = SessionLocal()
+
+def lay_phien_db() -> Generator[Session, None, None]:
+    """FastAPI Dependency cung cấp SQLAlchemy Session cho mỗi request."""
+    phien_db = SessionLocal()
     try:
-        yield db
+        yield phien_db
     finally:
-        db.close()
+        phien_db.close()
+
+
+# Bí danh tương thích ngược (aliases)
+get_db = lay_phien_db

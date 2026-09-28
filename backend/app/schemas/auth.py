@@ -15,6 +15,9 @@ class LoginRequest(BaseModel):
     )
 
 
+from typing import Optional
+
+
 class UserResponse(BaseModel):
     """Thông tin user trả về cho client."""
     id: int
@@ -23,6 +26,9 @@ class UserResponse(BaseModel):
     role: str
     is_active: bool
     token_version: int
+    full_name: Optional[str] = None
+    assigned_warehouse: Optional[str] = None
+    must_change_password: Optional[bool] = False
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -63,6 +69,40 @@ class ChangePasswordRequest(BaseModel):
         if not co_chu_cai or not co_chu_so:
             raise ValueError("Mật khẩu mới phải chứa ít nhất một chữ cái và một chữ số.")
 
+        return gia_tri_mat_khau
+
+
+class ForgotPasswordRequest(BaseModel):
+    """Schema cho request quên mật khẩu qua email (SCRUM-200)."""
+    email: str = Field(
+        ...,
+        description="Địa chỉ email cần nhận liên kết đặt lại mật khẩu",
+        examples=["user@warehouse.local"]
+    )
+
+
+class ResetPasswordRequest(BaseModel):
+    """Schema cho request đặt lại mật khẩu bằng token (SCRUM-200)."""
+    token: str = Field(
+        ...,
+        description="Token đặt lại mật khẩu 30 phút",
+        examples=["abcdef123456..."]
+    )
+    new_password: str = Field(
+        ...,
+        description="Mật khẩu mới (tối thiểu 8 ký tự, gồm cả chữ cái và chữ số)",
+        examples=["NewSecurePass88"]
+    )
+
+    @field_validator("new_password")
+    @classmethod
+    def kiem_tra_do_manh_mat_khau(cls, gia_tri_mat_khau: str) -> str:
+        if len(gia_tri_mat_khau) < 8:
+            raise ValueError("Mật khẩu mới phải có độ dài tối thiểu 8 ký tự.")
+        co_chu_cai = any(ky_tu.isalpha() for ky_tu in gia_tri_mat_khau)
+        co_chu_so = any(ky_tu.isdigit() for ky_tu in gia_tri_mat_khau)
+        if not co_chu_cai or not co_chu_so:
+            raise ValueError("Mật khẩu mới phải chứa ít nhất một chữ cái và một chữ số.")
         return gia_tri_mat_khau
 
 

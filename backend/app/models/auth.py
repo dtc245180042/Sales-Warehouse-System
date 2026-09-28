@@ -89,15 +89,22 @@ class User(Base):
     role = Column(String(50), nullable=False, default=UserRole.CUSTOMER.value)
     full_name = Column(String(100), nullable=True)
     phone_number = Column(String(20), nullable=True)
+    assigned_warehouse = Column(String(100), nullable=True)
 
     # Đếm số lần đăng nhập thất bại liên tiếp (SCRUM-287)
     failed_login_attempts = Column(Integer, default=0, nullable=False)
 
     # Thời điểm hết hạn khóa tài khoản (SCRUM-287)
     locked_until = Column(DateTime(timezone=True), nullable=True, default=None)
+    lock_reason = Column(String(255), nullable=True)
 
     # Quản lý phiên đăng nhập: Tăng version khi đổi mật khẩu để thu hồi token cũ (SCRUM-307)
     token_version = Column(Integer, default=1, nullable=False)
+
+    # Đặt lại mật khẩu qua email (SCRUM-200)
+    reset_password_token = Column(String(255), nullable=True, index=True)
+    reset_password_expires_at = Column(DateTime(timezone=True), nullable=True)
+    must_change_password = Column(Boolean, default=False, nullable=False)
 
     # Trạng thái tài khoản
     is_active = Column(Boolean, default=True, nullable=False)

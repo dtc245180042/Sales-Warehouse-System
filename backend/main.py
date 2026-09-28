@@ -78,8 +78,11 @@ app.add_middleware(
 # Tích hợp router chính (/api bao gồm permissions, roles, auth)
 app.include_router(api_router)
 
-# Tích hợp thêm router xác thực trực tiếp tại /api/v1
+from app.api.users import router as router_nguoi_dung
+
+# Tích hợp thêm router xác thực và người dùng trực tiếp tại /api/v1
 app.include_router(router_xac_thuc, prefix=settings.API_V1_STR)
+app.include_router(router_nguoi_dung, prefix=settings.API_V1_STR)
 
 
 @app.get("/", tags=["Health"])

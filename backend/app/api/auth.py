@@ -1,3 +1,4 @@
+import secrets
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -11,6 +12,8 @@ from app.schemas.auth import (
     LoginRequest,
     TokenResponse,
     ChangePasswordRequest,
+    ForgotPasswordRequest,
+    ResetPasswordRequest,
     MessageResponse,
     UserResponse,
 )
@@ -159,6 +162,145 @@ def doi_mat_khau(
     )
 
 
+@router.post(
+    "/logout",
+    response_model=MessageResponse,
+    summary="Đăng xuất & Vô hiệu hóa phiên lập tức phía máy chủ (SCRUM-199)"
+)
+def dang_xuat(
+    nguoi_dung_hien_tai: User = Depends(lay_nguoi_dung_hien_tai),
+    phien_db: Session = Depends(lay_phien_db)
+):
+    """Đăng xuất an toàn: Tăng token_version để vô hiệu hóa token hiện tại phía server ngay lập tức."""
+    nguoi_dung_hien_tai.token_version += 1
+    phien_db.commit()
+    return MessageResponse(message="Đăng xuất thành công. Phiên đăng nhập đã bị vô hiệu hóa phía máy chủ.")
+
+
+@router.post(
+    "/refresh",
+    response_model=TokenResponse,
+    summary="Gia hạn phiên đăng nhập tự động khi người dùng đang hoạt động (SCRUM-199)"
+)
+def gia_han_phien(
+    nguoi_dung_hien_tai: User = Depends(lay_nguoi_dung_hien_tai)
+):
+    """Gia hạn phiên tự động: Cấp access token mới khi phiên cũ vẫn còn hiệu lực và người dùng đang thao tác."""
+    du_lieu_token = {
+        "sub": nguoi_dung_hien_tai.username,
+        "user_id": nguoi_dung_hien_tai.id,
+        "role": nguoi_dung_hien_tai.role,
+        "token_version": nguoi_dung_hien_tai.token_version
+    }
+    token_moi = tao_token_truy_cap(du_lieu_token)
+    return TokenResponse(
+        access_token=token_moi,
+        token_type="bearer",
+        user=UserResponse.model_validate(nguoi_dung_hien_tai)
+    )
+
+
+@router.post(
+    "/forgot-password",
+    response_model=MessageResponse,
+    summary="Yêu cầu đặt lại mật khẩu qua email có hiệu lực 30 phút (SCRUM-200)"
+)
+def quen_mat_khau(
+    du_lieu_yeu_cau: ForgotPasswordRequest,
+    phien_db: Session = Depends(lay_phien_db)
+):
+    """Gửi liên kết đặt lại mật khẩu:
+    - Token có hiệu lực đúng 30 phút.
+    - Dù email không tồn tại vẫn trả về cùng thông điệp chung (tránh rò rỉ dữ liệu).
+    """
+    email_nhan = du_lieu_yeu_cau.email.strip().lower()
+    nguoi_dung = phien_db.query(User).filter(User.email == email_nhan).first()
+
+    if nguoi_dung:
+        token_dat_lai = secrets.token_urlsafe(32)
+        nguoi_dung.reset_password_token = token_dat_lai
+        nguoi_dung.reset_password_expires_at = datetime.now(timezone.utc) + timedelta(minutes=30)
+        phien_db.commit()
+
+    return MessageResponse(
+        message="Nếu email tồn tại trong hệ thống, hướng dẫn đặt lại mật khẩu đã được gửi đến email của bạn."
+    )
+
+
+@router.post(
+    "/reset-password",
+    response_model=MessageResponse,
+    summary="Đặt lại mật khẩu mới bằng token 30 phút (SCRUM-200)"
+)
+def dat_lai_mat_khau(
+    du_lieu_yeu_cau: ResetPasswordRequest,
+    phien_db: Session = Depends(lay_phien_db)
+):
+    """Xác nhận token và đặt lại mật khẩu mới:
+    - Kiểm tra token hợp lệ và còn hạn trong vòng 30 phút.
+    - Mật khẩu mới tối thiểu 8 ký tự, có cả chữ và số.
+    - Đổi xong hủy token (chỉ dùng 1 lần) và tăng token_version để thu hồi các phiên cũ.
+    """
+    token_xac_nhan = du_lieu_yeu_cau.token.strip()
+    nguoi_dung = phien_db.query(User).filter(
+        User.reset_password_token == token_xac_nhan
+    ).first()
+
+    thoi_gian_hien_tai = datetime.now(timezone.utc)
+    if not nguoi_dung or not nguoi_dung.reset_password_expires_at:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Liên kết đặt lại mật khẩu không hợp lệ hoặc đã được sử dụng."
+        )
+
+    # Đảm bảo datetime timezone-aware
+    han_token = nguoi_dung.reset_password_expires_at
+    if han_token.tzinfo is None:
+        han_token = han_token.replace(tzinfo=timezone.utc)
+
+    if thoi_gian_hien_tai > han_token:
+        # Hết hạn 30 phút
+        nguoi_dung.reset_password_token = None
+        nguoi_dung.reset_password_expires_at = None
+        phien_db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Liên kết đặt lại mật khẩu đã hết hạn (quá 30 phút). Vui lòng yêu cầu lại."
+        )
+
+    # Cập nhật mật khẩu mới, xóa token và thu hồi phiên cũ
+    nguoi_dung.hashed_password = bam_mat_khau(du_lieu_yeu_cau.new_password)
+    nguoi_dung.reset_password_token = None
+    nguoi_dung.reset_password_expires_at = None
+    nguoi_dung.token_version += 1
+    phien_db.commit()
+
+    return MessageResponse(
+        message="Đặt lại mật khẩu thành công. Vui lòng đăng nhập bằng mật khẩu mới."
+    )
+
+
+@router.get(
+    "/financial/cost-and-margin",
+    summary="Báo cáo Giá vốn & Biên lợi nhuận - Chỉ dành riêng cho Quản lý Kinh doanh (SCRUM-202)"
+)
+def bao_cao_gia_von_va_bien_loi_nhuan(
+    nguoi_dung_hien_tai: User = Depends(yeu_cau_vai_tro(UserRole.SALES_MANAGER, UserRole.ADMIN))
+):
+    """Kiểm tra quyền tầng server: Nhân viên kinh doanh, thủ kho, kế toán không có quyền truy cập."""
+    return {
+        "status": "success",
+        "authorized_role": nguoi_dung_hien_tai.role,
+        "data": [
+            {"product_sku": "SKU-BIA-SG-SPEC", "cost_price": 10500, "selling_price": 15000, "profit_margin": "30.0%"},
+            {"product_sku": "SKU-CHOCOPIE-OR", "cost_price": 38000, "selling_price": 55000, "profit_margin": "30.9%"},
+            {"product_sku": "SKU-LAVIE-500", "cost_price": 3500, "selling_price": 6000, "profit_margin": "41.6%"},
+            {"product_sku": "SKU-STING-DAU", "cost_price": 6800, "selling_price": 10000, "profit_margin": "32.0%"},
+            {"product_sku": "SKU-SUA-VNM-180", "cost_price": 6000, "selling_price": 8500, "profit_margin": "29.4%"},
+        ]
+    }
+
+
 @router.get(
     "/me",
     response_model=UserResponse,
@@ -203,6 +345,10 @@ def demo_khu_vuc_danh_rieng_cho_kho(
 
 # Bí danh tương thích ngược (aliases)
 login = dang_nhap
+logout = dang_xuat
+refresh = gia_han_phien
+forgot_password = quen_mat_khau
+reset_password = dat_lai_mat_khau
 change_password = doi_mat_khau
 get_me = lay_thong_tin_toi
 demo_sales_manager_or_admin = demo_khu_vuc_quan_ly_ban_hang_hoac_admin

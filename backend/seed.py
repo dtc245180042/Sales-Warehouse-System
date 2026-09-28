@@ -28,6 +28,8 @@ def run_seed():
     try:
         print("-> Đang khởi tạo quyền mặc định, vai trò nghiệp vụ và gán quyền...")
         result = seed_all(db)
+        from main import khoi_tao_tai_khoan_ban_dau
+        khoi_tao_tai_khoan_ban_dau(db)
         print("\n [KẾT QUẢ KHỞI TẠO THÀNH CÔNG]:")
         print(f"   - Tổng quyền (Permissions): {result['permissions']['total']} (Tạo mới: {result['permissions']['created']}, Cập nhật: {result['permissions']['updated']})")
         print(f"   - Tổng vai trò (Roles): {result['roles']['total']} (Tạo mới: {result['roles']['created']})")
@@ -35,6 +37,7 @@ def run_seed():
         for role, count in result['role_permissions'].items():
             print(f"     + {role:<12}: {count} quyền")
         print(f"   - Tài khoản Admin mặc định: {result['default_admin']['username']} ({result['default_admin']['email']})")
+        print("   - Đã khởi tạo đầy đủ 7 tài khoản mẫu cho 7 vai trò theo chuẩn SCRUM.")
         print("=" * 60)
     except Exception as e:
         print(f"[LỖI] Khởi tạo dữ liệu thất bại: {e}")

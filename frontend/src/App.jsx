@@ -15,9 +15,21 @@ const MOCK_PRODUCTS = [
 ];
 
 const MOCK_ACCOUNTS = [
-  { fullName: 'Quản Trị Viên Hệ Thống', username: 'admin', password: 'admin123', email: 'admin@quanlykho.vn', phone: '0912345678', role: 'admin', createdAt: '01/01/2026' },
-  { fullName: 'Nhân Viên Bán Hàng POS', username: 'staff', password: 'staff123', email: 'staff@quanlykho.vn', phone: '0987654321', role: 'staff', createdAt: '15/02/2026' },
-  { fullName: 'Công ty TNHH Thương mại Tuấn Phương (Đại lý cấp 1)', username: 'customer', password: 'customer123', email: 'tuanphuong@daily.vn', phone: '0933445566', role: 'customer', createdAt: '20/03/2026' }
+  { fullName: 'Trần Quản Trị Hệ Thống', username: 'admin', password: 'Admin@1234', email: 'admin@warehouse.local', phone: '0901234567', role: 'admin', roleTitle: 'Quản trị viên (Admin)', createdAt: '01/01/2026', warehouse: null },
+  { fullName: 'Nguyễn Văn Giám Đốc Kinh Doanh', username: 'sales_mgr', password: 'SalesMgr@1234', email: 'sales_mgr@warehouse.local', phone: '0902345678', role: 'sales_mgr', roleTitle: 'Quản lý kinh doanh (Sales Manager)', createdAt: '10/01/2026', warehouse: null },
+  { fullName: 'Lê Thị Nhân Viên Kinh Doanh', username: 'sales_rep', password: 'SalesRep@1234', email: 'sales_rep@warehouse.local', phone: '0903456789', role: 'sales_rep', roleTitle: 'Nhân viên kinh doanh (Sales Rep)', createdAt: '15/01/2026', warehouse: null, assignedAgencies: ['Công ty TNHH Tuấn Phương', 'Đại lý Minh Phát', 'Đại lý Hồng Hà'] },
+  { fullName: 'Phạm Văn Trưởng Kho', username: 'wh_mgr', password: 'WhMgr@1234', email: 'wh_mgr@warehouse.local', phone: '0904567890', role: 'wh_mgr', roleTitle: 'Quản lý kho (WH Manager)', createdAt: '20/01/2026', warehouse: 'Kho Tổng Hà Nội' },
+  { fullName: 'Hoàng Văn Thủ Kho', username: 'warehouse', password: 'Warehouse@1234', email: 'warehouse@warehouse.local', phone: '0905678901', role: 'warehouse', roleTitle: 'Thủ kho (Warehouse Staff)', createdAt: '25/01/2026', warehouse: 'Kho Đà Nẵng' },
+  { fullName: 'Đỗ Thị Kế Toán Trưởng', username: 'accountant', password: 'Accountant@1234', email: 'accountant@warehouse.local', phone: '0906789012', role: 'accountant', roleTitle: 'Kế toán (Accountant)', createdAt: '01/02/2026', warehouse: null },
+  { fullName: 'Công ty TNHH Đại Lý Tuấn Phương', username: 'customer', password: 'Customer@1234', email: 'customer@warehouse.local', phone: '0907890123', role: 'customer', roleTitle: 'Đại lý cấp 1 (Customer)', createdAt: '10/02/2026', warehouse: null }
+];
+
+const MOCK_FINANCIAL_MARGINS = [
+  { sku: 'SKU-BIA-SG-SPEC', name: 'Bia Sài Gòn Special Lon 330ml', costPrice: 11500, salePrice: 15000, margin: '23.3%' },
+  { sku: 'SKU-CHOCOPIE-OR', name: 'Bánh Chocopie Orion Hộp 12 Cái', costPrice: 42000, salePrice: 55000, margin: '23.6%' },
+  { sku: 'SKU-LAVIE-500', name: 'Nước khoáng Lavie Chai 500ml', costPrice: 4200, salePrice: 6000, margin: '30.0%' },
+  { sku: 'SKU-STING-DAU', name: 'Nước tăng lực Sting Dâu Chai 330ml', costPrice: 7000, salePrice: 10000, margin: '30.0%' },
+  { sku: 'SKU-SUA-VNM-180', name: 'Sữa tươi Vinamilk Có đường 180ml', costPrice: 6500, salePrice: 8500, margin: '23.5%' },
 ];
 
 function App({
@@ -50,6 +62,7 @@ function App({
   const [activeTab, setActiveTab] = useState('main');
   const [hoveredBlock, setHoveredBlock] = useState(null);
   const [viewMode, setViewMode] = useState('oms'); // 'oms' | 'scrum300'
+  const [userList, setUserList] = useState(MOCK_ACCOUNTS);
 
   // STATE POP-UP THÔNG BÁO (MODAL ALERT)
   const [popup, setPopup] = useState({
@@ -59,6 +72,38 @@ function App({
     type: 'success', // 'success' | 'error' | 'info'
     onConfirm: null
   });
+
+  const handleLockAccountDemo = (targetUsername) => {
+    const reason = window.prompt("Nhập lý do khóa tài khoản (Bắt buộc theo SCRUM-207):");
+    if (!reason || !reason.trim()) {
+      alert("Lỗi: Bắt buộc phải ghi rõ lý do khóa tài khoản theo yêu cầu SCRUM-207!");
+      return;
+    }
+    const target = userList.find(u => u.username === targetUsername);
+    let warningMsg = `Tài khoản '${targetUsername}' đã bị khóa và lập tức thu hồi toàn bộ phiên đăng nhập đang mở phía server.\nLý do: "${reason}".`;
+    if (target && (target.role === 'sales_rep' || target.role === 'sales_mgr')) {
+      warningMsg += `\n\n⚠️ CẢNH BÁO BÀN GIAO: Nhân viên kinh doanh '${target.fullName}' phụ trách danh sách đại lý địa bàn. Yêu cầu phân công bàn giao ngay lập tức cho nhân viên khác! (SCRUM-207)`;
+    }
+    setUserList(prev => prev.map(u => u.username === targetUsername ? { ...u, isLocked: true, lockReason: reason } : u));
+    setPopup({
+      show: true,
+      title: 'Khóa tài khoản thành công',
+      message: warningMsg,
+      type: 'info',
+      onConfirm: () => setPopup({ ...popup, show: false })
+    });
+  };
+
+  const handleUnlockAccountDemo = (targetUsername) => {
+    setUserList(prev => prev.map(u => u.username === targetUsername ? { ...u, isLocked: false, lockReason: null } : u));
+    setPopup({
+      show: true,
+      title: 'Mở khóa tài khoản',
+      message: `Tài khoản '${targetUsername}' đã được mở khóa và có thể đăng nhập bình thường.`,
+      type: 'success',
+      onConfirm: () => setPopup({ ...popup, show: false })
+    });
+  };
 
   // STATE DỮ LIỆU FORM ĐĂNG KÝ
   const [regForm, setRegForm] = useState({
@@ -150,11 +195,25 @@ function App({
     });
   };
 
+  const handleRoleChange = (newRole) => {
+    setCurrentRole(newRole);
+    const matched = MOCK_ACCOUNTS.find(a => a.role === newRole) || MOCK_ACCOUNTS[0];
+    setUser(matched);
+    localStorage.setItem('auth_user', JSON.stringify(matched));
+  };
+
+  const handleQuickLoginAs = (account) => {
+    setUser(account);
+    setCurrentRole(account.role);
+    localStorage.setItem('auth_user', JSON.stringify(account));
+    setScreen('dashboard');
+  };
+
   const handleLoginSubmit = (e) => {
     e.preventDefault();
     onLoginSubmit({});
 
-    const loggedUser = MOCK_ACCOUNTS.find(a => a.role === currentRole) || MOCK_ACCOUNTS[2];
+    const loggedUser = MOCK_ACCOUNTS.find(a => a.role === currentRole) || MOCK_ACCOUNTS[0];
     setUser(loggedUser);
     localStorage.setItem('auth_user', JSON.stringify(loggedUser));
     setScreen('dashboard');
@@ -213,14 +272,6 @@ function App({
     });
   };
 
-  const handleRoleChange = (role) => {
-    setCurrentRole(role);
-    if (user) {
-      const updatedUser = { ...user, role };
-      setUser(updatedUser);
-      localStorage.setItem('auth_user', JSON.stringify(updatedUser));
-    }
-  };
 
   // COMPONENT POP-UP MODAL HIỂN THỊ TOÀN CỤC
   const NotificationModal = () => {
@@ -295,12 +346,54 @@ function App({
                     <span>🛒</span> Cổng Đặt hàng Đại lý
                   </a>
                   <a href="#cong-no" style={{ ...styles.omsNavItem, textDecoration: 'none', ...(hoveredBlock === 'nav-c2' ? styles.elevatedBlockDark : {}) }} onMouseEnter={() => setHoveredBlock('nav-c2')} onMouseLeave={() => setHoveredBlock(null)}>
-                    <span>📜</span> Tra cứu Công nợ
+                    <span>📜</span> Tra cứu Công nợ & Hạn mức
                   </a>
                 </>
               )}
 
-              {roleActive === 'staff' && (
+              {roleActive === 'sales_rep' && (
+                <>
+                  <a href="#dai-ly-dia-ban" style={{ ...styles.omsNavItem, ...styles.omsNavItemActive, textDecoration: 'none', ...(hoveredBlock === 'nav-sr1' ? styles.elevatedBlockDark : {}) }} onMouseEnter={() => setHoveredBlock('nav-sr1')} onMouseLeave={() => setHoveredBlock(null)}>
+                    <span>👥</span> Đại lý Phụ trách (Địa bàn)
+                  </a>
+                  <a href="#tao-don-sales" style={{ ...styles.omsNavItem, textDecoration: 'none', ...(hoveredBlock === 'nav-sr2' ? styles.elevatedBlockDark : {}) }} onMouseEnter={() => setHoveredBlock('nav-sr2')} onMouseLeave={() => setHoveredBlock(null)}>
+                    <span>🛒</span> Lên đơn hàng Đại lý
+                  </a>
+                  <a href="#ton-kho-sales" style={{ ...styles.omsNavItem, textDecoration: 'none', ...(hoveredBlock === 'nav-sr3' ? styles.elevatedBlockDark : {}) }} onMouseEnter={() => setHoveredBlock('nav-sr3')} onMouseLeave={() => setHoveredBlock(null)}>
+                    <span>📦</span> Tra cứu tồn kho chi nhánh
+                  </a>
+                </>
+              )}
+
+              {roleActive === 'sales_mgr' && (
+                <>
+                  <a href="#tong-quan-kinh-doanh" style={{ ...styles.omsNavItem, ...styles.omsNavItemActive, textDecoration: 'none', ...(hoveredBlock === 'nav-sm1' ? styles.elevatedBlockDark : {}) }} onMouseEnter={() => setHoveredBlock('nav-sm1')} onMouseLeave={() => setHoveredBlock(null)}>
+                    <span>📊</span> Tổng quan Doanh thu
+                  </a>
+                  <a href="#gia-von-bien-loi-nhuan" style={{ ...styles.omsNavItem, textDecoration: 'none', ...(hoveredBlock === 'nav-sm2' ? styles.elevatedBlockDark : {}) }} onMouseEnter={() => setHoveredBlock('nav-sm2')} onMouseLeave={() => setHoveredBlock(null)}>
+                    <span>💎</span> Giá vốn & Biên LN (SCRUM-202)
+                  </a>
+                  <a href="#duyet-han-muc-mgr" style={{ ...styles.omsNavItem, textDecoration: 'none', ...(hoveredBlock === 'nav-sm3' ? styles.elevatedBlockDark : {}) }} onMouseEnter={() => setHoveredBlock('nav-sm3')} onMouseLeave={() => setHoveredBlock(null)}>
+                    <span>💳</span> Phê duyệt Hạn mức Tín dụng
+                  </a>
+                </>
+              )}
+
+              {roleActive === 'wh_mgr' && (
+                <>
+                  <a href="#kho-tong-hn" style={{ ...styles.omsNavItem, ...styles.omsNavItemActive, textDecoration: 'none', ...(hoveredBlock === 'nav-wm1' ? styles.elevatedBlockDark : {}) }} onMouseEnter={() => setHoveredBlock('nav-wm1')} onMouseLeave={() => setHoveredBlock(null)}>
+                    <span>🏭</span> Kho Tổng Hà Nội (Gán kho)
+                  </a>
+                  <a href="#phieu-nhap-xuat" style={{ ...styles.omsNavItem, textDecoration: 'none', ...(hoveredBlock === 'nav-wm2' ? styles.elevatedBlockDark : {}) }} onMouseEnter={() => setHoveredBlock('nav-wm2')} onMouseLeave={() => setHoveredBlock(null)}>
+                    <span>📥</span> Phiếu Nhập / Xuất / Điều chuyển
+                  </a>
+                  <a href="#kiem-ke-kho-tong" style={{ ...styles.omsNavItem, textDecoration: 'none', ...(hoveredBlock === 'nav-wm3' ? styles.elevatedBlockDark : {}) }} onMouseEnter={() => setHoveredBlock('nav-wm3')} onMouseLeave={() => setHoveredBlock(null)}>
+                    <span>📦</span> Kiểm kê Tồn kho toàn diện
+                  </a>
+                </>
+              )}
+
+              {roleActive === 'warehouse' && (
                 <>
                   <a href="#pos" style={{ ...styles.omsNavItem, ...styles.omsNavItemActive, textDecoration: 'none', ...(hoveredBlock === 'nav-s1' ? styles.elevatedBlockDark : {}) }} onMouseEnter={() => setHoveredBlock('nav-s1')} onMouseLeave={() => setHoveredBlock(null)}>
                     <span>⚡</span> Bán hàng & Xuất kho (POS)
@@ -308,8 +401,22 @@ function App({
                   <a href="#kiem-don" style={{ ...styles.omsNavItem, textDecoration: 'none', ...(hoveredBlock === 'nav-s2' ? styles.elevatedBlockDark : {}) }} onMouseEnter={() => setHoveredBlock('nav-s2')} onMouseLeave={() => setHoveredBlock(null)}>
                     <span>📋</span> Tiếp nhận & Kiểm đơn
                   </a>
-                  <a href="#ton-kho" style={{ ...styles.omsNavItem, textDecoration: 'none', ...(hoveredBlock === 'nav-s3' ? styles.elevatedBlockDark : {}) }} onMouseEnter={() => setHoveredBlock('nav-s3')} onMouseLeave={() => setHoveredBlock(null)}>
-                    <span>📦</span> Kiểm kê Tồn kho
+                  <a href="#ton-kho-dn" style={{ ...styles.omsNavItem, textDecoration: 'none', ...(hoveredBlock === 'nav-s3' ? styles.elevatedBlockDark : {}) }} onMouseEnter={() => setHoveredBlock('nav-s3')} onMouseLeave={() => setHoveredBlock(null)}>
+                    <span>📦</span> Kiểm kê Kho Đà Nẵng
+                  </a>
+                </>
+              )}
+
+              {roleActive === 'accountant' && (
+                <>
+                  <a href="#cong-no-daily" style={{ ...styles.omsNavItem, ...styles.omsNavItemActive, textDecoration: 'none', ...(hoveredBlock === 'nav-ac1' ? styles.elevatedBlockDark : {}) }} onMouseEnter={() => setHoveredBlock('nav-ac1')} onMouseLeave={() => setHoveredBlock(null)}>
+                    <span>📜</span> Sổ theo dõi Công nợ Đại lý
+                  </a>
+                  <a href="#doi-soat-han-muc" style={{ ...styles.omsNavItem, textDecoration: 'none', ...(hoveredBlock === 'nav-ac2' ? styles.elevatedBlockDark : {}) }} onMouseEnter={() => setHoveredBlock('nav-ac2')} onMouseLeave={() => setHoveredBlock(null)}>
+                    <span>💳</span> Đối soát Hạn mức Tín dụng
+                  </a>
+                  <a href="#bao-cao-tai-chinh" style={{ ...styles.omsNavItem, textDecoration: 'none', ...(hoveredBlock === 'nav-ac3' ? styles.elevatedBlockDark : {}) }} onMouseEnter={() => setHoveredBlock('nav-ac3')} onMouseLeave={() => setHoveredBlock(null)}>
+                    <span>📈</span> Báo cáo Doanh thu & Dòng tiền
                   </a>
                 </>
               )}
@@ -319,14 +426,14 @@ function App({
                   <a href="#tong-quan" style={{ ...styles.omsNavItem, ...styles.omsNavItemActive, textDecoration: 'none', ...(hoveredBlock === 'nav-a1' ? styles.elevatedBlockDark : {}) }} onMouseEnter={() => setHoveredBlock('nav-a1')} onMouseLeave={() => setHoveredBlock(null)}>
                     <span>📊</span> Tổng quan Quản trị
                   </a>
-                  <a href="#dai-ly" style={{ ...styles.omsNavItem, textDecoration: 'none', ...(hoveredBlock === 'nav-a2' ? styles.elevatedBlockDark : {}) }} onMouseEnter={() => setHoveredBlock('nav-a2')} onMouseLeave={() => setHoveredBlock(null)}>
-                    <span>🏢</span> Quản lý Hệ thống Đại lý
+                  <a href="#quan-ly-user" style={{ ...styles.omsNavItem, textDecoration: 'none', ...(hoveredBlock === 'nav-a2' ? styles.elevatedBlockDark : {}) }} onMouseEnter={() => setHoveredBlock('nav-a2')} onMouseLeave={() => setHoveredBlock(null)}>
+                    <span>👥</span> Quản lý Người dùng (SCRUM-205)
                   </a>
-                  <a href="#tin-dung" style={{ ...styles.omsNavItem, textDecoration: 'none', ...(hoveredBlock === 'nav-a3' ? styles.elevatedBlockDark : {}) }} onMouseEnter={() => setHoveredBlock('nav-a3')} onMouseLeave={() => setHoveredBlock(null)}>
-                    <span>💳</span> Duyệt Hạn mức Tín dụng
+                  <a href="#khoa-tai-khoan" style={{ ...styles.omsNavItem, textDecoration: 'none', ...(hoveredBlock === 'nav-a3' ? styles.elevatedBlockDark : {}) }} onMouseEnter={() => setHoveredBlock('nav-a3')} onMouseLeave={() => setHoveredBlock(null)}>
+                    <span>🔒</span> Khóa tài khoản & Bàn giao (SCRUM-207)
                   </a>
-                  <a href="#bao-cao" style={{ ...styles.omsNavItem, textDecoration: 'none', ...(hoveredBlock === 'nav-a4' ? styles.elevatedBlockDark : {}) }} onMouseEnter={() => setHoveredBlock('nav-a4')} onMouseLeave={() => setHoveredBlock(null)}>
-                    <span>📈</span> Báo cáo Doanh thu & Kho
+                  <a href="#phan-quyen-7-vai-tro" style={{ ...styles.omsNavItem, textDecoration: 'none', ...(hoveredBlock === 'nav-a4' ? styles.elevatedBlockDark : {}) }} onMouseEnter={() => setHoveredBlock('nav-a4')} onMouseLeave={() => setHoveredBlock(null)}>
+                    <span>🎭</span> Phân quyền 7 vai trò (SCRUM-202, 206)
                   </a>
                 </>
               )}
@@ -336,6 +443,11 @@ function App({
           <div style={styles.omsSidebarFooter}>
             <div style={{ fontSize: '11px', color: '#94a3b8' }}>
               Vai trò: <strong style={{ color: '#fff' }}>{roleActive.toUpperCase()}</strong>
+              {user?.warehouse && (
+                <div style={{ color: '#38bdf8', fontSize: '10px', marginTop: '2px' }}>
+                  🏢 {user.warehouse}
+                </div>
+              )}
             </div>
             <button
               type="button"
@@ -358,21 +470,25 @@ function App({
               <div style={styles.omsLogoSquare}>O</div>
               <div>
                 <h3 style={{ margin: 0, fontSize: '16px', color: '#0f172a', fontWeight: '800' }}>OMS Pro</h3>
-                <span style={{ fontSize: '11px', color: '#64748b' }}>Hệ thống Quản lý Bán hàng & Kho</span>
+                <span style={{ fontSize: '11px', color: '#64748b' }}>Hệ thống Quản lý Bán hàng & Kho (Sprint 1)</span>
               </div>
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
               <div style={styles.omsRoleSelectWrapper}>
-                <span style={{ fontSize: '12px', color: '#64748b' }}>🔍 Xem Giao Diện:</span>
+                <span style={{ fontSize: '12px', color: '#64748b' }}>🔍 Xem Giao Diện 7 Vai Trò:</span>
                 <select
                   value={roleActive}
                   onChange={(e) => handleRoleChange(e.target.value)}
                   style={styles.omsRoleSelect}
                 >
-                  <option value="customer">Đại lý (Customer)</option>
-                  <option value="staff">Nhân viên (Staff)</option>
-                  <option value="admin">Quản trị (Admin)</option>
+                  <option value="customer">1. Đại lý (Customer)</option>
+                  <option value="sales_rep">2. Nhân viên kinh doanh (Sales Rep)</option>
+                  <option value="sales_mgr">3. Quản lý kinh doanh (Sales Manager)</option>
+                  <option value="wh_mgr">4. Quản lý kho (WH Manager)</option>
+                  <option value="warehouse">5. Thủ kho (Warehouse)</option>
+                  <option value="accountant">6. Kế toán (Accountant)</option>
+                  <option value="admin">7. Quản trị hệ thống (Admin)</option>
                 </select>
               </div>
 
@@ -410,10 +526,23 @@ function App({
           >
             <div>
               <h2 style={{ margin: '0 0 6px 0', fontSize: '20px', fontWeight: 'bold' }}>
-                {roleActive === 'admin' ? "Bảng Điều Khiển Quản Trị Hệ Thống (ADMIN)" : roleActive === 'staff' ? "Phân Hệ Xử Lý Bán Hàng & Kho (STAFF)" : "Cổng Đặt Hàng Trực Tuyến Đại Lý (CUSTOMER)"}
+                {roleActive === 'admin'
+                  ? "Bảng Điều Khiển Quản Trị Hệ Thống (ADMIN)"
+                  : roleActive === 'sales_mgr'
+                  ? "Bảng Phân Tích & Điều Hành Kinh Doanh (SALES MANAGER)"
+                  : roleActive === 'sales_rep'
+                  ? "Cổng Nghiệp Vụ Nhân Viên Kinh Doanh (SALES REP)"
+                  : roleActive === 'wh_mgr'
+                  ? "Trung Tâm Quản Lý Kho Hàng (WH MANAGER)"
+                  : roleActive === 'warehouse'
+                  ? "Quầy Bán Hàng & Xuất Kho POS (WAREHOUSE)"
+                  : roleActive === 'accountant'
+                  ? "Phân Hệ Kế Toán & Quản Lý Công Nợ (ACCOUNTANT)"
+                  : "Cổng Đặt Hàng Trực Tuyến Đại Lý (CUSTOMER)"}
               </h2>
               <p style={{ margin: 0, fontSize: '13px', opacity: 0.9 }}>
-                {roleActive === 'admin' ? "Quản lý toàn bộ chi nhánh, hạn mức đại lý & kho hàng" : roleActive === 'staff' ? "Phân hệ kiểm duyệt đơn, kiểm kê kho & quầy POS" : user?.fullName || "Công ty TNHH Thương mại Tuấn Phương (Đại lý cấp 1)"}
+                {user?.fullName || "Người dùng hệ thống"} • Vai trò: <strong>{user?.roleTitle || roleActive.toUpperCase()}</strong>
+                {user?.warehouse && <span> | 🏢 Kho gán: <strong>{user.warehouse}</strong> (SCRUM-206)</span>}
               </p>
             </div>
 
@@ -422,24 +551,42 @@ function App({
                 <>
                   <div>
                     <div style={{ fontSize: '11px', textTransform: 'uppercase', opacity: 0.8 }}>HẠN MỨC TÍN DỤNG</div>
-                    <div style={{ fontSize: '18px', fontWeight: 'bold' }}>0 đ</div>
+                    <div style={{ fontSize: '18px', fontWeight: 'bold' }}>50.000.000 đ</div>
                   </div>
                   <div>
                     <div style={{ fontSize: '11px', textTransform: 'uppercase', opacity: 0.8 }}>KHẢ DỤNG CÒN LẠI</div>
-                    <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#86efac' }}>0 đ</div>
+                    <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#86efac' }}>38.500.000 đ</div>
                   </div>
                 </>
               )}
-              {roleActive === 'staff' && (
+              {roleActive === 'sales_rep' && (
                 <div>
-                  <div style={{ fontSize: '11px', textTransform: 'uppercase', opacity: 0.8 }}>ĐƠN CHỜ XỬ LÝ</div>
-                  <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#fde047' }}>0 Đơn hàng</div>
+                  <div style={{ fontSize: '11px', textTransform: 'uppercase', opacity: 0.8 }}>ĐẠI LÝ PHỤ TRÁCH</div>
+                  <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#fde047' }}>3 Đại lý</div>
+                </div>
+              )}
+              {roleActive === 'sales_mgr' && (
+                <div>
+                  <div style={{ fontSize: '11px', textTransform: 'uppercase', opacity: 0.8 }}>BIÊN LỢI NHUẬN TB</div>
+                  <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#86efac' }}>26.1% (SCRUM-202)</div>
+                </div>
+              )}
+              {(roleActive === 'warehouse' || roleActive === 'wh_mgr') && (
+                <div>
+                  <div style={{ fontSize: '11px', textTransform: 'uppercase', opacity: 0.8 }}>MẶT HÀNG TRONG KHO</div>
+                  <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#38bdf8' }}>5 Mã hàng</div>
+                </div>
+              )}
+              {roleActive === 'accountant' && (
+                <div>
+                  <div style={{ fontSize: '11px', textTransform: 'uppercase', opacity: 0.8 }}>TỔNG CÔNG NỢ ĐẠI LÝ</div>
+                  <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#fca5a5' }}>11.500.000 đ</div>
                 </div>
               )}
               {roleActive === 'admin' && (
                 <div>
-                  <div style={{ fontSize: '11px', textTransform: 'uppercase', opacity: 0.8 }}>TỔNG DOANH THU THÁNG</div>
-                  <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#86efac' }}>0 đ</div>
+                  <div style={{ fontSize: '11px', textTransform: 'uppercase', opacity: 0.8 }}>TỔNG TÀI KHOẢN MẪU</div>
+                  <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#86efac' }}>7 Vai trò</div>
                 </div>
               )}
             </div>
@@ -508,26 +655,167 @@ function App({
             </>
           )}
 
-          {roleActive === 'staff' && (
+          {roleActive === 'sales_rep' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '15px' }}>
-                <div style={{ ...styles.staffStatCard, ...(hoveredBlock === 's-stat-1' ? styles.elevatedCardLight : {}) }} onMouseEnter={() => setHoveredBlock('s-stat-1')} onMouseLeave={() => setHoveredBlock(null)}>
-                  <span style={{ fontSize: '12px', color: '#64748b' }}>Đơn hàng chờ kiểm duyệt</span>
-                  <h3 style={{ margin: '5px 0', fontSize: '22px', color: '#d97706' }}>0 Đơn</h3>
+                <div style={styles.staffStatCard}>
+                  <span style={{ fontSize: '12px', color: '#64748b' }}>Đại lý phụ trách theo địa bàn</span>
+                  <h3 style={{ margin: '5px 0', fontSize: '22px', color: '#2563eb' }}>3 Đại lý</h3>
                 </div>
-                <div style={{ ...styles.staffStatCard, ...(hoveredBlock === 's-stat-2' ? styles.elevatedCardLight : {}) }} onMouseEnter={() => setHoveredBlock('s-stat-2')} onMouseLeave={() => setHoveredBlock(null)}>
-                  <span style={{ fontSize: '12px', color: '#64748b' }}>Đơn đang đóng gói kho</span>
-                  <h3 style={{ margin: '5px 0', fontSize: '22px', color: '#2563eb' }}>0 Đơn</h3>
+                <div style={styles.staffStatCard}>
+                  <span style={{ fontSize: '12px', color: '#64748b' }}>Đơn hàng bán ra trong tuần</span>
+                  <h3 style={{ margin: '5px 0', fontSize: '22px', color: '#059669' }}>12 Đơn</h3>
                 </div>
-                <div style={{ ...styles.staffStatCard, ...(hoveredBlock === 's-stat-3' ? styles.elevatedCardLight : {}) }} onMouseEnter={() => setHoveredBlock('s-stat-3')} onMouseLeave={() => setHoveredBlock(null)}>
-                  <span style={{ fontSize: '12px', color: '#64748b' }}>Đã xuất kho hôm nay</span>
-                  <h3 style={{ margin: '5px 0', fontSize: '22px', color: '#059669' }}>0 Đơn</h3>
+                <div style={styles.staffStatCard}>
+                  <span style={{ fontSize: '12px', color: '#64748b' }}>Quy định an ninh nhân sự</span>
+                  <h3 style={{ margin: '5px 0', fontSize: '14px', color: '#d97706' }}>Bàn giao khi khóa (SCRUM-207)</h3>
                 </div>
               </div>
 
-              <div style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '16px', padding: '30px 20px', textAlign: 'center', transition: 'all 0.3s ease', ...(hoveredBlock === 's-list-box' ? styles.elevatedCardLight : {}) }} onMouseEnter={() => setHoveredBlock('s-list-box')} onMouseLeave={() => setHoveredBlock(null)}>
-                <h3 style={{ margin: '0 0 8px 0', fontSize: '15px', color: '#1e293b' }}>📋 Danh Sách Đơn Hàng Cần Xử Lý (Nhân Viên)</h3>
-                <p style={{ fontSize: '13px', color: '#94a3b8', margin: 0 }}>Hiện tại chưa có đơn hàng nào cần tiếp nhận hoặc xử lý.</p>
+              <div style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '16px', padding: '24px' }}>
+                <h3 style={{ margin: '0 0 12px 0', fontSize: '16px', color: '#1e293b' }}>
+                  👥 Danh Sách Đại Lý Gán Theo Địa Bàn Phụ Trách:
+                </h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  {(user?.assignedAgencies || ['Công ty TNHH Tuấn Phương (Cấp 1)', 'Đại lý Minh Phát (Cấp 2)', 'Đại lý Hồng Hà (Cấp 2)']).map((ag, i) => (
+                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', backgroundColor: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                      <span style={{ fontWeight: '600', fontSize: '14px', color: '#1e293b' }}>🏢 {ag}</span>
+                      <span style={{ fontSize: '12px', color: '#059669', backgroundColor: '#dcfce7', padding: '4px 10px', borderRadius: '12px', fontWeight: 'bold' }}>Đang phụ trách</span>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ marginTop: '16px', padding: '12px', backgroundColor: '#fffbeb', borderRadius: '8px', border: '1px dashed #f59e0b', fontSize: '12px', color: '#b45309' }}>
+                  ⚠️ <strong>Quy định an ninh [SCRUM-207]:</strong> Danh sách đại lý do nhân viên kinh doanh này phụ trách sẽ tự động được cảnh báo cần bàn giao gấp khi tài khoản bị Quản trị viên khóa.
+                </div>
+              </div>
+            </div>
+          )}
+
+          {roleActive === 'sales_mgr' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '15px' }}>
+                <div style={styles.staffStatCard}>
+                  <span style={{ fontSize: '12px', color: '#64748b' }}>Doanh số toàn đội ngũ</span>
+                  <h3 style={{ margin: '5px 0', fontSize: '22px', color: '#059669' }}>450.000.000 đ</h3>
+                </div>
+                <div style={styles.staffStatCard}>
+                  <span style={{ fontSize: '12px', color: '#64748b' }}>Lợi nhuận gộp ước tính</span>
+                  <h3 style={{ margin: '5px 0', fontSize: '22px', color: '#2563eb' }}>117.450.000 đ</h3>
+                </div>
+                <div style={styles.staffStatCard}>
+                  <span style={{ fontSize: '12px', color: '#64748b' }}>Quyền xem giá vốn (SCRUM-202)</span>
+                  <h3 style={{ margin: '5px 0', fontSize: '14px', color: '#7c3aed' }}>Đặc quyền Sales Manager</h3>
+                </div>
+              </div>
+
+              <div style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '16px', padding: '24px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                  <h3 style={{ margin: 0, fontSize: '16px', color: '#1e293b' }}>
+                    💎 Bảng Tra Cứu Giá Vốn & Biên Lợi Nhuận (SCRUM-202)
+                  </h3>
+                  <span style={{ fontSize: '12px', color: '#7c3aed', backgroundColor: '#f5f3ff', border: '1px solid #ddd6fe', padding: '4px 10px', borderRadius: '12px', fontWeight: 'bold' }}>
+                    🔒 Bảo mật Server: GET /api/v1/auth/financial/cost-and-margin
+                  </span>
+                </div>
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'left' }}>
+                    <thead>
+                      <tr style={{ backgroundColor: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
+                        <th style={{ padding: '10px 14px' }}>Mã SKU</th>
+                        <th style={{ padding: '10px 14px' }}>Tên Sản Phẩm</th>
+                        <th style={{ padding: '10px 14px', textAlign: 'right' }}>Giá Bán Đại Lý</th>
+                        <th style={{ padding: '10px 14px', textAlign: 'right', color: '#dc2626' }}>Giá Vốn (COGS)</th>
+                        <th style={{ padding: '10px 14px', textAlign: 'right', color: '#059669' }}>Lợi Nhuận Gộp</th>
+                        <th style={{ padding: '10px 14px', textAlign: 'center' }}>Biên Lợi Nhuận</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {MOCK_FINANCIAL_MARGINS.map((prod) => (
+                        <tr key={prod.sku} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                          <td style={{ padding: '10px 14px', fontWeight: 'bold', color: '#64748b' }}>{prod.sku}</td>
+                          <td style={{ padding: '10px 14px', fontWeight: '600' }}>{prod.name}</td>
+                          <td style={{ padding: '10px 14px', textAlign: 'right' }}>{prod.salePrice.toLocaleString('vi-VN')} đ</td>
+                          <td style={{ padding: '10px 14px', textAlign: 'right', color: '#dc2626', fontWeight: '600' }}>{prod.costPrice.toLocaleString('vi-VN')} đ</td>
+                          <td style={{ padding: '10px 14px', textAlign: 'right', color: '#059669', fontWeight: '600' }}>{(prod.salePrice - prod.costPrice).toLocaleString('vi-VN')} đ</td>
+                          <td style={{ padding: '10px 14px', textAlign: 'center' }}>
+                            <span style={{ backgroundColor: '#dcfce7', color: '#15803d', padding: '3px 8px', borderRadius: '8px', fontWeight: 'bold', fontSize: '12px' }}>
+                              {prod.margin}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {roleActive === 'wh_mgr' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '15px' }}>
+                <div style={styles.staffStatCard}>
+                  <span style={{ fontSize: '12px', color: '#64748b' }}>Kho phụ trách (SCRUM-206)</span>
+                  <h3 style={{ margin: '5px 0', fontSize: '18px', color: '#2563eb' }}>Kho Tổng Hà Nội</h3>
+                </div>
+                <div style={styles.staffStatCard}>
+                  <span style={{ fontSize: '12px', color: '#64748b' }}>Phiếu điều chuyển chờ duyệt</span>
+                  <h3 style={{ margin: '5px 0', fontSize: '22px', color: '#d97706' }}>2 Phiếu</h3>
+                </div>
+                <div style={styles.staffStatCard}>
+                  <span style={{ fontSize: '12px', color: '#64748b' }}>Mặt hàng tồn kho</span>
+                  <h3 style={{ margin: '5px 0', fontSize: '22px', color: '#059669' }}>5 Mặt hàng</h3>
+                </div>
+              </div>
+              <div style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '16px', padding: '24px' }}>
+                <h3 style={{ margin: '0 0 12px 0', fontSize: '16px', color: '#1e293b' }}>🏭 Quản Lý Tồn Kho Tại Kho Tổng Hà Nội</h3>
+                <p style={{ fontSize: '13px', color: '#64748b', margin: 0 }}>Quản lý kho có thẩm quyền phê duyệt phiếu nhập/xuất kho trung tâm và lệnh điều chuyển hàng hóa về các chi nhánh kho vệ tinh (Đà Nẵng, TP.HCM).</p>
+              </div>
+            </div>
+          )}
+
+          {roleActive === 'warehouse' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '15px' }}>
+                <div style={styles.staffStatCard}>
+                  <span style={{ fontSize: '12px', color: '#64748b' }}>Kho phụ trách (SCRUM-206)</span>
+                  <h3 style={{ margin: '5px 0', fontSize: '18px', color: '#2563eb' }}>Kho Đà Nẵng</h3>
+                </div>
+                <div style={styles.staffStatCard}>
+                  <span style={{ fontSize: '12px', color: '#64748b' }}>Đơn hàng chờ xuất quầy POS</span>
+                  <h3 style={{ margin: '5px 0', fontSize: '22px', color: '#d97706' }}>4 Đơn</h3>
+                </div>
+                <div style={styles.staffStatCard}>
+                  <span style={{ fontSize: '12px', color: '#64748b' }}>Đã xuất kho trong ngày</span>
+                  <h3 style={{ margin: '5px 0', fontSize: '22px', color: '#059669' }}>18 Đơn</h3>
+                </div>
+              </div>
+              <div style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '16px', padding: '24px' }}>
+                <h3 style={{ margin: '0 0 12px 0', fontSize: '16px', color: '#1e293b' }}>⚡ Quầy Xuất Kho & POS Chi Nhánh Đà Nẵng</h3>
+                <p style={{ fontSize: '13px', color: '#64748b', margin: 0 }}>Thủ kho phụ trách kiểm đếm số lượng thực tế khi xuất hàng cho xe tải đại lý và lập biên bản kiểm kê định kỳ.</p>
+              </div>
+            </div>
+          )}
+
+          {roleActive === 'accountant' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '15px' }}>
+                <div style={styles.staffStatCard}>
+                  <span style={{ fontSize: '12px', color: '#64748b' }}>Tổng công nợ đại lý</span>
+                  <h3 style={{ margin: '5px 0', fontSize: '22px', color: '#dc2626' }}>11.500.000 đ</h3>
+                </div>
+                <div style={styles.staffStatCard}>
+                  <span style={{ fontSize: '12px', color: '#64748b' }}>Hạn mức tín dụng bảo lãnh</span>
+                  <h3 style={{ margin: '5px 0', fontSize: '22px', color: '#2563eb' }}>50.000.000 đ</h3>
+                </div>
+                <div style={styles.staffStatCard}>
+                  <span style={{ fontSize: '12px', color: '#64748b' }}>Hóa đơn đối soát tháng</span>
+                  <h3 style={{ margin: '5px 0', fontSize: '22px', color: '#059669' }}>100% Hoàn tất</h3>
+                </div>
+              </div>
+              <div style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '16px', padding: '24px' }}>
+                <h3 style={{ margin: '0 0 12px 0', fontSize: '16px', color: '#1e293b' }}>📜 Sổ Theo Dõi Công Nợ & Hạn Mức Tín Dụng</h3>
+                <p style={{ fontSize: '13px', color: '#64748b', margin: 0 }}>Kế toán theo dõi sát sao vòng quay công nợ, đối chiếu chứng từ giao nhận kho và lập báo cáo tài chính định kỳ theo đúng phân quyền nghiệp vụ.</p>
               </div>
             </div>
           )}
@@ -535,27 +823,96 @@ function App({
           {roleActive === 'admin' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px' }}>
-                <div style={{ ...styles.adminStatCard, ...(hoveredBlock === 'a-stat-1' ? styles.elevatedCardLight : {}) }} onMouseEnter={() => setHoveredBlock('a-stat-1')} onMouseLeave={() => setHoveredBlock(null)}>
-                  <span style={{ fontSize: '11px', color: '#64748b' }}>TỔNG ĐẠI LÝ</span>
-                  <h2 style={{ margin: '4px 0', color: '#1e293b' }}>0</h2>
+                <div style={styles.adminStatCard}>
+                  <span style={{ fontSize: '11px', color: '#64748b' }}>TÀI KHOẢN MẪU HỆ THỐNG</span>
+                  <h2 style={{ margin: '4px 0', color: '#1e293b' }}>{userList.length}</h2>
                 </div>
-                <div style={{ ...styles.adminStatCard, ...(hoveredBlock === 'a-stat-2' ? styles.elevatedCardLight : {}) }} onMouseEnter={() => setHoveredBlock('a-stat-2')} onMouseLeave={() => setHoveredBlock(null)}>
-                  <span style={{ fontSize: '11px', color: '#64748b' }}>ĐƠN HÀNG TOÀN HỆ THỐNG</span>
-                  <h2 style={{ margin: '4px 0', color: '#2563eb' }}>0</h2>
+                <div style={styles.adminStatCard}>
+                  <span style={{ fontSize: '11px', color: '#64748b' }}>VAI TRÒ NGHIỆP VỤ (SCRUM-202)</span>
+                  <h2 style={{ margin: '4px 0', color: '#2563eb' }}>7 Vai trò</h2>
                 </div>
-                <div style={{ ...styles.adminStatCard, ...(hoveredBlock === 'a-stat-3' ? styles.elevatedCardLight : {}) }} onMouseEnter={() => setHoveredBlock('a-stat-3')} onMouseLeave={() => setHoveredBlock(null)}>
-                  <span style={{ fontSize: '11px', color: '#64748b' }}>DOANH THU THÁNG NÀY</span>
-                  <h2 style={{ margin: '4px 0', color: '#059669' }}>0 đ</h2>
+                <div style={styles.adminStatCard}>
+                  <span style={{ fontSize: '11px', color: '#64748b' }}>DOANH SỐ TOÀN HỆ THỐNG</span>
+                  <h2 style={{ margin: '4px 0', color: '#059669' }}>450.000.000 đ</h2>
                 </div>
-                <div style={{ ...styles.adminStatCard, borderLeft: '4px solid #d97706', ...(hoveredBlock === 'a-stat-4' ? styles.elevatedCardLight : {}) }} onMouseEnter={() => setHoveredBlock('a-stat-4')} onMouseLeave={() => setHoveredBlock(null)}>
-                  <span style={{ fontSize: '11px', color: '#64748b' }}>YÊU CẦU CẤP HẠN MỨC</span>
-                  <h2 style={{ margin: '4px 0', color: '#d97706' }}>0 Yêu cầu</h2>
+                <div style={{ ...styles.adminStatCard, borderLeft: '4px solid #d97706' }}>
+                  <span style={{ fontSize: '11px', color: '#64748b' }}>QUY ĐỊNH KHÓA TÀI KHOẢN</span>
+                  <h2 style={{ margin: '4px 0', fontSize: '18px', color: '#d97706' }}>SCRUM-207</h2>
                 </div>
               </div>
 
-              <div style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '16px', padding: '30px 20px', textAlign: 'center', transition: 'all 0.3s ease', ...(hoveredBlock === 'a-main-box' ? styles.elevatedCardLight : {}) }} onMouseEnter={() => setHoveredBlock('a-main-box')} onMouseLeave={() => setHoveredBlock(null)}>
-                <h3 style={{ margin: '0 0 8px 0', fontSize: '15px', color: '#1e293b' }}>👑 Trung Tâm Quản Lý & Điều Phối Hạn Mức Tín Dụng</h3>
-                <p style={{ fontSize: '13px', color: '#94a3b8', margin: 0 }}>Khu vực hiển thị danh sách đại lý và yêu cầu điều chỉnh hạn mức. Đang đợi API Backend kết nối.</p>
+              <div style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '16px', padding: '24px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: '16px', color: '#1e293b' }}>
+                      👥 Quản Lý Tài Khoản & Khóa/Mở Khóa (SCRUM-205, SCRUM-207)
+                    </h3>
+                    <span style={{ fontSize: '12px', color: '#64748b' }}>Bắt buộc ghi lý do khóa • Thu hồi phiên tức thì • Cảnh báo bàn giao đại lý</span>
+                  </div>
+                </div>
+
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'left' }}>
+                    <thead>
+                      <tr style={{ backgroundColor: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
+                        <th style={{ padding: '10px 12px' }}>Họ và tên</th>
+                        <th style={{ padding: '10px 12px' }}>Tài khoản</th>
+                        <th style={{ padding: '10px 12px' }}>Vai trò</th>
+                        <th style={{ padding: '10px 12px' }}>Kho gán (SCRUM-206)</th>
+                        <th style={{ padding: '10px 12px' }}>Trạng thái</th>
+                        <th style={{ padding: '10px 12px', textAlign: 'center' }}>Thao tác</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {userList.map((u) => (
+                        <tr key={u.username} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                          <td style={{ padding: '10px 12px', fontWeight: '600' }}>{u.fullName}</td>
+                          <td style={{ padding: '10px 12px', color: '#2563eb' }}>@{u.username}</td>
+                          <td style={{ padding: '10px 12px' }}>
+                            <span style={{ backgroundColor: '#eff6ff', color: '#1d4ed8', padding: '3px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 'bold' }}>
+                              {u.roleTitle || u.role}
+                            </span>
+                          </td>
+                          <td style={{ padding: '10px 12px' }}>
+                            {u.warehouse ? <span style={{ color: '#059669', fontWeight: 'bold' }}>🏢 {u.warehouse}</span> : <span style={{ color: '#94a3b8' }}>-</span>}
+                          </td>
+                          <td style={{ padding: '10px 12px' }}>
+                            {u.isLocked ? (
+                              <span style={{ backgroundColor: '#fee2e2', color: '#b91c1c', padding: '3px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 'bold' }} title={`Lý do: ${u.lockReason}`}>
+                                🔒 Đã khóa
+                              </span>
+                            ) : (
+                              <span style={{ backgroundColor: '#dcfce7', color: '#15803d', padding: '3px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 'bold' }}>
+                                 Hoạt động
+                              </span>
+                            )}
+                          </td>
+                          <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                            {u.role === 'admin' ? (
+                              <span style={{ fontSize: '11px', color: '#94a3b8' }} title="Không thể tự khóa tài khoản Admin (SCRUM-206)">Admin gốc</span>
+                            ) : u.isLocked ? (
+                              <button
+                                type="button"
+                                onClick={() => handleUnlockAccountDemo(u.username)}
+                                style={{ padding: '4px 10px', fontSize: '11px', borderRadius: '6px', border: '1px solid #86efac', backgroundColor: '#f0fdf4', color: '#15803d', cursor: 'pointer', fontWeight: 'bold' }}
+                              >
+                                🔓 Mở khóa
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleLockAccountDemo(u.username)}
+                                style={{ padding: '4px 10px', fontSize: '11px', borderRadius: '6px', border: '1px solid #fca5a5', backgroundColor: '#fef2f2', color: '#b91c1c', cursor: 'pointer', fontWeight: 'bold' }}
+                              >
+                                🔒 Khóa tài khoản
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           )}
@@ -777,18 +1134,36 @@ function App({
                 <TogglePassBtn isVisible={showLoginPass} onToggle={() => setShowLoginPass(!showLoginPass)} />
               </div>
 
-              <div style={styles.quickAccountContainer}>
-                <button
-                  type="submit"
-                  style={{
-                    ...styles.quickAccountCard,
-                    ...(hoveredBlock === 'quick-demo' ? styles.elevatedBtnBlue : {}),
-                  }}
-                  onMouseEnter={() => setHoveredBlock('quick-demo')}
-                  onMouseLeave={() => setHoveredBlock(null)}
-                >
-                  🚀 DÙNG TÀI KHOẢN MẪU & VÀO DASHBOARD
-                </button>
+              <div style={{ margin: '12px 0', textAlign: 'left' }}>
+                <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 'bold', marginBottom: '8px' }}>
+                  ⚡ CHỌN NHANH TÀI KHOẢN THỬ NGHIỆM (7 VAI TRÒ):
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '6px' }}>
+                  {MOCK_ACCOUNTS.map((acc) => (
+                    <button
+                      key={acc.username}
+                      type="button"
+                      onClick={() => handleQuickLoginAs(acc)}
+                      style={{
+                        padding: '6px 8px',
+                        borderRadius: '6px',
+                        border: '1px solid #cbd5e1',
+                        backgroundColor: '#f8fafc',
+                        fontSize: '11px',
+                        cursor: 'pointer',
+                        color: '#1e293b',
+                        fontWeight: '500',
+                        textAlign: 'left'
+                      }}
+                      title={`Đăng nhập vai trò: ${acc.roleTitle} | Username: ${acc.username}`}
+                    >
+                      <strong style={{ color: '#2563eb' }}>{acc.username}</strong>
+                      <div style={{ fontSize: '10px', color: '#64748b', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {acc.role}
+                      </div>
+                    </button>
+                  ))}
+                </div>
               </div>
 
               <button

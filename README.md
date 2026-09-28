@@ -4,7 +4,7 @@ Dự án website quản lý bán hàng và kho hàng tích hợp xác thực JWT
 
 ---
 
-## 🚀 Hướng Dẫn Khởi Chạy Hệ Thống
+##  Hướng Dẫn Khởi Chạy Hệ Thống
 
 ### 1. Khởi chạy Backend (FastAPI)
 ```powershell
@@ -36,7 +36,7 @@ npm run dev
 
 ---
 
-## 🔑 Danh Sách Tài Khoản Kiểm Thử (Test Accounts)
+##  Danh Sách Tài Khoản Kiểm Thử (Test Accounts)
 
 ### 1. Tài khoản kiểm thử Backend API (Database Seed - 7 Vai trò nghiệp vụ)
 > Có thể sử dụng **Username** hoặc **Email** để đăng nhập tại các endpoint `/api/v1/auth/login` hoặc `/api/auth/login`.
@@ -78,14 +78,3 @@ npm run dev
   - `Kho Đà Nẵng`
   - `Kho TP. Hồ Chí Minh`
   - `Kho Miền Tây`
-
----
-
-## 🛡️ Các Cơ Chế Bảo Mật Đã Tích Hợp
-- **Xác thực JWT Bearer**: Token mang thông tin `user_id`, `role`, và `token_version`.
-- **Khóa tạm thời 15 phút (SCRUM-198)**: Tự động khóa khi người dùng nhập sai mật khẩu 5 lần liên tiếp.
-- **Duy trì phiên & Đăng xuất an toàn (SCRUM-199)**: Endpoint `/api/v1/auth/refresh` gia hạn token và `/api/v1/auth/logout` hủy phiên ngay lập tức phía server.
-- **Quên mật khẩu an toàn (SCRUM-200)**: Token có thời hạn đúng 30 phút, chỉ sử dụng được 1 lần.
-- **Thu hồi phiên khi đổi mật khẩu (SCRUM-201)**: Tăng `token_version` trong CSDL để vô hiệu hóa toàn bộ token cũ đang đăng nhập ở các thiết bị khác.
-- **Ràng buộc vai trò kho (SCRUM-206)**: Bắt buộc tài khoản thuộc vai trò kho phải gắn ít nhất một kho/địa bàn cụ thể; chặn người dùng tự thu hồi quyền quản trị của chính mình.
-- **Khóa tài khoản nhân viên (SCRUM-207)**: Bắt buộc ghi rõ lý do khóa và cảnh báo bàn giao danh sách khách hàng/đại lý ngay khi khóa nhân viên kinh doanh.

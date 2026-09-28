@@ -1,4 +1,7 @@
 import React, { useState, useEffect } from 'react';
+import { AuthProvider } from './context';
+import Navbar from './components/Navbar';
+import Hello from './pages/hello';
 
 // =========================================================================
 // MOCK DATA CỐ ĐỊNH CHỈ DÙNG ĐỂ HIỂN THỊ KHUNG GIAO DIỆN FRONTEND
@@ -46,6 +49,7 @@ function App({
 
   const [activeTab, setActiveTab] = useState('main');
   const [hoveredBlock, setHoveredBlock] = useState(null);
+  const [viewMode, setViewMode] = useState('oms'); // 'oms' | 'scrum300'
 
   // STATE POP-UP THÔNG BÁO (MODAL ALERT)
   const [popup, setPopup] = useState({
@@ -957,10 +961,41 @@ function App({
   // MAIN RETURN WRAPPER
   // =========================================================================
   return (
-    <>
-      <NotificationModal />
-      {renderMainContent()}
-    </>
+    <AuthProvider>
+      <div style={{ position: 'fixed', bottom: '16px', right: '16px', zIndex: 999999, display: 'flex', gap: '8px' }}>
+        <button
+          onClick={() => setViewMode(viewMode === 'oms' ? 'scrum300' : 'oms')}
+          style={{
+            padding: '10px 18px',
+            backgroundColor: '#2563eb',
+            color: '#ffffff',
+            border: 'none',
+            borderRadius: '24px',
+            boxShadow: '0 4px 14px rgba(0,0,0,0.3)',
+            cursor: 'pointer',
+            fontWeight: 'bold',
+            fontSize: '13px',
+            transition: 'all 0.2s ease',
+          }}
+        >
+          {viewMode === 'oms' ? '🔍 Xem Demo SCRUM-300 (Header & Kho)' : '📦 Về Giao Diện OMS Pro'}
+        </button>
+      </div>
+
+      {viewMode === 'scrum300' ? (
+        <div>
+          <Navbar />
+          <main>
+            <Hello />
+          </main>
+        </div>
+      ) : (
+        <>
+          <NotificationModal />
+          {renderMainContent()}
+        </>
+      )}
+    </AuthProvider>
   );
 }
 

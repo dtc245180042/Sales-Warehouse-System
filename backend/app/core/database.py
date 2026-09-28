@@ -26,14 +26,23 @@ def init_db():
             inspector = inspect(engine)
             if "users" in inspector.get_table_names():
                 columns = [c["name"] for c in inspector.get_columns("users")]
-                if "warehouse_id" not in columns:
-                    conn.execute(text("ALTER TABLE users ADD COLUMN warehouse_id INTEGER"))
-                if "warehouse_name" not in columns:
-                    conn.execute(text("ALTER TABLE users ADD COLUMN warehouse_name VARCHAR(100)"))
-                if "region" not in columns:
-                    conn.execute(text("ALTER TABLE users ADD COLUMN region VARCHAR(100)"))
-                if "assigned_warehouse" not in columns:
-                    conn.execute(text("ALTER TABLE users ADD COLUMN assigned_warehouse VARCHAR(100)"))
+                cols_to_add = [
+                    ("role", "VARCHAR(50) DEFAULT 'Customer'"),
+                    ("assigned_warehouse", "VARCHAR(100)"),
+                    ("warehouse_id", "INTEGER"),
+                    ("warehouse_name", "VARCHAR(100)"),
+                    ("region", "VARCHAR(100)"),
+                    ("failed_login_attempts", "INTEGER DEFAULT 0"),
+                    ("locked_until", "DATETIME"),
+                    ("lock_reason", "VARCHAR(255)"),
+                    ("token_version", "INTEGER DEFAULT 1"),
+                    ("reset_password_token", "VARCHAR(255)"),
+                    ("reset_password_expires_at", "DATETIME"),
+                    ("must_change_password", "BOOLEAN DEFAULT 0"),
+                ]
+                for col_name, col_def in cols_to_add:
+                    if col_name not in columns:
+                        conn.execute(text(f"ALTER TABLE users ADD COLUMN {col_name} {col_def}"))
                 conn.commit()
     except Exception:
         pass

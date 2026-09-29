@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from typing import Optional
 from sqlalchemy import (
     Column,
     Integer,
@@ -156,9 +157,15 @@ class User(Base):
     is_locked = da_bi_khoa
 
     @property
+    def activation_token(self) -> Optional[str]:
+        return self.reset_password_token
+
+    @property
     def status(self) -> str:
-        """Trạng thái tài khoản: active, locked hoặc inactive (SCRUM-324)."""
+        """Trạng thái tài khoản: active, locked, inactive hoặc pending_activation (SCRUM-324, SCRUM-323)."""
         if not self.is_active:
+            if self.lock_reason and any(k in self.lock_reason.lower() for k in ["kích hoạt", "pending", "activation"]):
+                return "pending_activation"
             if self.locked_until is not None:
                 return "locked"
             if self.lock_reason and any(k in self.lock_reason.lower() for k in ["khóa", "lock"]):
@@ -167,6 +174,7 @@ class User(Base):
         if self.da_bi_khoa():
             return "locked"
         return "active"
+
 
 
     def has_permission(self, permission_code: str) -> bool:

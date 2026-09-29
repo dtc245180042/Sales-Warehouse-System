@@ -667,3 +667,147 @@ def test_update_user_when_invalid_phone_format_returns_400(client, admin_token, 
     assert "Định dạng số điện thoại" in response.json()["detail"]
 
 
+# ---------------------------------------------------------------------------
+# Test Cases SCRUM-323: Tạo cơ chế cấp mật khẩu tạm và gửi email kích hoạt khi tạo tài khoản
+# ---------------------------------------------------------------------------
+
+def test_create_user_generates_temporary_password_and_activation_token(client, admin_token):
+    """Khi tạo tài khoản mới không truyền mật khẩu -> Tự sinh mật khẩu tạm, mã kích hoạt và gửi email (SCRUM-323)."""
+    # Arrange
+    headers = {"Authorization": f"Bearer {admin_token}"}
+    payload = {
+        "username": "user_scrum323_temp",
+        "email": "user_scrum323_temp@test.local",
+        "full_name": "Người Dùng Mật Khẩu Tạm",
+        "role": UserRole.CUSTOMER.value,
+    }
+
+    # Act
+    response = client.post("/api/v1/users", headers=headers, json=payload)
+
+    # Assert
+    assert response.status_code == 201
+    data = response.json()
+    assert data["must_change_password"] is True
+    assert data["temporary_password"] is not None
+    assert data["temporary_password"].startswith("Temp@")
+    assert data["activation_token"] is not None
+
+
+def test_create_user_with_pending_activation_status(client, admin_token):
+    """Tạo tài khoản với tùy chọn chờ kích hoạt -> Lưu trạng thái pending_activation (SCRUM-323)."""
+    # Arrange
+    headers = {"Authorization": f"Bearer {admin_token}"}
+    payload = {
+        "username": "user_scrum323_pending",
+        "email": "user_scrum323_pending@test.local",
+        "full_name": "Người Dùng Chờ Kích Hoạt",
+        "role": UserRole.CUSTOMER.value,
+        "require_activation": True,
+    }
+
+    # Act
+    response = client.post("/api/v1/users", headers=headers, json=payload)
+
+    # Assert
+    assert response.status_code == 201
+    data = response.json()
+    assert data["is_active"] is False
+    assert data["status"] == "pending_activation"
+    assert data["lock_reason"] == "Chờ kích hoạt"
+    assert data["activation_token"] is not None
+
+
+def test_activate_user_with_valid_token_success(client, admin_token):
+    """Kích hoạt tài khoản thành công qua endpoint /api/v1/users/activate bằng token (SCRUM-323)."""
+    # Arrange: Tạo user ở trạng thái chờ kích hoạt
+    headers = {"Authorization": f"Bearer {admin_token}"}
+    create_payload = {
+        "username": "user_to_activate_v1",
+        "email": "user_to_activate_v1@test.local",
+        "require_activation": True,
+    }
+    create_resp = client.post("/api/v1/users", headers=headers, json=create_payload)
+    assert create_resp.status_code == 201
+    token = create_resp.json()["activation_token"]
+
+    # Act: Kích hoạt bằng token
+    activate_payload = {"token": token}
+    response = client.post("/api/v1/users/activate", json=activate_payload)
+
+    # Assert
+    assert response.status_code == 200
+    data = response.json()
+    assert data["is_active"] is True
+    assert data["status"] == "active"
+    assert data["lock_reason"] is None
+
+
+def test_activate_account_via_auth_endpoint_and_login_success(client, admin_token):
+    """Kích hoạt tài khoản và đặt mật khẩu mới qua /api/auth/activate, sau đó đăng nhập thành công (SCRUM-323)."""
+    # Arrange: Tạo user ở trạng thái chờ kích hoạt
+    headers = {"Authorization": f"Bearer {admin_token}"}
+    create_payload = {
+        "username": "user_activate_auth",
+        "email": "user_activate_auth@test.local",
+        "require_activation": True,
+    }
+    create_resp = client.post("/api/v1/users", headers=headers, json=create_payload)
+    assert create_resp.status_code == 201
+    token = create_resp.json()["activation_token"]
+
+    # Act: Kích hoạt và thiết lập mật khẩu mới
+    new_pass = "Active@Pass123"
+    activate_payload = {"token": token, "new_password": new_pass}
+    response = client.post("/api/auth/activate", json=activate_payload)
+
+    # Assert kích hoạt thành công
+    assert response.status_code == 200
+    assert "kích hoạt thành công" in response.json()["message"]
+
+    # Act: Đăng nhập bằng mật khẩu mới
+    login_resp = client.post(
+        "/api/auth/login",
+        json={"username": "user_activate_auth", "password": new_pass},
+    )
+    assert login_resp.status_code == 200
+    assert "access_token" in login_resp.json()
+
+
+def test_activate_user_with_invalid_token_returns_400(client):
+    """Kích hoạt tài khoản với token không tồn tại -> Báo lỗi 400 (SCRUM-323)."""
+    # Arrange
+    payload = {"token": "completely_invalid_token_12345"}
+
+    # Act
+    response = client.post("/api/v1/users/activate", json=payload)
+
+    # Assert
+    assert response.status_code == 400
+    assert "không hợp lệ hoặc không tồn tại" in response.json()["detail"]
+
+
+def test_admin_activate_user_by_id_success(client, admin_token):
+    """Admin kích hoạt tài khoản người dùng theo ID -> Thành công 200 OK (SCRUM-323)."""
+    # Arrange: Tạo user ở trạng thái chờ kích hoạt
+    headers = {"Authorization": f"Bearer {admin_token}"}
+    create_payload = {
+        "username": "user_admin_activate_id",
+        "email": "user_admin_activate_id@test.local",
+        "require_activation": True,
+    }
+    create_resp = client.post("/api/v1/users", headers=headers, json=create_payload)
+    assert create_resp.status_code == 201
+    user_id = create_resp.json()["id"]
+
+    # Act: Admin kích hoạt trực tiếp
+    response = client.post(f"/api/v1/users/{user_id}/activate", headers=headers)
+
+    # Assert
+    assert response.status_code == 200
+    data = response.json()
+    assert data["is_active"] is True
+    assert data["status"] == "active"
+
+
+

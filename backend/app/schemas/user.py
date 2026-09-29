@@ -18,6 +18,7 @@ class UserCreate(UserBase):
     role: Optional[str] = "Customer"
     role_names: Optional[List[str]] = []
     assigned_warehouse: Optional[str] = None
+    require_activation: Optional[bool] = Field(False, description="Tùy chọn lưu trạng thái chờ kích hoạt (SCRUM-323)")
 
 
 class UserUpdate(BaseModel):
@@ -29,14 +30,17 @@ class UserUpdate(BaseModel):
     role_names: Optional[List[str]] = None
     assigned_warehouse: Optional[str] = None
     is_active: Optional[bool] = None
-    status: Optional[str] = Field(None, description="Trạng thái: active (hoạt động), locked (khóa), inactive (ngừng sử dụng)")
+    status: Optional[str] = Field(None, description="Trạng thái: active (hoạt động), locked (khóa), inactive (ngừng sử dụng), pending_activation (chờ kích hoạt)")
     lock_reason: Optional[str] = Field(None, description="Lý do khóa hoặc ngừng sử dụng (SCRUM-324)")
-
-
 
 
 class UserLockRequest(BaseModel):
     reason: str = Field(..., min_length=1, description="Lý do khóa tài khoản (bắt buộc theo SCRUM-207)")
+
+
+class ActivateAccountRequest(BaseModel):
+    token: str = Field(..., description="Mã kích hoạt tài khoản (SCRUM-323)")
+    new_password: Optional[str] = Field(None, min_length=6, description="Mật khẩu mới nếu muốn thiết lập khi kích hoạt")
 
 
 class UserResponse(UserBase):
@@ -45,6 +49,8 @@ class UserResponse(UserBase):
     assigned_warehouse: Optional[str] = None
     lock_reason: Optional[str] = None
     must_change_password: Optional[bool] = False
+    temporary_password: Optional[str] = Field(None, description="Mật khẩu tạm thời khi tạo mới (SCRUM-323)")
+    activation_token: Optional[str] = Field(None, description="Mã kích hoạt tài khoản (SCRUM-323)")
     token_version: Optional[int] = 1
     created_at: Optional[datetime] = None
     roles: List[RoleResponse] = []
@@ -58,3 +64,4 @@ class UserPaginatedResponse(BaseModel):
     page: int
     page_size: int
     total_pages: int
+

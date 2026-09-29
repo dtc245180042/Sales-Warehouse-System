@@ -32,6 +32,8 @@ from app.schemas.auth import (
     TokenResponse,
     UserClaimsResponse,
 )
+from app.schemas.user import ActivateAccountRequest
+from app.services import user_service
 from app.services.auth_service import (
     GENERIC_FORGOT_PASSWORD_MESSAGE,
     build_user_claims_response,
@@ -279,6 +281,26 @@ def reset_password(
     # Thử qua PasswordResetToken (SCRUM-295)
     msg = reset_password_with_token(db=db, token=token, new_password=request_body.new_password)
     return MessageResponse(message=msg)
+
+
+@router.post(
+    "/activate",
+    response_model=MessageResponse,
+    summary="Kích hoạt tài khoản bằng mã token gửi qua email (SCRUM-323)",
+)
+def activate_account(
+    request_body: ActivateAccountRequest,
+    db: Session = Depends(get_db),
+) -> MessageResponse:
+    """Kích hoạt tài khoản người dùng bằng token (SCRUM-323)."""
+    user = user_service.activate_user_with_token(
+        token=request_body.token,
+        new_password=request_body.new_password,
+        db=db,
+    )
+    return MessageResponse(
+        message=f"Tài khoản '{user.username}' đã được kích hoạt thành công."
+    )
 
 
 @router.get(

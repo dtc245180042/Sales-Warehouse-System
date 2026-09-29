@@ -1,4 +1,5 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+import logging
 import math
 import re
 import secrets
@@ -10,6 +11,10 @@ from sqlalchemy.orm import Session
 from app.core.security import get_password_hash
 from app.models.auth import Role, User, UserRole
 from app.schemas.user import UserCreate, UserUpdate
+from app.services.email_service import send_account_activation_email
+
+logger = logging.getLogger(__name__)
+
 
 # Danh sách các vai trò thuộc nhóm Kho
 WAREHOUSE_ROLES: List[str] = [
@@ -109,9 +114,23 @@ def create_user(user_data: UserCreate, db: Session) -> User:
             detail="Người dùng thuộc vai trò kho phải được gắn với ít nhất một kho hoặc địa bàn cụ thể.",
         )
 
-    # 4. Thiết lập mật khẩu
+    # 6. Thiết lập mật khẩu và mã kích hoạt tài khoản (SCRUM-323)
     initial_password = user_data.password if user_data.password else f"Temp@{secrets.token_hex(4)}1"
     must_change = user_data.password is None
+    activation_token = secrets.token_urlsafe(32)
+
+    # 7. Trạng thái tài khoản ban đầu: hỗ trợ lưu trạng thái chờ kích hoạt (SCRUM-323)
+    is_pending = (
+        user_data.require_activation is True or
+        (user_data.status and user_data.status.strip().lower() in ["pending_activation", "chờ kích hoạt"])
+    )
+
+    if is_pending:
+        is_active = False
+        lock_reason = "Chờ kích hoạt"
+    else:
+        is_active = user_data.is_active if user_data.is_active is not None else True
+        lock_reason = None
 
     new_user = User(
         username=username,
@@ -122,7 +141,10 @@ def create_user(user_data: UserCreate, db: Session) -> User:
         assigned_warehouse=user_data.assigned_warehouse,
         hashed_password=get_password_hash(initial_password),
         must_change_password=must_change,
-        is_active=user_data.is_active if user_data.is_active is not None else True,
+        is_active=is_active,
+        lock_reason=lock_reason,
+        reset_password_token=activation_token,
+        reset_password_expires_at=datetime.now(timezone.utc) + timedelta(days=2),
         token_version=1,
     )
 
@@ -138,7 +160,72 @@ def create_user(user_data: UserCreate, db: Session) -> User:
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
+
+    # Gán temporary_password để trả về cho client / Admin tiện sao chép (SCRUM-323)
+    new_user.temporary_password = initial_password if must_change else None
+
+    # 8. Gửi email kích hoạt tài khoản và cấp mật khẩu tạm (SCRUM-323)
+    try:
+        send_account_activation_email(
+            to_email=new_user.email,
+            username=new_user.username,
+            temp_password=initial_password,
+            full_name=new_user.full_name,
+            activation_token=activation_token,
+        )
+    except Exception as exc:
+        logger.warning(f"Lỗi khi gửi email kích hoạt tài khoản cho {new_user.email}: {exc}")
+
     return new_user
+
+
+def activate_user_with_token(
+    token: str,
+    new_password: Optional[str] = None,
+    db: Session = None,
+) -> User:
+    """Kích hoạt tài khoản người dùng bằng mã kích hoạt / token (SCRUM-323)."""
+    cleaned_token = token.strip()
+    user = db.query(User).filter(User.reset_password_token == cleaned_token).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Mã kích hoạt tài khoản không hợp lệ hoặc không tồn tại.",
+        )
+
+    # Kiểm tra hạn của token kích hoạt
+    if user.reset_password_expires_at:
+        expiry = user.reset_password_expires_at
+        if expiry.tzinfo is None:
+            expiry = expiry.replace(tzinfo=timezone.utc)
+        if datetime.now(timezone.utc) > expiry:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Mã kích hoạt tài khoản đã hết hạn.",
+            )
+
+    # Kích hoạt tài khoản
+    user.is_active = True
+    user.lock_reason = None
+    user.reset_password_token = None
+    user.reset_password_expires_at = None
+    user.failed_login_attempts = 0
+    user.locked_until = None
+
+    if new_password:
+        if len(new_password) < 6:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Mật khẩu mới phải có ít nhất 6 ký tự.",
+            )
+        user.hashed_password = get_password_hash(new_password)
+        user.must_change_password = False
+        user.token_version += 1
+
+    db.commit()
+    db.refresh(user)
+    return user
+
 
 
 def list_users(

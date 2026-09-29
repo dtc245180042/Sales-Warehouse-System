@@ -7,6 +7,7 @@ from app.core.dependencies import get_current_user, require_role
 from app.models.auth import User, UserRole
 from app.schemas.auth import MessageResponse
 from app.schemas.user import (
+    ActivateAccountRequest,
     UserCreate,
     UserLockRequest,
     UserPaginatedResponse,
@@ -155,6 +156,51 @@ def unlock_user(
     return MessageResponse(
         message=f"Tài khoản '{unlocked_user.username}' đã được mở khóa thành công."
     )
+
+
+@router.post(
+    "/activate",
+    response_model=UserResponse,
+    summary="Kích hoạt tài khoản bằng mã kích hoạt / token (SCRUM-323)",
+)
+def activate_user(
+    request_body: ActivateAccountRequest,
+    db: Session = Depends(get_db),
+) -> UserResponse:
+    """Kích hoạt tài khoản người dùng bằng mã token đã được gửi qua email (SCRUM-323)."""
+    user = user_service.activate_user_with_token(
+        token=request_body.token,
+        new_password=request_body.new_password,
+        db=db,
+    )
+    return UserResponse.model_validate(user)
+
+
+@router.post(
+    "/{user_id}/activate",
+    response_model=UserResponse,
+    summary="Quản trị viên kích hoạt tài khoản người dùng theo ID (SCRUM-323)",
+)
+def admin_activate_user(
+    user_id: int,
+    current_user: User = Depends(require_role(UserRole.ADMIN)),
+    db: Session = Depends(get_db),
+) -> UserResponse:
+    """Quản trị viên kích hoạt tài khoản đang ở trạng thái chờ kích hoạt (SCRUM-323)."""
+    user = user_service.get_user_by_id(user_id=user_id, db=db)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Không tìm thấy người dùng.",
+        )
+    user.is_active = True
+    user.lock_reason = None
+    user.reset_password_token = None
+    user.reset_password_expires_at = None
+    db.commit()
+    db.refresh(user)
+    return UserResponse.model_validate(user)
+
 
 
 # ---------------------------------------------------------------------------

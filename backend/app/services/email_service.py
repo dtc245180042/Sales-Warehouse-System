@@ -95,3 +95,121 @@ def send_password_reset_email(to_email: str, reset_url: str, expire_minutes: int
     except Exception as e:
         logger.error(f"Lỗi khi gửi email đến {to_email}: {e}")
         return False
+
+
+def send_account_activation_email(
+    to_email: str,
+    username: str,
+    temp_password: str,
+    full_name: str = None,
+    activation_token: str = None,
+    activation_url: str = None,
+) -> bool:
+    """Gửi email chào mừng và kích hoạt tài khoản / cấp mật khẩu tạm (SCRUM-323).
+    Bao gồm thông tin đăng nhập, mật khẩu tạm và hướng dẫn đăng nhập, đổi mật khẩu.
+    """
+    subject = "Sales-Warehouse - Kích hoạt tài khoản và thông tin đăng nhập"
+    recipient_name = full_name or username
+    login_url = activation_url or os.getenv("FRONTEND_URL", "http://localhost:3000/login")
+
+    html_content = f"""
+    <!DOCTYPE html>
+    <html lang="vi">
+    <head>
+        <meta charset="UTF-8">
+        <style>
+            body {{ font-family: 'Segoe UI', Arial, sans-serif; background-color: #f4f6f9; margin: 0; padding: 20px; }}
+            .container {{ max-width: 580px; margin: 0 auto; background: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }}
+            .header {{ background: #1e293b; color: #ffffff; padding: 24px; text-align: center; }}
+            .header h1 {{ margin: 0; font-size: 20px; font-weight: 600; }}
+            .content {{ padding: 32px 24px; color: #334155; line-height: 1.6; }}
+            .cred-box {{ background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 16px; margin: 20px 0; }}
+            .cred-row {{ display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 14px; }}
+            .cred-label {{ color: #64748b; font-weight: 500; }}
+            .cred-value {{ font-family: monospace; font-weight: 700; color: #0f172a; background: #e2e8f0; padding: 2px 8px; border-radius: 4px; }}
+            .btn-container {{ text-align: center; margin: 28px 0; }}
+            .btn {{ background-color: #2563eb; color: #ffffff !important; padding: 12px 28px; text-decoration: none; border-radius: 6px; font-weight: 600; display: inline-block; }}
+            .btn:hover {{ background-color: #1d4ed8; }}
+            .instructions {{ background: #eff6ff; border-left: 4px solid #3b82f6; padding: 12px 16px; border-radius: 4px; font-size: 13px; color: #1e40af; margin-top: 20px; }}
+            .footer {{ background: #f8fafc; padding: 16px 24px; text-align: center; font-size: 12px; color: #94a3b8; border-top: 1px solid #f1f5f9; }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <h1>Hệ thống Quản lý Bán hàng & Kho</h1>
+            </div>
+            <div class="content">
+                <p>Xin chào <strong>{recipient_name}</strong>,</p>
+                <p>Tài khoản của bạn trên hệ thống <strong>Sales-Warehouse</strong> đã được tạo thành công. Dưới đây là thông tin đăng nhập khởi tạo:</p>
+                
+                <div class="cred-box">
+                    <div class="cred-row">
+                        <span class="cred-label">Tên đăng nhập:</span>
+                        <span class="cred-value">{username}</span>
+                    </div>
+                    <div class="cred-row">
+                        <span class="cred-label">Mật khẩu tạm thời:</span>
+                        <span class="cred-value">{temp_password}</span>
+                    </div>
+                    {f'''<div class="cred-row">
+                        <span class="cred-label">Mã kích hoạt:</span>
+                        <span class="cred-value">{activation_token}</span>
+                    </div>''' if activation_token else ''}
+                </div>
+
+                <div class="btn-container">
+                    <a href="{login_url}" class="btn" target="_blank">Đăng nhập & Kích hoạt tài khoản</a>
+                </div>
+
+                <div class="instructions">
+                    <strong>Hướng dẫn quan trọng:</strong>
+                    <ol style="margin: 8px 0 0 16px; padding: 0;">
+                        <li>Sử dụng tên đăng nhập và mật khẩu tạm thời ở trên để đăng nhập lần đầu.</li>
+                        <li>Hệ thống sẽ yêu cầu bạn đổi mật khẩu mới để đảm bảo tính an toàn cho tài khoản.</li>
+                        <li>Không chia sẻ mật khẩu tạm này với bất kỳ ai khác.</li>
+                    </ol>
+                </div>
+            </div>
+            <div class="footer">
+                <p>&copy; Sales-Warehouse System. Email tự động kích hoạt tài khoản.</p>
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+
+    if not SMTP_HOST:
+        logger.info(f"[EMAIL DEV MOCK] Đã gửi email kích hoạt tài khoản cho {to_email} (username: {username})")
+        print(f"\n==================== [DEV EMAIL ACTIVATION SIMULATOR] ====================")
+        print(f" Đến: {to_email} ({recipient_name})")
+        print(f" Tiêu đề: {subject}")
+        print(f" Username: {username}")
+        print(f" Mật khẩu tạm: {temp_password}")
+        if activation_token:
+            print(f" Mã kích hoạt: {activation_token}")
+        print(f" Đường dẫn: {login_url}")
+        print(f"==========================================================================\n")
+        return True
+
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"] = f"{EMAILS_FROM_NAME} <{EMAILS_FROM_EMAIL}>"
+        msg["To"] = to_email
+
+        part = MIMEText(html_content, "html")
+        msg.attach(part)
+
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=10) as server:
+            server.starttls()
+            if SMTP_USER and SMTP_PASSWORD:
+                server.login(SMTP_USER, SMTP_PASSWORD)
+            server.sendmail(EMAILS_FROM_EMAIL, [to_email], msg.as_string())
+
+        logger.info(f"Đã gửi email kích hoạt thành công đến {to_email}")
+        return True
+    except Exception as e:
+        logger.error(f"Lỗi khi gửi email kích hoạt đến {to_email}: {e}")
+        return False
+

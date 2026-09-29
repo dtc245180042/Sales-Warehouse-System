@@ -388,3 +388,91 @@ def test_user_management_when_unauthenticated_returns_401(client):
 
     # Assert
     assert response.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# Test Cases SCRUM-325: Kiểm tra trùng tài khoản, email và SĐT khi tạo/cập nhật
+# ---------------------------------------------------------------------------
+
+def test_create_user_when_duplicate_phone_returns_400_with_message(client, admin_token):
+    """Tạo người dùng với số điện thoại đã tồn tại -> Báo lỗi 400 cụ thể (SCRUM-325)."""
+    # Arrange
+    headers = {"Authorization": f"Bearer {admin_token}"}
+    payload = {
+        "username": "unique_username_phone_test",
+        "email": "unique_phone_test@test.local",
+        "phone_number": "0901234567",  # Đã thuộc về scrum205_admin
+        "role": UserRole.CUSTOMER.value,
+    }
+
+    # Act
+    response = client.post("/api/v1/users", headers=headers, json=payload)
+
+    # Assert
+    assert response.status_code == 400
+    assert "Số điện thoại '0901234567' đã được đăng ký" in response.json()["detail"]
+
+
+def test_update_user_when_duplicate_username_returns_400_with_message(client, admin_token, db_session):
+    """Cập nhật username của user thành username đã có người dùng -> Báo lỗi 400 (SCRUM-325)."""
+    # Arrange
+    sales_user = db_session.query(User).filter(User.username == "scrum205_sales").first()
+    headers = {"Authorization": f"Bearer {admin_token}"}
+    payload = {"username": "scrum205_admin"}  # Đã tồn tại
+
+    # Act
+    response = client.put(f"/api/v1/users/{sales_user.id}", headers=headers, json=payload)
+
+    # Assert
+    assert response.status_code == 400
+    assert "Tên đăng nhập 'scrum205_admin' đã tồn tại" in response.json()["detail"]
+
+
+def test_update_user_when_duplicate_email_returns_400_with_message(client, admin_token, db_session):
+    """Cập nhật email của user thành email đã có người dùng -> Báo lỗi 400 (SCRUM-325)."""
+    # Arrange
+    sales_user = db_session.query(User).filter(User.username == "scrum205_sales").first()
+    headers = {"Authorization": f"Bearer {admin_token}"}
+    payload = {"email": "admin205@test.local"}  # Đã thuộc về admin
+
+    # Act
+    response = client.put(f"/api/v1/users/{sales_user.id}", headers=headers, json=payload)
+
+    # Assert
+    assert response.status_code == 400
+    assert "Địa chỉ email 'admin205@test.local' đã được đăng ký" in response.json()["detail"]
+
+
+def test_update_user_when_duplicate_phone_returns_400_with_message(client, admin_token, db_session):
+    """Cập nhật SĐT của user thành SĐT đã có người dùng -> Báo lỗi 400 (SCRUM-325)."""
+    # Arrange
+    sales_user = db_session.query(User).filter(User.username == "scrum205_sales").first()
+    headers = {"Authorization": f"Bearer {admin_token}"}
+    payload = {"phone_number": "0901234567"}  # Đã thuộc về admin
+
+    # Act
+    response = client.put(f"/api/v1/users/{sales_user.id}", headers=headers, json=payload)
+
+    # Assert
+    assert response.status_code == 400
+    assert "Số điện thoại '0901234567' đã được đăng ký" in response.json()["detail"]
+
+
+def test_update_user_when_keeping_own_phone_and_email_succeeds(client, admin_token, db_session):
+    """Cập nhật giữ nguyên email và SĐT của chính mình -> Thành công 200 OK không báo trùng ảo (SCRUM-325)."""
+    # Arrange
+    sales_user = db_session.query(User).filter(User.username == "scrum205_sales").first()
+    headers = {"Authorization": f"Bearer {admin_token}"}
+    payload = {
+        "full_name": "Nhân Viên Kinh Doanh Cập Nhật",
+        "email": sales_user.email,
+        "phone_number": sales_user.phone_number,
+    }
+
+    # Act
+    response = client.put(f"/api/v1/users/{sales_user.id}", headers=headers, json=payload)
+
+    # Assert
+    assert response.status_code == 200
+    assert response.json()["full_name"] == "Nhân Viên Kinh Doanh Cập Nhật"
+

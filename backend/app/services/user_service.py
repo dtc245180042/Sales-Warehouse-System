@@ -42,7 +42,17 @@ def create_user(user_data: UserCreate, db: Session) -> User:
             detail=f"Địa chỉ email '{email}' đã được đăng ký cho một tài khoản khác.",
         )
 
-    # 3. Ràng buộc vai trò kho (SCRUM-206)
+    # 3. Kiểm tra trùng số điện thoại (SCRUM-325)
+    phone = user_data.phone_number.strip() if user_data.phone_number else None
+    if phone:
+        if db.query(User).filter(User.phone_number == phone).first():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Số điện thoại '{phone}' đã được đăng ký cho một tài khoản khác.",
+            )
+
+    # 4. Ràng buộc vai trò kho (SCRUM-206)
+
     primary_role = user_data.role or UserRole.CUSTOMER.value
     role_names = user_data.role_names or []
     is_warehouse_role = primary_role in WAREHOUSE_ROLES or any(r in WAREHOUSE_ROLES for r in role_names)
@@ -164,17 +174,49 @@ def update_user(
                 detail="Không thể tự thu hồi vai trò quản trị viên của chính mình.",
             )
 
-    # 2. Cập nhật thông tin cơ bản
+    # 2. Kiểm tra trùng tên đăng nhập khi cập nhật (SCRUM-325)
+    if update_data.username is not None:
+        new_username = update_data.username.strip()
+        if new_username and new_username != target_user.username:
+            if db.query(User).filter(User.username == new_username, User.id != target_user.id).first():
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Tên đăng nhập '{new_username}' đã tồn tại trong hệ thống. Vui lòng chọn tên khác.",
+                )
+            target_user.username = new_username
+
+    # 3. Kiểm tra trùng email khi cập nhật (SCRUM-325)
+    if update_data.email is not None:
+        new_email = update_data.email.strip().lower()
+        if new_email and new_email != target_user.email:
+            if db.query(User).filter(User.email == new_email, User.id != target_user.id).first():
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Địa chỉ email '{new_email}' đã được đăng ký cho một tài khoản khác.",
+                )
+            target_user.email = new_email
+
+    # 4. Kiểm tra trùng số điện thoại khi cập nhật (SCRUM-325)
+    if update_data.phone_number is not None:
+        new_phone = update_data.phone_number.strip() if update_data.phone_number else None
+        if new_phone and new_phone != target_user.phone_number:
+            if db.query(User).filter(User.phone_number == new_phone, User.id != target_user.id).first():
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Số điện thoại '{new_phone}' đã được đăng ký cho một tài khoản khác.",
+                )
+        target_user.phone_number = new_phone
+
+    # 5. Cập nhật thông tin cơ bản
     if update_data.full_name is not None:
         target_user.full_name = update_data.full_name
-    if update_data.phone_number is not None:
-        target_user.phone_number = update_data.phone_number
     if update_data.assigned_warehouse is not None:
         target_user.assigned_warehouse = update_data.assigned_warehouse
     if update_data.is_active is not None:
         target_user.is_active = update_data.is_active
 
-    # 3. Cập nhật vai trò và kiểm tra ràng buộc vai trò kho
+    # 6. Cập nhật vai trò và kiểm tra ràng buộc vai trò kho
+
     if update_data.role:
         target_user.role = update_data.role
 

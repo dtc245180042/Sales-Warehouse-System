@@ -20,12 +20,15 @@ class UserCreate(UserBase):
 
 
 class UserUpdate(BaseModel):
+    username: Optional[str] = None
+    email: Optional[str] = None
     full_name: Optional[str] = None
     phone_number: Optional[str] = None
     role: Optional[str] = None
     role_names: Optional[List[str]] = None
     assigned_warehouse: Optional[str] = None
     is_active: Optional[bool] = None
+
 
 
 class UserLockRequest(BaseModel):

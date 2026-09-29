@@ -7,6 +7,13 @@ from app.services.auth_service import (
 )
 from app.services.email_service import send_password_reset_email
 from app.services.menu_service import seed_menus, get_all_menus, get_user_navigation_menu
+from app.services.product_service import (
+    can_view_cost_and_margin,
+    filter_product_margins,
+    get_products_list,
+    get_product_by_sku,
+    PRODUCT_CATALOG,
+)
 
 __all__ = [
     "seed_all",
@@ -21,4 +28,10 @@ __all__ = [
     "seed_menus",
     "get_all_menus",
     "get_user_navigation_menu",
+    "can_view_cost_and_margin",
+    "filter_product_margins",
+    "get_products_list",
+    "get_product_by_sku",
+    "PRODUCT_CATALOG",
 ]
+

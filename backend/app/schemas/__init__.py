@@ -27,6 +27,12 @@ from app.schemas.navigation import (
     MenuItemResponse,
     UserMenuResponse,
 )
+from app.schemas.product import (
+    ProductBase,
+    ProductPublicResponse,
+    ProductManagerResponse,
+    ProductListResponse,
+)
 
 __all__ = [
     "PermissionBase",
@@ -59,4 +65,9 @@ __all__ = [
     "MenuItemUpdate",
     "MenuItemResponse",
     "UserMenuResponse",
+    "ProductBase",
+    "ProductPublicResponse",
+    "ProductManagerResponse",
+    "ProductListResponse",
 ]
+

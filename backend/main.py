@@ -11,6 +11,8 @@ from app.services.seed_service import seed_all
 from app.api import api_router
 from app.api.auth import router as router_xac_thuc
 from app.api.users import router as router_nguoi_dung
+from app.api.products import router as router_san_pham
+
 
 
 def khoi_tao_tai_khoan_ban_dau(phien_db: Session):
@@ -92,6 +94,8 @@ app.include_router(api_router)
 # Tích hợp thêm router xác thực và người dùng trực tiếp tại /api/v1
 app.include_router(router_xac_thuc, prefix=settings.API_V1_STR)
 app.include_router(router_nguoi_dung, prefix=settings.API_V1_STR)
+app.include_router(router_san_pham, prefix=settings.API_V1_STR)
+
 
 
 @app.get("/", tags=["Health"])

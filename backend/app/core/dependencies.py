@@ -42,14 +42,16 @@ def get_current_user(
     if raw_user_id is None or token_version is None:
         raise auth_error
 
+    user = None
     try:
         user_id = int(raw_user_id)
+        user = db.query(User).filter(User.id == user_id).first()
     except (ValueError, TypeError):
-        raise auth_error
+        user = db.query(User).filter(User.username == str(raw_user_id)).first()
 
-    user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise auth_error
+
 
     if not user.is_active:
         raise HTTPException(

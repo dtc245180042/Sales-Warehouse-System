@@ -14,6 +14,14 @@ from app.services.product_service import (
     get_product_by_sku,
     PRODUCT_CATALOG,
 )
+from app.services.user_service import (
+    create_user,
+    list_users,
+    get_user_by_id,
+    update_user,
+    lock_user,
+    unlock_user,
+)
 
 __all__ = [
     "seed_all",
@@ -33,5 +41,12 @@ __all__ = [
     "get_products_list",
     "get_product_by_sku",
     "PRODUCT_CATALOG",
+    "create_user",
+    "list_users",
+    "get_user_by_id",
+    "update_user",
+    "lock_user",
+    "unlock_user",
 ]
+
 

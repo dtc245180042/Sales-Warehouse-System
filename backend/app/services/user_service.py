@@ -5,7 +5,7 @@ import re
 import secrets
 from typing import Any, Dict, List, Optional, Tuple
 from fastapi import HTTPException, status
-from sqlalchemy import or_
+from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
 from app.core.security import get_password_hash
@@ -229,21 +229,36 @@ def activate_user_with_token(
 
 
 def list_users(
-    query: Optional[str],
-    role: Optional[str],
-    is_active: Optional[bool],
-    page: int,
-    page_size: int,
-    db: Session,
+    query: Optional[str] = None,
+    name: Optional[str] = None,
+    username: Optional[str] = None,
+    phone: Optional[str] = None,
+    role: Optional[str] = None,
+    status: Optional[str] = None,
+    is_active: Optional[bool] = None,
+    page: int = 1,
+    page_size: int = 20,
+    db: Session = None,
 ) -> Tuple[List[User], int, int]:
-    """Tìm kiếm, lọc và phân trang người dùng (SCRUM-205, mặc định 20 dòng):
+    """Tìm kiếm, lọc và phân trang người dùng (SCRUM-205 & SCRUM-322, mặc định 20 dòng):
     
+    Hỗ trợ tìm kiếm theo:
+    - query: Tìm kiếm từ khóa tổng hợp (username, email, họ tên hoặc số điện thoại)
+    - name: Tìm kiếm theo họ tên người dùng
+    - username: Tìm kiếm theo tên đăng nhập / tài khoản
+    - phone: Tìm kiếm theo số điện thoại
+    
+    Hỗ trợ lọc theo:
+    - role: Lọc theo vai trò (chính hoặc phụ trong RBAC)
+    - status: Lọc theo trạng thái tài khoản (active, locked, inactive, pending_activation)
+    - is_active: Lọc theo cờ hoạt động (boolean)
+
     Returns:
         (users_list, total_count, total_pages)
     """
     stmt = db.query(User)
 
-    # Tìm kiếm theo từ khóa: username, email, họ tên hoặc số điện thoại
+    # 1. Tìm kiếm tổng hợp theo từ khóa: username, email, họ tên hoặc số điện thoại
     if query and query.strip():
         search_term = f"%{query.strip()}%"
         stmt = stmt.filter(
@@ -255,11 +270,78 @@ def list_users(
             )
         )
 
-    # Lọc theo vai trò
-    if role and role.strip():
-        stmt = stmt.filter(User.role == role.strip())
+    # 2. Tìm kiếm cụ thể theo họ tên (name) - SCRUM-322
+    if name and name.strip():
+        stmt = stmt.filter(User.full_name.ilike(f"%{name.strip()}%"))
 
-    # Lọc theo trạng thái
+    # 3. Tìm kiếm cụ thể theo tài khoản (username) - SCRUM-322
+    if username and username.strip():
+        stmt = stmt.filter(User.username.ilike(f"%{username.strip()}%"))
+
+    # 4. Tìm kiếm cụ thể theo số điện thoại (phone) - SCRUM-322
+    if phone and phone.strip():
+        stmt = stmt.filter(User.phone_number.ilike(f"%{phone.strip()}%"))
+
+    # 5. Lọc theo vai trò (hỗ trợ cả vai trò chính và các vai trò Many-to-Many) - SCRUM-322
+    if role and role.strip():
+        role_clean = role.strip()
+        stmt = stmt.filter(
+            or_(
+                User.role.ilike(role_clean),
+                User.roles.any(Role.name.ilike(role_clean)),
+                User.roles.any(Role.display_name.ilike(role_clean)),
+            )
+        )
+
+    # 6. Lọc theo trạng thái tài khoản: active, locked, inactive, pending_activation - SCRUM-322
+    if status and status.strip():
+        st = status.strip().lower()
+        now = datetime.now(timezone.utc)
+        if st in ["active", "hoạt động"]:
+            stmt = stmt.filter(
+                User.is_active == True,
+                or_(User.locked_until == None, User.locked_until <= now),
+            )
+        elif st in ["locked", "khóa"]:
+            stmt = stmt.filter(
+                or_(
+                    and_(User.is_active == True, User.locked_until > now),
+                    and_(
+                        User.is_active == False,
+                        or_(
+                            User.locked_until != None,
+                            User.lock_reason.ilike("%khóa%"),
+                            User.lock_reason.ilike("%lock%"),
+                        ),
+                    ),
+                )
+            )
+        elif st in ["pending_activation", "chờ kích hoạt", "pending"]:
+            stmt = stmt.filter(
+                User.is_active == False,
+                or_(
+                    User.lock_reason.ilike("%kích hoạt%"),
+                    User.lock_reason.ilike("%pending%"),
+                    User.lock_reason.ilike("%activation%"),
+                ),
+            )
+        elif st in ["inactive", "ngừng sử dụng", "deactivated"]:
+            stmt = stmt.filter(
+                User.is_active == False,
+                User.locked_until == None,
+                or_(
+                    User.lock_reason == None,
+                    and_(
+                        ~User.lock_reason.ilike("%khóa%"),
+                        ~User.lock_reason.ilike("%lock%"),
+                        ~User.lock_reason.ilike("%kích hoạt%"),
+                        ~User.lock_reason.ilike("%pending%"),
+                        ~User.lock_reason.ilike("%activation%"),
+                    ),
+                ),
+            )
+
+    # 7. Lọc theo cờ is_active (boolean backward compatible)
     if is_active is not None:
         stmt = stmt.filter(User.is_active == is_active)
 
@@ -274,6 +356,7 @@ def list_users(
     )
 
     return users, total_count, total_pages
+
 
 
 def get_user_by_id(user_id: int, db: Session) -> Optional[User]:

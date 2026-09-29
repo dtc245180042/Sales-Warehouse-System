@@ -810,4 +810,145 @@ def test_admin_activate_user_by_id_success(client, admin_token):
     assert data["status"] == "active"
 
 
+# ---------------------------------------------------------------------------
+# Test Cases SCRUM-322: Thiết kế bộ lọc tìm kiếm theo tên, tài khoản, số điện thoại, vai trò và trạng thái
+# ---------------------------------------------------------------------------
+
+def test_list_users_when_search_by_name_returns_matching_users(client, admin_token):
+    """Tìm kiếm theo họ và tên (name / full_name) -> Trả về danh sách chính xác (SCRUM-322)."""
+    # Arrange
+    headers = {"Authorization": f"Bearer {admin_token}"}
+
+    # Act
+    response = client.get("/api/v1/users?name=Quản Trị Viên", headers=headers)
+
+    # Assert
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data["items"]) >= 1
+    for user in data["items"]:
+        assert "Quản Trị Viên" in user["full_name"]
+
+
+def test_list_users_when_search_by_username_returns_matching_users(client, admin_token):
+    """Tìm kiếm theo tài khoản (username) -> Trả về kết quả khớp (SCRUM-322)."""
+    # Arrange
+    headers = {"Authorization": f"Bearer {admin_token}"}
+
+    # Act
+    response = client.get("/api/v1/users?username=scrum205_sales", headers=headers)
+
+    # Assert
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data["items"]) == 1
+    assert data["items"][0]["username"] == "scrum205_sales"
+
+
+def test_list_users_when_search_by_phone_returns_matching_users(client, admin_token, db_session):
+    """Tìm kiếm theo số điện thoại (phone) -> Trả về người dùng có số điện thoại tương ứng (SCRUM-322)."""
+    # Arrange
+    admin_user = db_session.query(User).filter(User.username == "scrum205_admin").first()
+    headers = {"Authorization": f"Bearer {admin_token}"}
+
+    # Act
+    response = client.get(f"/api/v1/users?phone={admin_user.phone_number}", headers=headers)
+
+    # Assert
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data["items"]) == 1
+    assert data["items"][0]["phone_number"] == admin_user.phone_number
+    assert data["items"][0]["username"] == "scrum205_admin"
+
+
+
+def test_list_users_when_filter_by_status_active_returns_active_users(client, admin_token):
+    """Lọc người dùng theo trạng thái 'active' -> Trả về các tài khoản đang hoạt động (SCRUM-322)."""
+    # Arrange
+    headers = {"Authorization": f"Bearer {admin_token}"}
+
+    # Act
+    response = client.get("/api/v1/users?status=active", headers=headers)
+
+    # Assert
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data["items"]) > 0
+    for user in data["items"]:
+        assert user["status"] == "active"
+        assert user["is_active"] is True
+
+
+def test_list_users_when_filter_by_status_locked_returns_locked_users(client, admin_token, db_session):
+    """Lọc người dùng theo trạng thái 'locked' -> Trả về các tài khoản bị khóa (SCRUM-322)."""
+    # Arrange: Đảm bảo có ít nhất 1 tài khoản locked
+    target_user = db_session.query(User).filter(User.username == "page_user_01").first()
+    target_user.is_active = False
+    target_user.lock_reason = "Khóa tài khoản kiểm thử bộ lọc"
+    db_session.commit()
+
+    headers = {"Authorization": f"Bearer {admin_token}"}
+
+    # Act
+    response = client.get("/api/v1/users?status=locked", headers=headers)
+
+    # Assert
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data["items"]) >= 1
+    for user in data["items"]:
+        assert user["status"] == "locked"
+        assert user["is_active"] is False
+
+
+def test_list_users_when_filter_by_status_pending_activation_returns_pending_users(client, admin_token, db_session):
+    """Lọc người dùng theo trạng thái 'pending_activation' -> Trả về tài khoản chờ kích hoạt (SCRUM-322)."""
+    # Arrange: Đảm bảo có tài khoản chờ kích hoạt
+    pending_user = db_session.query(User).filter(User.username == "user_scrum323_pending").first()
+    if not pending_user:
+        create_payload = {
+            "username": "filter_pending_user",
+            "email": "filter_pending@test.local",
+            "require_activation": True,
+        }
+        client.post("/api/v1/users", headers={"Authorization": f"Bearer {admin_token}"}, json=create_payload)
+
+    headers = {"Authorization": f"Bearer {admin_token}"}
+
+    # Act
+    response = client.get("/api/v1/users?status=pending_activation", headers=headers)
+
+    # Assert
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data["items"]) >= 1
+    for user in data["items"]:
+        assert user["status"] == "pending_activation"
+        assert user["is_active"] is False
+
+
+def test_list_users_when_combined_filters_returns_precise_results(client, admin_token):
+    """Kết hợp nhiều tiêu chí tìm kiếm và bộ lọc (tên + vai trò + trạng thái) -> Kết quả chính xác tuyệt đối (SCRUM-322)."""
+    # Arrange
+    headers = {"Authorization": f"Bearer {admin_token}"}
+
+    # Act: Tìm kiếm tài khoản có tên chứa "Phân Trang", vai trò "Customer", trạng thái "active"
+    response = client.get(
+        "/api/v1/users?name=Phân Trang&role=Customer&status=active&page=1&page_size=10",
+        headers=headers,
+    )
+
+    # Assert
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data["items"]) <= 10
+    for user in data["items"]:
+        assert "Phân Trang" in user["full_name"]
+        assert user["role"] == UserRole.CUSTOMER.value
+        assert user["status"] == "active"
+        assert user["is_active"] is True
+
+
+
 

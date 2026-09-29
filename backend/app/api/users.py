@@ -43,21 +43,37 @@ def create_user(
 @router.get(
     "",
     response_model=UserPaginatedResponse,
-    summary="Tìm kiếm, lọc và phân trang danh sách người dùng (SCRUM-205)",
+    summary="Tìm kiếm, lọc và phân trang danh sách người dùng (SCRUM-205 & SCRUM-322)",
 )
 def list_users(
-    query: Optional[str] = Query(None, alias="q", description="Tìm theo tên, tài khoản, email hoặc số điện thoại"),
-    role: Optional[str] = Query(None, description="Lọc theo vai trò"),
-    is_active: Optional[bool] = Query(None, description="Lọc theo trạng thái hoạt động"),
+    query: Optional[str] = Query(None, alias="q", description="Tìm kiếm chung theo tên, tài khoản, email hoặc số điện thoại"),
+    name: Optional[str] = Query(None, description="Tìm kiếm theo họ tên người dùng (SCRUM-322)"),
+    full_name: Optional[str] = Query(None, description="Tìm kiếm theo họ tên (alias) (SCRUM-322)"),
+    username: Optional[str] = Query(None, description="Tìm kiếm theo username / tài khoản (SCRUM-322)"),
+    phone: Optional[str] = Query(None, description="Tìm kiếm theo số điện thoại (SCRUM-322)"),
+    phone_number: Optional[str] = Query(None, description="Tìm kiếm theo số điện thoại (alias) (SCRUM-322)"),
+    role: Optional[str] = Query(None, description="Lọc theo vai trò (SCRUM-322)"),
+    status: Optional[str] = Query(None, description="Lọc theo trạng thái: active, locked, inactive, pending_activation (SCRUM-322)"),
+    is_active: Optional[bool] = Query(None, description="Lọc theo cờ hoạt động (boolean)"),
     page: int = Query(1, ge=1, description="Số trang hiện tại (bắt đầu từ 1)"),
     page_size: int = Query(20, ge=1, le=100, description="Số bản ghi trên mỗi trang (mặc định 20)"),
     current_user: User = Depends(require_role(UserRole.ADMIN)),
     db: Session = Depends(get_db),
 ) -> UserPaginatedResponse:
-    """Tìm kiếm, lọc và phân trang danh sách tài khoản theo đúng SCRUM-205 (mặc định 20 dòng)."""
+    """Tìm kiếm, lọc và phân trang danh sách tài khoản theo đúng SCRUM-205 & SCRUM-322 (mặc định 20 dòng):
+    - Tìm kiếm theo: tên, username/tài khoản, số điện thoại.
+    - Lọc theo: vai trò, trạng thái tài khoản (active, locked, inactive, pending_activation).
+    """
+    search_name = name or full_name
+    search_phone = phone or phone_number
+
     users, total_count, total_pages = user_service.list_users(
         query=query,
+        name=search_name,
+        username=username,
+        phone=search_phone,
         role=role,
+        status=status,
         is_active=is_active,
         page=page,
         page_size=page_size,

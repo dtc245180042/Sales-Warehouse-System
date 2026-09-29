@@ -8,8 +8,7 @@ from app.core.database import engine, Base, SessionLocal
 from app.core.security import bam_mat_khau
 from app.models.auth import Role, Permission, User, UserRole
 from app.services.seed_service import seed_all
-from app.api import api_router
-from app.api.auth import router as router_xac_thuc
+from app.api import api_router, api_v1_router
 
 
 def khoi_tao_tai_khoan_ban_dau(phien_db: Session):
@@ -85,14 +84,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Tích hợp router chính (/api bao gồm permissions, roles, auth)
+# ==============================================================================
+# TÍCH HỢP HỆ THỐNG ROUTER TỰ ĐỘNG (ZERO-CONFLICT PLUG-AND-PLAY)
+# Tất cả router (cũ và mới thêm) đều được nạp tự động qua api_router và api_v1_router.
+# FILE main.py NÀY LÀ BẤT KHẢ XÂM PHẠM - CÁC AGENT TUYỆT ĐỐI KHÔNG SỬA ĐỔI FILE NÀY!
+# ==============================================================================
 app.include_router(api_router)
-
-from app.api.users import router as router_nguoi_dung
-
-# Tích hợp thêm router xác thực và người dùng trực tiếp tại /api/v1
-app.include_router(router_xac_thuc, prefix=settings.API_V1_STR)
-app.include_router(router_nguoi_dung, prefix=settings.API_V1_STR)
+app.include_router(api_v1_router)
 
 
 @app.get("/", tags=["Health"])

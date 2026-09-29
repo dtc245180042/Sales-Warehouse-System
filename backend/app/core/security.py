@@ -1,8 +1,9 @@
 from datetime import datetime, timedelta, timezone
-from typing import Any, Optional, Dict
+from typing import Any, Dict, Optional
 import hashlib
 import secrets
 import bcrypt
+
 try:
     from jose import jwt, JWTError
 except ImportError:
@@ -16,66 +17,64 @@ ALGORITHM = settings.ALGORITHM
 ACCESS_TOKEN_EXPIRE_MINUTES = settings.ACCESS_TOKEN_EXPIRE_MINUTES
 
 
-def kiem_tra_mat_khau(mat_khau_thuan: str, mat_khau_bam: str) -> bool:
-    """Xác thực mật khẩu thô so với chuỗi hash (hỗ trợ cả bcrypt và pbkdf2)."""
-    if mat_khau_bam.startswith("pbkdf2:"):
-        parts = mat_khau_bam.split("$")
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """Verify a plain-text password against its stored hash.
+
+    Supports both bcrypt (default) and pbkdf2_sha256 (legacy).
+    """
+    if hashed_password.startswith("pbkdf2:"):
+        parts = hashed_password.split("$")
         if len(parts) == 3:
             salt = parts[1]
             key_hex = parts[2]
-            computed = hashlib.pbkdf2_hmac("sha256", mat_khau_thuan.encode("utf-8"), salt.encode("utf-8"), 100000).hex()
+            computed = hashlib.pbkdf2_hmac(
+                "sha256",
+                plain_password.encode("utf-8"),
+                salt.encode("utf-8"),
+                100000,
+            ).hex()
             return secrets.compare_digest(key_hex, computed)
 
     try:
-        chuoi_byte_thuan = mat_khau_thuan.encode("utf-8")[:72]
-        chuoi_byte_bam = mat_khau_bam.encode("utf-8")
-        return bcrypt.checkpw(chuoi_byte_thuan, chuoi_byte_bam)
+        plain_bytes = plain_password.encode("utf-8")[:72]
+        hashed_bytes = hashed_password.encode("utf-8")
+        return bcrypt.checkpw(plain_bytes, hashed_bytes)
     except Exception:
         return False
 
 
-def bam_mat_khau(mat_khau: str) -> str:
-    """Băm mật khẩu sử dụng thuật toán bcrypt (giới hạn an toàn 72 bytes)."""
-    chuoi_byte = mat_khau.encode("utf-8")[:72]
-    muoi = bcrypt.gensalt()
-    return bcrypt.hashpw(chuoi_byte, muoi).decode("utf-8")
+def get_password_hash(password: str) -> str:
+    """Hash a password using bcrypt (input safely capped at 72 bytes)."""
+    password_bytes = password.encode("utf-8")[:72]
+    salt = bcrypt.gensalt()
+    return bcrypt.hashpw(password_bytes, salt).decode("utf-8")
 
 
-def tao_token_truy_cap(
-    du_lieu: Dict[str, Any],
-    thoi_gian_het_han: Optional[timedelta] = None
+def create_access_token(
+    data: Dict[str, Any],
+    expires_delta: Optional[timedelta] = None,
 ) -> str:
-    """Tạo JWT access token chứa payload data và thời hạn hết hạn."""
-    du_lieu_ma_hoa = du_lieu.copy()
-    thoi_diem_hien_tai = datetime.now(timezone.utc)
-    if thoi_gian_het_han:
-        han_dung = thoi_diem_hien_tai + thoi_gian_het_han
-    else:
-        han_dung = thoi_diem_hien_tai + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    """Create a signed JWT access token with the given payload and expiry time."""
+    payload = data.copy()
+    now = datetime.now(timezone.utc)
+    expire = now + (expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES))
 
-    du_lieu_ma_hoa.update({
-        "exp": han_dung,
-        "iat": thoi_diem_hien_tai
-    })
-    token_jwt = jwt.encode(du_lieu_ma_hoa, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
-    return token_jwt
+    payload.update({"exp": expire, "iat": now})
+    return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
 
-def giai_ma_token_truy_cap(chuoi_token: str) -> Optional[Dict[str, Any]]:
-    """Giải mã JWT token và trả về payload, hoặc None nếu không hợp lệ / hết hạn."""
+def decode_access_token(token: str) -> Optional[Dict[str, Any]]:
+    """Decode a JWT token and return its payload, or None if invalid / expired."""
     try:
-        tai_trong = jwt.decode(
-            chuoi_token,
-            settings.SECRET_KEY,
-            algorithms=[settings.ALGORITHM]
-        )
-        return tai_trong
+        return jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
     except (JWTError, Exception):
         return None
 
 
-# Bí danh tương thích ngược (aliases)
-verify_password = kiem_tra_mat_khau
-get_password_hash = bam_mat_khau
-create_access_token = tao_token_truy_cap
-decode_access_token = giai_ma_token_truy_cap
+# ---------------------------------------------------------------------------
+# Backward-compatibility aliases (legacy Vietnamese names — do NOT use in new code)
+# ---------------------------------------------------------------------------
+kiem_tra_mat_khau = verify_password
+bam_mat_khau = get_password_hash
+tao_token_truy_cap = create_access_token
+giai_ma_token_truy_cap = decode_access_token

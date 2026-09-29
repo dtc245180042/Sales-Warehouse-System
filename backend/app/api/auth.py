@@ -1,202 +1,179 @@
+"""
+Router xác thực — /api/auth & /api/v1/auth
+
+Endpoints:
+  POST   /login              — Đăng nhập, trả JWT + claims (SCRUM-287, SCRUM-301)
+  POST   /change-password    — Đổi mật khẩu & thu hồi phiên (SCRUM-307)
+  POST   /logout             — Đăng xuất server-side (SCRUM-307)
+  POST   /refresh            — Gia hạn phiên tự động (SCRUM-199)
+  POST   /forgot-password    — Yêu cầu đặt lại mật khẩu (SCRUM-200)
+  POST   /reset-password     — Xác nhận token & đặt mật khẩu mới (SCRUM-200)
+  GET    /me                 — Thông tin user + claims (SCRUM-301)
+  GET    /me/claims          — Claims đầy đủ: roles, permissions, menu (SCRUM-203)
+  GET    /financial/cost-and-margin — Báo cáo giá vốn (SCRUM-202)
+"""
 import secrets
 from datetime import datetime, timedelta, timezone
-from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, status
+
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.database import lay_phien_db
-from app.core.security import kiem_tra_mat_khau, bam_mat_khau, tao_token_truy_cap
-from app.core.dependencies import lay_nguoi_dung_hien_tai, yeu_cau_vai_tro
-from app.models.auth import User, UserRole, PasswordResetToken
+from app.core.database import get_db
+from app.core.dependencies import get_current_user, require_role
+from app.core.security import get_password_hash, verify_password, create_access_token
+from app.models.auth import User, UserRole
 from app.schemas.auth import (
-    LoginRequest,
-    TokenResponse,
-    UserResponse,
     ChangePasswordRequest,
     ForgotPasswordRequest,
-    ResetPasswordRequest,
+    LoginRequest,
     MessageResponse,
+    ResetPasswordRequest,
+    TokenResponse,
+    UserClaimsResponse,
 )
 from app.services.auth_service import (
+    GENERIC_FORGOT_PASSWORD_MESSAGE,
+    build_user_claims_response,
     request_password_reset,
     reset_password_with_token,
-    build_user_claims_response,
 )
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 
-def _chuan_bi_user_response(user: User, db: Session) -> UserResponse:
-    """Helper đóng gói UserResponse kèm roles, permissions và cây menu điều hướng."""
-    try:
-        claims = build_user_claims_response(user, db)
-        return UserResponse(
-            id=user.id,
-            username=user.username,
-            email=user.email,
-            role=user.role,
-            is_active=user.is_active,
-            token_version=user.token_version,
-            full_name=user.full_name,
-            phone_number=user.phone_number,
-            assigned_warehouse=user.assigned_warehouse or user.warehouse_name,
-            warehouse_id=user.warehouse_id,
-            warehouse_name=user.warehouse_name,
-            region=user.region,
-            must_change_password=user.must_change_password,
-            roles=claims.roles,
-            permissions=claims.permissions,
-            navigation_menus=claims.navigation_menus,
-        )
-    except Exception:
-        roles = user.get_roles_list()
-        permissions = user.get_permissions_list()
-        return UserResponse(
-            id=user.id,
-            username=user.username,
-            email=user.email,
-            role=user.role,
-            is_active=user.is_active,
-            token_version=user.token_version,
-            full_name=user.full_name,
-            phone_number=user.phone_number,
-            assigned_warehouse=user.assigned_warehouse or user.warehouse_name,
-            warehouse_id=user.warehouse_id,
-            warehouse_name=user.warehouse_name,
-            region=user.region,
-            must_change_password=user.must_change_password,
-            roles=roles,
-            permissions=permissions,
-            navigation_menus=[],
-        )
+# ---------------------------------------------------------------------------
+# Private helpers
+# ---------------------------------------------------------------------------
 
+def _build_token_payload(user: User) -> dict:
+    """Tạo JWT payload chuẩn từ thông tin user."""
+    return {
+        "sub": user.username,
+        "user_id": user.id,
+        "role": user.role,
+        "roles": user.get_roles_list(),
+        "warehouse_id": user.warehouse_id,
+        "token_version": user.token_version,
+    }
+
+
+def _build_token_response(user: User, db: Session) -> TokenResponse:
+    """Tạo TokenResponse đầy đủ gồm access_token + user claims."""
+    token = create_access_token(_build_token_payload(user))
+    claims = build_user_claims_response(user, db)
+    return TokenResponse(access_token=token, token_type="bearer", user=claims)
+
+
+# ---------------------------------------------------------------------------
+# Endpoints
+# ---------------------------------------------------------------------------
 
 @router.post(
     "/login",
     response_model=TokenResponse,
-    summary="Đăng nhập tài khoản, xác thực phân quyền & xử lý khóa tạm 15 phút (SCRUM-287 & SCRUM-301)"
+    summary="Đăng nhập, xác thực phân quyền & xử lý khóa tạm 15 phút (SCRUM-287, SCRUM-301)",
 )
-def dang_nhap(
-    du_lieu_yeu_cau: LoginRequest,
-    phien_db: Session = Depends(lay_phien_db)
+def login(
+    request_body: LoginRequest,
+    db: Session = Depends(get_db),
 ):
     """Xác thực đăng nhập:
     - Tìm kiếm theo username hoặc email.
     - Kiểm tra trạng thái khóa tạm thời 15 phút (SCRUM-287).
-    - Kiểm tra mật khẩu, nếu sai >= 5 lần thì khóa 15 phút.
-    - Tạo JWT token mang user_id, roles, warehouse_id và token_version.
-    - Trả về token cùng thông tin người dùng, roles, permissions và cây menu điều hướng.
+    - Nếu sai mật khẩu >= 5 lần thì khóa 15 phút.
+    - Tạo JWT mang user_id, roles, warehouse_id, token_version.
+    - Trả về token + claims đầy đủ (roles, permissions, navigation_menus).
     """
-    thoi_gian_hien_tai = datetime.now(timezone.utc)
-    dinh_danh = du_lieu_yeu_cau.username.strip()
+    now = datetime.now(timezone.utc)
+    identifier = request_body.username.strip()
 
-    nguoi_dung = phien_db.query(User).filter(
-        (User.username == dinh_danh) | (User.email == dinh_danh.lower())
+    user = db.query(User).filter(
+        (User.username == identifier) | (User.email == identifier.lower())
     ).first()
 
-    if nguoi_dung:
-        # 1. Kiểm tra trạng thái khóa tạm thời
-        if nguoi_dung.da_bi_khoa():
+    if user:
+        # 1. Kiểm tra tài khoản bị khóa tạm thời
+        if user.da_bi_khoa():
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Tài khoản tạm thời bị khóa trong 15 phút do nhập sai nhiều lần."
+                detail="Tài khoản tạm thời bị khóa trong 15 phút do nhập sai nhiều lần.",
             )
 
-        # Nếu đã qua thời gian khóa thì tự động mở lại
-        if nguoi_dung.locked_until and not nguoi_dung.da_bi_khoa():
-            nguoi_dung.locked_until = None
-            nguoi_dung.failed_login_attempts = 0
-            phien_db.commit()
+        # Tự động mở khóa nếu đã hết thời gian
+        if user.locked_until and not user.da_bi_khoa():
+            user.locked_until = None
+            user.failed_login_attempts = 0
+            db.commit()
 
-        # 2. Kiểm tra tài khoản có bị vô hiệu hóa không
-        if not nguoi_dung.is_active:
+        # 2. Kiểm tra tài khoản active
+        if not user.is_active:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Tài khoản đã bị vô hiệu hóa. Vui lòng liên hệ quản trị viên."
+                detail="Tài khoản đã bị vô hiệu hóa. Vui lòng liên hệ quản trị viên.",
             )
 
         # 3. Xác thực mật khẩu
-        if not kiem_tra_mat_khau(du_lieu_yeu_cau.password, nguoi_dung.hashed_password):
-            nguoi_dung.failed_login_attempts += 1
-
-            if nguoi_dung.failed_login_attempts >= settings.MAX_FAILED_LOGIN_ATTEMPTS:
-                nguoi_dung.locked_until = thoi_gian_hien_tai + timedelta(minutes=settings.ACCOUNT_LOCK_MINUTES)
-                phien_db.commit()
+        if not verify_password(request_body.password, user.hashed_password):
+            user.failed_login_attempts += 1
+            if user.failed_login_attempts >= settings.MAX_FAILED_LOGIN_ATTEMPTS:
+                user.locked_until = now + timedelta(minutes=settings.ACCOUNT_LOCK_MINUTES)
+                db.commit()
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Tài khoản tạm thời bị khóa trong 15 phút do nhập sai nhiều lần."
+                    detail="Tài khoản tạm thời bị khóa trong 15 phút do nhập sai nhiều lần.",
                 )
-
-            phien_db.commit()
+            db.commit()
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Tên đăng nhập hoặc mật khẩu không chính xác",
-                headers={"WWW-Authenticate": "Bearer"}
+                headers={"WWW-Authenticate": "Bearer"},
             )
 
-        # Đăng nhập thành công: reset số lần sai
-        nguoi_dung.failed_login_attempts = 0
-        nguoi_dung.locked_until = None
-        phien_db.commit()
+        # Đăng nhập thành công: reset bộ đếm sai
+        user.failed_login_attempts = 0
+        user.locked_until = None
+        db.commit()
 
-        # Đóng gói JWT access token
-        du_lieu_token = {
-            "sub": nguoi_dung.username,
-            "user_id": nguoi_dung.id,
-            "role": nguoi_dung.role,
-            "roles": nguoi_dung.get_roles_list(),
-            "warehouse_id": nguoi_dung.warehouse_id,
-            "token_version": nguoi_dung.token_version
-        }
-        token_jwt = tao_token_truy_cap(du_lieu_token)
-        user_res = _chuan_bi_user_response(nguoi_dung, phien_db)
+        return _build_token_response(user, db)
 
-        return TokenResponse(
-            access_token=token_jwt,
-            token_type="bearer",
-            user=user_res
-        )
-
-    # Nếu người dùng không tồn tại
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Tên đăng nhập hoặc mật khẩu không chính xác",
-        headers={"WWW-Authenticate": "Bearer"}
+        headers={"WWW-Authenticate": "Bearer"},
     )
 
 
 @router.post(
     "/change-password",
     response_model=MessageResponse,
-    summary="Đổi mật khẩu & thu hồi các phiên đăng nhập khác (SCRUM-307)"
+    summary="Đổi mật khẩu & thu hồi các phiên đăng nhập khác (SCRUM-307)",
 )
-def doi_mat_khau(
-    du_lieu_yeu_cau: ChangePasswordRequest,
-    nguoi_dung_hien_tai: User = Depends(lay_nguoi_dung_hien_tai),
-    phien_db: Session = Depends(lay_phien_db)
+def change_password(
+    request_body: ChangePasswordRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     """Đổi mật khẩu người dùng đang đăng nhập:
     - Xác thực mật khẩu cũ chính xác.
     - Cập nhật mật khẩu mới (đã hash).
-    - Tăng token_version thêm 1 để thu hồi các token cũ.
+    - Tăng token_version để thu hồi toàn bộ token cũ (SCRUM-307).
     """
-    if not kiem_tra_mat_khau(du_lieu_yeu_cau.old_password, nguoi_dung_hien_tai.hashed_password):
+    if not verify_password(request_body.old_password, current_user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Mật khẩu hiện tại không chính xác."
+            detail="Mật khẩu hiện tại không chính xác.",
         )
-
-    if kiem_tra_mat_khau(du_lieu_yeu_cau.new_password, nguoi_dung_hien_tai.hashed_password):
+    if verify_password(request_body.new_password, current_user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Mật khẩu mới không được trùng với mật khẩu hiện tại."
+            detail="Mật khẩu mới không được trùng với mật khẩu hiện tại.",
         )
 
-    nguoi_dung_hien_tai.hashed_password = bam_mat_khau(du_lieu_yeu_cau.new_password)
-    nguoi_dung_hien_tai.token_version += 1
-    nguoi_dung_hien_tai.must_change_password = False
-    phien_db.commit()
+    current_user.hashed_password = get_password_hash(request_body.new_password)
+    current_user.token_version += 1
+    current_user.must_change_password = False
+    db.commit()
 
     return MessageResponse(
         message="Đổi mật khẩu thành công. Các phiên đăng nhập trên thiết bị khác đã được đăng xuất."
@@ -206,200 +183,202 @@ def doi_mat_khau(
 @router.post(
     "/logout",
     response_model=MessageResponse,
-    summary="Đăng xuất và hủy phiên đăng nhập (SCRUM-307)"
+    summary="Đăng xuất và hủy phiên đăng nhập server-side (SCRUM-307)",
 )
-def dang_xuat(
-    nguoi_dung_hien_tai: User = Depends(lay_nguoi_dung_hien_tai),
-    phien_db: Session = Depends(lay_phien_db)
+def logout(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     """Đăng xuất an toàn bằng cách tăng token_version trong database."""
-    nguoi_dung_hien_tai.token_version += 1
-    phien_db.commit()
+    current_user.token_version += 1
+    db.commit()
     return MessageResponse(message="Đăng xuất thành công. Phiên đăng nhập đã bị vô hiệu hóa phía máy chủ.")
 
 
 @router.post(
     "/refresh",
     response_model=TokenResponse,
-    summary="Gia hạn phiên đăng nhập tự động khi người dùng đang hoạt động (SCRUM-199)"
+    summary="Gia hạn phiên đăng nhập tự động khi người dùng đang hoạt động (SCRUM-199)",
 )
-def gia_han_phien(
-    nguoi_dung_hien_tai: User = Depends(lay_nguoi_dung_hien_tai),
-    phien_db: Session = Depends(lay_phien_db)
+def refresh_token(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
-    """Gia hạn phiên tự động: Cấp access token mới khi phiên cũ vẫn còn hiệu lực và người dùng đang thao tác."""
-    du_lieu_token = {
-        "sub": nguoi_dung_hien_tai.username,
-        "user_id": nguoi_dung_hien_tai.id,
-        "role": nguoi_dung_hien_tai.role,
-        "roles": nguoi_dung_hien_tai.get_roles_list(),
-        "warehouse_id": nguoi_dung_hien_tai.warehouse_id,
-        "token_version": nguoi_dung_hien_tai.token_version
-    }
-    token_moi = tao_token_truy_cap(du_lieu_token)
-    user_res = _chuan_bi_user_response(nguoi_dung_hien_tai, phien_db)
-    return TokenResponse(
-        access_token=token_moi,
-        token_type="bearer",
-        user=user_res
-    )
+    """Cấp access token mới khi phiên cũ vẫn còn hiệu lực và người dùng đang thao tác."""
+    return _build_token_response(current_user, db)
 
 
 @router.post(
     "/forgot-password",
     response_model=MessageResponse,
-    summary="Yêu cầu đặt lại mật khẩu qua email có hiệu lực (SCRUM-200 / SCRUM-295)"
+    summary="Yêu cầu đặt lại mật khẩu qua email (SCRUM-200 / SCRUM-295)",
 )
-def quen_mat_khau(
-    du_lieu_yeu_cau: ForgotPasswordRequest,
+def forgot_password(
+    request_body: ForgotPasswordRequest,
     background_tasks: BackgroundTasks,
-    phien_db: Session = Depends(lay_phien_db)
+    db: Session = Depends(get_db),
 ):
     """Gửi liên kết đặt lại mật khẩu:
-    - Sinh token an toàn, lưu CSDL và gửi email bất đồng bộ.
-    - Hỗ trợ cả PasswordResetToken và reset_password_token trên User.
-    - Luôn trả về cùng một thông báo chung (chống rò rỉ dữ liệu).
+    - Sinh token an toàn, lưu DB và gửi email bất đồng bộ.
+    - Luôn trả thông báo chung (chống rò rỉ dữ liệu / User Enumeration).
     """
-    email_nhan = du_lieu_yeu_cau.email.strip().lower()
-    nguoi_dung = phien_db.query(User).filter(User.email == email_nhan).first()
+    email = request_body.email.strip().lower()
 
-    if nguoi_dung:
-        token_dat_lai = secrets.token_urlsafe(32)
-        nguoi_dung.reset_password_token = token_dat_lai
-        nguoi_dung.reset_password_expires_at = datetime.now(timezone.utc) + timedelta(minutes=30)
-        phien_db.commit()
+    # Cập nhật cả trường reset_password_token trên User (tương thích ngược)
+    user = db.query(User).filter(User.email == email).first()
+    if user:
+        token_str = secrets.token_urlsafe(32)
+        user.reset_password_token = token_str
+        user.reset_password_expires_at = datetime.now(timezone.utc) + timedelta(minutes=30)
+        db.commit()
 
-    # Gọi hàm service để gửi email ngầm và lưu PasswordResetToken
-    msg = request_password_reset(db=phien_db, email=email_nhan, background_tasks=background_tasks)
-
-    return MessageResponse(
-        message=msg or "Nếu email tồn tại trong hệ thống, hướng dẫn đặt lại mật khẩu đã được gửi đến hộp thư của bạn."
-    )
+    # Service xử lý PasswordResetToken + gửi email
+    msg = request_password_reset(db=db, email=email, background_tasks=background_tasks)
+    return MessageResponse(message=msg or GENERIC_FORGOT_PASSWORD_MESSAGE)
 
 
 @router.post(
     "/reset-password",
     response_model=MessageResponse,
-    summary="Đặt lại mật khẩu mới bằng token (SCRUM-200 / SCRUM-295)"
+    summary="Đặt lại mật khẩu mới bằng token (SCRUM-200 / SCRUM-295)",
 )
-def dat_lai_mat_khau(
-    du_lieu_yeu_cau: ResetPasswordRequest,
-    phien_db: Session = Depends(lay_phien_db)
+def reset_password(
+    request_body: ResetPasswordRequest,
+    db: Session = Depends(get_db),
 ):
     """Xác nhận token và đặt lại mật khẩu mới:
     - Kiểm tra token hợp lệ và còn hạn.
-    - Đổi xong hủy token (chỉ dùng 1 lần) và tăng token_version để thu hồi các phiên cũ.
+    - Đổi xong hủy token (chỉ dùng 1 lần) và tăng token_version.
     """
-    token_xac_nhan = du_lieu_yeu_cau.token.strip()
+    token = request_body.token.strip()
+    now = datetime.now(timezone.utc)
 
-    # Thử xử lý qua User.reset_password_token trước
-    thoi_gian_hien_tai = datetime.now(timezone.utc)
-    nguoi_dung = phien_db.query(User).filter(
-        User.reset_password_token == token_xac_nhan
-    ).first()
+    # Thử qua User.reset_password_token trước (tương thích ngược)
+    user = db.query(User).filter(User.reset_password_token == token).first()
+    if user and user.reset_password_expires_at:
+        expires_at = user.reset_password_expires_at
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
 
-    if nguoi_dung and nguoi_dung.reset_password_expires_at:
-        han_token = nguoi_dung.reset_password_expires_at
-        if han_token.tzinfo is None:
-            han_token = han_token.replace(tzinfo=timezone.utc)
-
-        if thoi_gian_hien_tai > han_token:
-            nguoi_dung.reset_password_token = None
-            nguoi_dung.reset_password_expires_at = None
-            phien_db.commit()
+        if now > expires_at:
+            user.reset_password_token = None
+            user.reset_password_expires_at = None
+            db.commit()
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Liên kết đặt lại mật khẩu đã hết hạn (quá 30 phút). Vui lòng yêu cầu lại."
+                detail="Liên kết đặt lại mật khẩu đã hết hạn (quá 30 phút). Vui lòng yêu cầu lại.",
             )
 
-        nguoi_dung.hashed_password = bam_mat_khau(du_lieu_yeu_cau.new_password)
-        nguoi_dung.reset_password_token = None
-        nguoi_dung.reset_password_expires_at = None
-        nguoi_dung.token_version += 1
-        phien_db.commit()
-        return MessageResponse(
-            message="Đặt lại mật khẩu thành công. Vui lòng đăng nhập bằng mật khẩu mới."
-        )
+        user.hashed_password = get_password_hash(request_body.new_password)
+        user.reset_password_token = None
+        user.reset_password_expires_at = None
+        user.token_version += 1
+        db.commit()
+        return MessageResponse(message="Đặt lại mật khẩu thành công. Vui lòng đăng nhập bằng mật khẩu mới.")
 
     # Thử qua PasswordResetToken (SCRUM-295)
-    msg = reset_password_with_token(db=phien_db, token=token_xac_nhan, new_password=du_lieu_yeu_cau.new_password)
+    msg = reset_password_with_token(db=db, token=token, new_password=request_body.new_password)
     return MessageResponse(message=msg)
 
 
 @router.get(
-    "/financial/cost-and-margin",
-    summary="Báo cáo Giá vốn & Biên lợi nhuận - Chỉ dành riêng cho Quản lý Kinh doanh (SCRUM-202)"
+    "/me",
+    response_model=UserClaimsResponse,
+    summary="Thông tin user đang đăng nhập kèm claims đầy đủ (SCRUM-301)",
 )
-def bao_cao_gia_von_va_bien_loi_nhuan(
-    nguoi_dung_hien_tai: User = Depends(yeu_cau_vai_tro(UserRole.SALES_MANAGER, UserRole.ADMIN))
+def get_me(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
-    """Kiểm tra quyền tầng server: Nhân viên kinh doanh, thủ kho, kế toán không có quyền truy cập."""
-    return {
-        "status": "success",
-        "authorized_role": nguoi_dung_hien_tai.role,
-        "data": [
-            {"product_sku": "SKU-BIA-SG-SPEC", "cost_price": 10500, "selling_price": 15000, "profit_margin": "30.0%"},
-            {"product_sku": "SKU-CHOCOPIE-OR", "cost_price": 38000, "selling_price": 55000, "profit_margin": "30.9%"},
-            {"product_sku": "SKU-LAVIE-500", "cost_price": 3500, "selling_price": 6000, "profit_margin": "41.6%"},
-            {"product_sku": "SKU-STING-DAU", "cost_price": 6800, "selling_price": 10000, "profit_margin": "32.0%"},
-            {"product_sku": "SKU-SUA-VNM-180", "cost_price": 6000, "selling_price": 8500, "profit_margin": "29.4%"},
-        ]
-    }
+    """Trả về profile + roles + permissions + cây menu điều hướng của user đang xác thực."""
+    return build_user_claims_response(current_user, db)
 
 
 @router.get(
-    "/me",
-    response_model=UserResponse,
-    summary="Lấy thông tin người dùng đang đăng nhập kèm phân quyền và cây menu (SCRUM-301)"
+    "/me/claims",
+    response_model=UserClaimsResponse,
+    summary="Claims đầy đủ: roles, permissions và menu theo vai trò/kho (SCRUM-203)",
 )
-def lay_thong_tin_toi(
-    nguoi_dung_hien_tai: User = Depends(lay_nguoi_dung_hien_tai),
-    phien_db: Session = Depends(lay_phien_db)
+def get_me_claims(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
-    """Trả về thông tin cá nhân của người dùng đã xác thực Bearer token, kèm cây menu navigation."""
-    return _chuan_bi_user_response(nguoi_dung_hien_tai, phien_db)
+    """Cung cấp claims chi tiết sau đăng nhập cho Frontend (SCRUM-203):
+
+    - `roles`: danh sách mã vai trò (e.g. ["ADMIN", "WH_MANAGER"]).
+    - `permissions`: danh sách mã quyền (e.g. ["order:view", "stock_in:create"]).
+    - `navigation_menus`: cây menu được lọc theo quyền — FE dùng để render Sidebar.
+    - `warehouse_id` / `warehouse_name` / `region`: context kho/địa bàn hiện tại.
+
+    Đảm bảo dữ liệu đủ để FE phân biệt menu hiển thị theo kho hoặc địa bàn làm việc.
+    """
+    return build_user_claims_response(current_user, db)
 
 
-# =========================================================================
-# ENDPOINTS DEMO CHO GUARD PHÂN QUYỀN (SCRUM-310 / Story S1-05)
-# =========================================================================
+# ---------------------------------------------------------------------------
+# Endpoints demo Guard phân quyền (SCRUM-310 / Story S1-05)
+# ---------------------------------------------------------------------------
 
 @router.get(
     "/demo/sales-manager-or-admin",
     response_model=MessageResponse,
-    summary="Demo Guard: Chỉ Sales Manager hoặc Admin mới có quyền truy cập (SCRUM-310)"
+    summary="Demo Guard: Chỉ Sales Manager hoặc Admin (SCRUM-310)",
 )
-def demo_khu_vuc_quan_ly_ban_hang_hoac_admin(
-    nguoi_dung_hien_tai: User = Depends(yeu_cau_vai_tro(UserRole.ADMIN, UserRole.SALES_MANAGER))
+def demo_sales_manager_or_admin(
+    current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.SALES_MANAGER)),
 ):
-    """Endpoint bảo vệ mẫu: Chỉ người dùng có vai trò 'Admin' hoặc 'Sales Manager' mới được phép gọi."""
+    """Endpoint bảo vệ mẫu: chỉ Admin hoặc Sales Manager được phép gọi."""
     return MessageResponse(
-        message=f"Xin chào {nguoi_dung_hien_tai.username}! Bạn đã truy cập thành công khu vực Quản lý Bán hàng với vai trò [{nguoi_dung_hien_tai.role}]."
+        message=f"Xin chào {current_user.username}! Bạn đã truy cập thành công khu vực Quản lý Bán hàng với vai trò [{current_user.role}]."
     )
 
 
 @router.get(
     "/demo/warehouse-only",
     response_model=MessageResponse,
-    summary="Demo Guard: Chỉ Warehouse, WH Manager hoặc Admin mới có quyền truy cập (SCRUM-310)"
+    summary="Demo Guard: Chỉ Warehouse / WH Manager / Admin (SCRUM-310)",
 )
-def demo_khu_vuc_danh_rieng_cho_kho(
-    nguoi_dung_hien_tai: User = Depends(yeu_cau_vai_tro(UserRole.ADMIN, UserRole.WH_MANAGER, UserRole.WAREHOUSE))
+def demo_warehouse_only(
+    current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.WH_MANAGER, UserRole.WAREHOUSE)),
 ):
-    """Endpoint bảo vệ mẫu: Chỉ người dùng có vai trò 'Admin', 'WH Manager' hoặc 'Warehouse' mới được phép gọi."""
+    """Endpoint bảo vệ mẫu: chỉ Admin, WH Manager hoặc Warehouse được phép gọi."""
     return MessageResponse(
-        message=f"Xin chào {nguoi_dung_hien_tai.username}! Bạn đã truy cập thành công phân hệ Quản lý Kho với vai trò [{nguoi_dung_hien_tai.role}]."
+        message=f"Xin chào {current_user.username}! Bạn đã truy cập thành công phân hệ Quản lý Kho với vai trò [{current_user.role}]."
     )
 
 
-# Bí danh tương thích ngược (aliases)
-login = dang_nhap
-logout = dang_xuat
-refresh = gia_han_phien
-forgot_password = quen_mat_khau
-reset_password = dat_lai_mat_khau
-change_password = doi_mat_khau
-get_me = lay_thong_tin_toi
-get_current_user_profile = lay_thong_tin_toi
-demo_sales_manager_or_admin = demo_khu_vuc_quan_ly_ban_hang_hoac_admin
-demo_warehouse_only = demo_khu_vuc_danh_rieng_cho_kho
+@router.get(
+    "/financial/cost-and-margin",
+    summary="Báo cáo Giá vốn & Biên lợi nhuận — chỉ Sales Manager hoặc Admin (SCRUM-202)",
+)
+def get_cost_and_margin(
+    current_user: User = Depends(require_role(UserRole.SALES_MANAGER, UserRole.ADMIN)),
+):
+    """Kiểm tra quyền tầng server: nhân viên kho, kế toán không có quyền truy cập."""
+    return {
+        "status": "success",
+        "authorized_role": current_user.role,
+        "data": [
+            {"product_sku": "SKU-BIA-SG-SPEC", "cost_price": 10500, "selling_price": 15000, "profit_margin": "30.0%"},
+            {"product_sku": "SKU-CHOCOPIE-OR",  "cost_price": 38000, "selling_price": 55000, "profit_margin": "30.9%"},
+            {"product_sku": "SKU-LAVIE-500",    "cost_price": 3500,  "selling_price": 6000,  "profit_margin": "41.6%"},
+            {"product_sku": "SKU-STING-DAU",    "cost_price": 6800,  "selling_price": 10000, "profit_margin": "32.0%"},
+            {"product_sku": "SKU-SUA-VNM-180",  "cost_price": 6000,  "selling_price": 8500,  "profit_margin": "29.4%"},
+        ],
+    }
+
+
+# ---------------------------------------------------------------------------
+# Backward-compatibility aliases (legacy Vietnamese names — do NOT use in new code)
+# ---------------------------------------------------------------------------
+dang_nhap = login
+doi_mat_khau = change_password
+dang_xuat = logout
+gia_han_phien = refresh_token
+quen_mat_khau = forgot_password
+dat_lai_mat_khau = reset_password
+lay_thong_tin_toi = get_me
+get_current_user_profile = get_me
+demo_khu_vuc_quan_ly_ban_hang_hoac_admin = demo_sales_manager_or_admin
+demo_khu_vuc_danh_rieng_cho_kho = demo_warehouse_only
+bao_cao_gia_von_va_bien_loi_nhuan = get_cost_and_margin

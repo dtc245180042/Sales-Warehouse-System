@@ -1,6 +1,7 @@
 import re
 from typing import List, Optional
 from pydantic import BaseModel, Field, field_validator, ConfigDict
+
 from app.schemas.navigation import MenuItemResponse
 
 
@@ -9,17 +10,21 @@ class LoginRequest(BaseModel):
     username: str = Field(
         ...,
         description="Tên đăng nhập hoặc địa chỉ email của người dùng",
-        examples=["admin", "admin@warehouse.local"]
+        examples=["admin", "admin@warehouse.local"],
     )
     password: str = Field(
         ...,
         description="Mật khẩu tài khoản",
-        examples=["Secret123"]
+        examples=["Secret123"],
     )
 
 
-class UserResponse(BaseModel):
-    """Thông tin user trả về cho client kèm vai trò, quyền hạn và menu điều hướng (SCRUM-301)."""
+class UserClaimsResponse(BaseModel):
+    """Thông tin claims đầy đủ của user sau khi đăng nhập (SCRUM-203 / SCRUM-301).
+
+    Trả về: profile, roles, permissions và cây menu điều hướng được cá nhân hóa
+    theo vai trò và kho/địa bàn đang làm việc của người dùng.
+    """
     id: int
     username: str
     email: str
@@ -34,7 +39,7 @@ class UserResponse(BaseModel):
     region: Optional[str] = None
     must_change_password: Optional[bool] = False
 
-    # Phân quyền & menu
+    # Claims phân quyền & menu
     roles: List[str] = []
     permissions: List[str] = []
     navigation_menus: List[MenuItemResponse] = []
@@ -42,18 +47,18 @@ class UserResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-# Bí danh tương thích cho SCRUM-301 claims
-UserClaimsResponse = UserResponse
+# Alias tương thích: auth.py dùng UserResponse trong TokenResponse
+UserResponse = UserClaimsResponse
 
 
 class TokenResponse(BaseModel):
     """Schema phản hồi khi đăng nhập thành công."""
     access_token: str
     token_type: str = "bearer"
-    user: UserResponse
+    user: UserClaimsResponse
 
 
-# Bí danh tương thích
+# Alias tương thích
 LoginResponse = TokenResponse
 
 
@@ -62,27 +67,25 @@ class ChangePasswordRequest(BaseModel):
     old_password: str = Field(
         ...,
         description="Mật khẩu hiện tại",
-        examples=["OldPass123"]
+        examples=["OldPass123"],
     )
     new_password: str = Field(
         ...,
         description="Mật khẩu mới (tối thiểu 8 ký tự, gồm cả chữ cái và chữ số)",
-        examples=["NewSecurePass88"]
+        examples=["NewSecurePass88"],
     )
 
     @field_validator("new_password")
     @classmethod
-    def kiem_tra_do_manh_mat_khau(cls, gia_tri_mat_khau: str) -> str:
-        if len(gia_tri_mat_khau) < 8:
+    def validate_password_strength(cls, value: str) -> str:
+        """Kiểm tra độ mạnh mật khẩu: tối thiểu 8 ký tự, có chữ cái và chữ số."""
+        if len(value) < 8:
             raise ValueError("Mật khẩu mới phải có độ dài tối thiểu 8 ký tự.")
-        
-        co_chu_cai = any(ky_tu.isalpha() for ky_tu in gia_tri_mat_khau)
-        co_chu_so = any(ky_tu.isdigit() for ky_tu in gia_tri_mat_khau)
-
-        if not co_chu_cai or not co_chu_so:
+        has_letter = any(c.isalpha() for c in value)
+        has_digit = any(c.isdigit() for c in value)
+        if not has_letter or not has_digit:
             raise ValueError("Mật khẩu mới phải chứa ít nhất một chữ cái và một chữ số.")
-
-        return gia_tri_mat_khau
+        return value
 
 
 class ForgotPasswordRequest(BaseModel):
@@ -90,7 +93,7 @@ class ForgotPasswordRequest(BaseModel):
     email: str = Field(
         ...,
         description="Địa chỉ email cần nhận liên kết đặt lại mật khẩu",
-        examples=["user@warehouse.local"]
+        examples=["user@warehouse.local"],
     )
 
     @field_validator("email")
@@ -108,20 +111,20 @@ class ResetPasswordRequest(BaseModel):
     token: str = Field(
         ...,
         description="Token đặt lại mật khẩu nhận được qua email",
-        examples=["abcdef123456..."]
+        examples=["abcdef123456..."],
     )
     new_password: str = Field(
         ...,
         description="Mật khẩu mới",
-        examples=["NewSecurePass88"]
+        examples=["NewSecurePass88"],
     )
 
     @field_validator("new_password")
     @classmethod
-    def kiem_tra_do_manh_mat_khau(cls, gia_tri_mat_khau: str) -> str:
-        if len(gia_tri_mat_khau) < 6:
+    def validate_password_min_length(cls, value: str) -> str:
+        if len(value) < 6:
             raise ValueError("Mật khẩu mới phải có độ dài tối thiểu 6 ký tự.")
-        return gia_tri_mat_khau
+        return value
 
 
 class MessageResponse(BaseModel):
@@ -129,6 +132,6 @@ class MessageResponse(BaseModel):
     message: str
 
 
-# Bí danh tương thích
+# Aliases tương thích
 ForgotPasswordResponse = MessageResponse
 ResetPasswordResponse = MessageResponse

@@ -1,4 +1,6 @@
+from datetime import datetime, timezone
 import math
+import re
 import secrets
 from typing import Any, Dict, List, Optional, Tuple
 from fastapi import HTTPException, status
@@ -18,32 +20,75 @@ WAREHOUSE_ROLES: List[str] = [
 ]
 
 
+def validate_username_format(username: str) -> None:
+    """Kiểm tra tính hợp lệ của tên đăng nhập (SCRUM-324)."""
+    cleaned = username.strip()
+    if len(cleaned) < 3 or len(cleaned) > 50:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Tên đăng nhập phải có độ dài từ 3 đến 50 ký tự.",
+        )
+    if not re.match(r"^[a-zA-Z0-9_.-]+$", cleaned):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Tên đăng nhập chỉ được chứa chữ cái, chữ số, dấu gạch dưới, gạch ngang hoặc dấu chấm.",
+        )
+
+
+def validate_email_format(email: str) -> None:
+    """Kiểm tra định dạng email hợp lệ (SCRUM-324)."""
+    cleaned = email.strip().lower()
+    if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", cleaned):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Định dạng email '{email}' không hợp lệ.",
+        )
+
+
+
+def validate_phone_format(phone: str) -> None:
+    """Kiểm tra định dạng số điện thoại (SCRUM-324)."""
+    cleaned = phone.strip().replace(" ", "").replace("-", "")
+    if not re.match(r"^(\+84|0)[0-9]{9,10}$", cleaned):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Định dạng số điện thoại '{phone}' không hợp lệ (yêu cầu 10 chữ số bắt đầu bằng 0).",
+        )
+
+
 def create_user(user_data: UserCreate, db: Session) -> User:
-    """Tạo người dùng mới (SCRUM-205 & SCRUM-206):
+    """Tạo người dùng mới (SCRUM-205, SCRUM-206 & SCRUM-324):
     
-    - Kiểm tra trùng username và email (báo lỗi cụ thể).
+    - Kiểm tra tính hợp lệ của dữ liệu trước khi lưu (email, phone, username).
+    - Kiểm tra trùng username, email và số điện thoại (SCRUM-325).
     - Cấp mật khẩu tạm thời nếu không truyền mật khẩu.
     - Kiểm tra ràng buộc vai trò kho phải gắn với ít nhất một kho.
     """
     username = user_data.username.strip()
     email = user_data.email.strip().lower()
+    phone = user_data.phone_number.strip() if user_data.phone_number else None
 
-    # 1. Kiểm tra trùng tên đăng nhập
+    # 1. Kiểm tra định dạng dữ liệu hợp lệ (SCRUM-324)
+    validate_username_format(username)
+    validate_email_format(email)
+    if phone:
+        validate_phone_format(phone)
+
+    # 2. Kiểm tra trùng tên đăng nhập
     if db.query(User).filter(User.username == username).first():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Tên đăng nhập '{username}' đã tồn tại trong hệ thống. Vui lòng chọn tên khác.",
         )
 
-    # 2. Kiểm tra trùng địa chỉ email
+    # 3. Kiểm tra trùng địa chỉ email
     if db.query(User).filter(User.email == email).first():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Địa chỉ email '{email}' đã được đăng ký cho một tài khoản khác.",
         )
 
-    # 3. Kiểm tra trùng số điện thoại (SCRUM-325)
-    phone = user_data.phone_number.strip() if user_data.phone_number else None
+    # 4. Kiểm tra trùng số điện thoại (SCRUM-325)
     if phone:
         if db.query(User).filter(User.phone_number == phone).first():
             raise HTTPException(
@@ -51,7 +96,8 @@ def create_user(user_data: UserCreate, db: Session) -> User:
                 detail=f"Số điện thoại '{phone}' đã được đăng ký cho một tài khoản khác.",
             )
 
-    # 4. Ràng buộc vai trò kho (SCRUM-206)
+    # 5. Ràng buộc vai trò kho (SCRUM-206)
+
 
     primary_role = user_data.role or UserRole.CUSTOMER.value
     role_names = user_data.role_names or []
@@ -174,9 +220,10 @@ def update_user(
                 detail="Không thể tự thu hồi vai trò quản trị viên của chính mình.",
             )
 
-    # 2. Kiểm tra trùng tên đăng nhập khi cập nhật (SCRUM-325)
+    # 2. Kiểm tra format và trùng tên đăng nhập khi cập nhật (SCRUM-324 & SCRUM-325)
     if update_data.username is not None:
         new_username = update_data.username.strip()
+        validate_username_format(new_username)
         if new_username and new_username != target_user.username:
             if db.query(User).filter(User.username == new_username, User.id != target_user.id).first():
                 raise HTTPException(
@@ -185,9 +232,10 @@ def update_user(
                 )
             target_user.username = new_username
 
-    # 3. Kiểm tra trùng email khi cập nhật (SCRUM-325)
+    # 3. Kiểm tra format và trùng email khi cập nhật (SCRUM-324 & SCRUM-325)
     if update_data.email is not None:
         new_email = update_data.email.strip().lower()
+        validate_email_format(new_email)
         if new_email and new_email != target_user.email:
             if db.query(User).filter(User.email == new_email, User.id != target_user.id).first():
                 raise HTTPException(
@@ -196,15 +244,17 @@ def update_user(
                 )
             target_user.email = new_email
 
-    # 4. Kiểm tra trùng số điện thoại khi cập nhật (SCRUM-325)
+    # 4. Kiểm tra format và trùng số điện thoại khi cập nhật (SCRUM-324 & SCRUM-325)
     if update_data.phone_number is not None:
         new_phone = update_data.phone_number.strip() if update_data.phone_number else None
-        if new_phone and new_phone != target_user.phone_number:
-            if db.query(User).filter(User.phone_number == new_phone, User.id != target_user.id).first():
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Số điện thoại '{new_phone}' đã được đăng ký cho một tài khoản khác.",
-                )
+        if new_phone:
+            validate_phone_format(new_phone)
+            if new_phone != target_user.phone_number:
+                if db.query(User).filter(User.phone_number == new_phone, User.id != target_user.id).first():
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Số điện thoại '{new_phone}' đã được đăng ký cho một tài khoản khác.",
+                    )
         target_user.phone_number = new_phone
 
     # 5. Cập nhật thông tin cơ bản
@@ -212,8 +262,52 @@ def update_user(
         target_user.full_name = update_data.full_name
     if update_data.assigned_warehouse is not None:
         target_user.assigned_warehouse = update_data.assigned_warehouse
-    if update_data.is_active is not None:
+
+    # 6. Cập nhật trạng thái tài khoản: hoạt động, khóa hoặc ngừng sử dụng (SCRUM-324)
+    if update_data.status is not None:
+        normalized_status = update_data.status.strip().lower()
+        if normalized_status in ["active", "hoạt động"]:
+            target_user.is_active = True
+            target_user.lock_reason = None
+            target_user.failed_login_attempts = 0
+            target_user.locked_until = None
+        elif normalized_status in ["locked", "khóa"]:
+            if target_user.id == current_user.id:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Không thể tự khóa tài khoản của chính mình.",
+                )
+            target_user.is_active = False
+            target_user.locked_until = datetime(2099, 1, 1, tzinfo=timezone.utc)
+            target_user.lock_reason = update_data.lock_reason.strip() if update_data.lock_reason else "Khóa bởi quản trị viên"
+            target_user.token_version += 1
+        elif normalized_status in ["inactive", "ngừng sử dụng", "deactivated"]:
+            if target_user.id == current_user.id:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Không thể tự vô hiệu hóa hoặc ngừng sử dụng tài khoản của chính mình.",
+                )
+            target_user.is_active = False
+            target_user.locked_until = None
+            target_user.lock_reason = update_data.lock_reason.strip() if update_data.lock_reason else "Ngừng sử dụng"
+            target_user.token_version += 1
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Trạng thái tài khoản '{update_data.status}' không hợp lệ. Chỉ chấp nhận: active (hoạt động), locked (khóa), inactive (ngừng sử dụng).",
+            )
+    elif update_data.is_active is not None:
+        if not update_data.is_active and target_user.id == current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Không thể tự vô hiệu hóa tài khoản của chính mình.",
+            )
         target_user.is_active = update_data.is_active
+        if not update_data.is_active:
+            target_user.token_version += 1
+            if update_data.lock_reason:
+                target_user.lock_reason = update_data.lock_reason
+
 
     # 6. Cập nhật vai trò và kiểm tra ràng buộc vai trò kho
 

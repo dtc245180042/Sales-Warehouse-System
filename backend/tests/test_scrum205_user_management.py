@@ -476,3 +476,194 @@ def test_update_user_when_keeping_own_phone_and_email_succeeds(client, admin_tok
     assert response.status_code == 200
     assert response.json()["full_name"] == "Nhân Viên Kinh Doanh Cập Nhật"
 
+
+# ---------------------------------------------------------------------------
+# Test Cases SCRUM-324: Nghiệp vụ sửa thông tin và cập nhật trạng thái tài khoản
+# ---------------------------------------------------------------------------
+
+def test_update_user_status_to_locked_success(client, admin_token, db_session):
+    """Admin cập nhật trạng thái tài khoản sang 'locked' (khóa) kèm lý do -> Thành công 200 OK (SCRUM-324)."""
+    # Arrange
+    target_user = db_session.query(User).filter(User.username == "page_user_01").first()
+    headers = {"Authorization": f"Bearer {admin_token}"}
+    payload = {
+        "status": "locked",
+        "lock_reason": "Vi phạm quy chế công ty",
+    }
+
+    # Act
+    response = client.put(f"/api/v1/users/{target_user.id}", headers=headers, json=payload)
+
+    # Assert
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "locked"
+    assert data["is_active"] is False
+    assert data["lock_reason"] == "Vi phạm quy chế công ty"
+
+
+def test_update_user_status_to_inactive_success(client, admin_token, db_session):
+    """Admin cập nhật trạng thái tài khoản sang 'inactive' (ngừng sử dụng) -> Thành công 200 OK (SCRUM-324)."""
+    # Arrange
+    target_user = db_session.query(User).filter(User.username == "page_user_02").first()
+    headers = {"Authorization": f"Bearer {admin_token}"}
+    payload = {
+        "status": "inactive",
+    }
+
+    # Act
+    response = client.put(f"/api/v1/users/{target_user.id}", headers=headers, json=payload)
+
+    # Assert
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "inactive"
+    assert data["is_active"] is False
+
+
+def test_update_user_status_to_active_success(client, admin_token, db_session):
+    """Admin mở khóa/kích hoạt lại tài khoản về 'active' -> Thành công 200 OK (SCRUM-324)."""
+    # Arrange: chuẩn bị tài khoản đang bị khóa
+    target_user = db_session.query(User).filter(User.username == "page_user_03").first()
+    target_user.is_active = False
+    target_user.lock_reason = "Đã khóa trước đó"
+    db_session.commit()
+
+    headers = {"Authorization": f"Bearer {admin_token}"}
+    payload = {
+        "status": "active",
+    }
+
+    # Act
+    response = client.put(f"/api/v1/users/{target_user.id}", headers=headers, json=payload)
+
+    # Assert
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "active"
+    assert data["is_active"] is True
+    assert data["lock_reason"] is None
+
+
+def test_update_user_status_when_admin_self_locks_returns_400(client, admin_token, db_session):
+    """Admin tự khóa tài khoản của chính mình -> Bị từ chối 400 (SCRUM-324)."""
+    # Arrange
+    admin_user = db_session.query(User).filter(User.username == "scrum205_admin").first()
+    headers = {"Authorization": f"Bearer {admin_token}"}
+    payload = {
+        "status": "locked",
+    }
+
+    # Act
+    response = client.put(f"/api/v1/users/{admin_user.id}", headers=headers, json=payload)
+
+    # Assert
+    assert response.status_code == 400
+    assert "Không thể tự khóa tài khoản của chính mình" in response.json()["detail"]
+
+
+def test_update_user_status_when_admin_self_deactivates_returns_400(client, admin_token, db_session):
+    """Admin tự vô hiệu hóa tài khoản của chính mình -> Bị từ chối 400 (SCRUM-324)."""
+    # Arrange
+    admin_user = db_session.query(User).filter(User.username == "scrum205_admin").first()
+    headers = {"Authorization": f"Bearer {admin_token}"}
+    payload = {
+        "status": "inactive",
+    }
+
+    # Act
+    response = client.put(f"/api/v1/users/{admin_user.id}", headers=headers, json=payload)
+
+    # Assert
+    assert response.status_code == 400
+    assert "Không thể tự vô hiệu hóa hoặc ngừng sử dụng" in response.json()["detail"]
+
+
+def test_update_user_status_when_invalid_status_returns_400(client, admin_token, db_session):
+    """Cập nhật trạng thái không hợp lệ -> Báo lỗi 400 (SCRUM-324)."""
+    # Arrange
+    target_user = db_session.query(User).filter(User.username == "page_user_04").first()
+    headers = {"Authorization": f"Bearer {admin_token}"}
+    payload = {
+        "status": "invalid_status_xyz",
+    }
+
+    # Act
+    response = client.put(f"/api/v1/users/{target_user.id}", headers=headers, json=payload)
+
+    # Assert
+    assert response.status_code == 400
+    assert "không hợp lệ" in response.json()["detail"]
+
+
+def test_create_user_when_invalid_email_format_returns_400(client, admin_token):
+    """Tạo người dùng với email sai định dạng -> Báo lỗi 400 hợp lệ (SCRUM-324)."""
+    # Arrange
+    headers = {"Authorization": f"Bearer {admin_token}"}
+    payload = {
+        "username": "user_invalid_mail",
+        "email": "invalid-email-address",
+        "role": UserRole.CUSTOMER.value,
+    }
+
+    # Act
+    response = client.post("/api/v1/users", headers=headers, json=payload)
+
+    # Assert
+    assert response.status_code == 400
+    assert "Định dạng email" in response.json()["detail"]
+
+
+def test_create_user_when_invalid_phone_format_returns_400(client, admin_token):
+    """Tạo người dùng với số điện thoại sai định dạng -> Báo lỗi 400 (SCRUM-324)."""
+    # Arrange
+    headers = {"Authorization": f"Bearer {admin_token}"}
+    payload = {
+        "username": "user_invalid_phone",
+        "email": "valid_email@test.local",
+        "phone_number": "123456",  # Không đủ 10 số
+        "role": UserRole.CUSTOMER.value,
+    }
+
+    # Act
+    response = client.post("/api/v1/users", headers=headers, json=payload)
+
+    # Assert
+    assert response.status_code == 400
+    assert "Định dạng số điện thoại" in response.json()["detail"]
+
+
+def test_update_user_when_invalid_email_format_returns_400(client, admin_token, db_session):
+    """Cập nhật người dùng với email sai định dạng -> Báo lỗi 400 (SCRUM-324)."""
+    # Arrange
+    target_user = db_session.query(User).filter(User.username == "page_user_05").first()
+    headers = {"Authorization": f"Bearer {admin_token}"}
+    payload = {
+        "email": "not-a-valid-email",
+    }
+
+    # Act
+    response = client.put(f"/api/v1/users/{target_user.id}", headers=headers, json=payload)
+
+    # Assert
+    assert response.status_code == 400
+    assert "Định dạng email" in response.json()["detail"]
+
+
+def test_update_user_when_invalid_phone_format_returns_400(client, admin_token, db_session):
+    """Cập nhật người dùng với SĐT sai định dạng -> Báo lỗi 400 (SCRUM-324)."""
+    # Arrange
+    target_user = db_session.query(User).filter(User.username == "page_user_05").first()
+    headers = {"Authorization": f"Bearer {admin_token}"}
+    payload = {
+        "phone_number": "abcdefg",
+    }
+
+    # Act
+    response = client.put(f"/api/v1/users/{target_user.id}", headers=headers, json=payload)
+
+    # Assert
+    assert response.status_code == 400
+    assert "Định dạng số điện thoại" in response.json()["detail"]
+
+

@@ -155,6 +155,20 @@ class User(Base):
 
     is_locked = da_bi_khoa
 
+    @property
+    def status(self) -> str:
+        """Trạng thái tài khoản: active, locked hoặc inactive (SCRUM-324)."""
+        if not self.is_active:
+            if self.locked_until is not None:
+                return "locked"
+            if self.lock_reason and any(k in self.lock_reason.lower() for k in ["khóa", "lock"]):
+                return "locked"
+            return "inactive"
+        if self.da_bi_khoa():
+            return "locked"
+        return "active"
+
+
     def has_permission(self, permission_code: str) -> bool:
         """Kiểm tra người dùng có quyền cụ thể hay không."""
         if self.role == "Admin" or self.role == "ADMIN":

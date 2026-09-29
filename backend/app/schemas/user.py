@@ -10,6 +10,7 @@ class UserBase(BaseModel):
     full_name: Optional[str] = None
     phone_number: Optional[str] = None
     is_active: Optional[bool] = True
+    status: Optional[str] = Field(None, description="Trạng thái tài khoản: active, locked, inactive (SCRUM-324)")
 
 
 class UserCreate(UserBase):
@@ -28,6 +29,9 @@ class UserUpdate(BaseModel):
     role_names: Optional[List[str]] = None
     assigned_warehouse: Optional[str] = None
     is_active: Optional[bool] = None
+    status: Optional[str] = Field(None, description="Trạng thái: active (hoạt động), locked (khóa), inactive (ngừng sử dụng)")
+    lock_reason: Optional[str] = Field(None, description="Lý do khóa hoặc ngừng sử dụng (SCRUM-324)")
+
 
 
 

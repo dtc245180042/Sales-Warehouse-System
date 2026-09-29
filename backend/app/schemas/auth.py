@@ -1,4 +1,12 @@
-from pydantic import BaseModel, Field, field_validator, ConfigDict
+from typing import Optional
+import email_validator
+from pydantic import BaseModel, Field, field_validator, ConfigDict, EmailStr
+
+# Cho phép các domain môi trường nội bộ/kiểm thử như .local, .localhost
+if hasattr(email_validator, "SPECIAL_USE_DOMAIN_NAMES"):
+    email_validator.SPECIAL_USE_DOMAIN_NAMES = [
+        d for d in email_validator.SPECIAL_USE_DOMAIN_NAMES if d not in ("local", "localhost", "internal")
+    ]
 
 
 class LoginRequest(BaseModel):
@@ -74,7 +82,7 @@ class ChangePasswordRequest(BaseModel):
 
 class ForgotPasswordRequest(BaseModel):
     """Schema cho request quên mật khẩu qua email (SCRUM-200)."""
-    email: str = Field(
+    email: EmailStr = Field(
         ...,
         description="Địa chỉ email cần nhận liên kết đặt lại mật khẩu",
         examples=["user@warehouse.local"]

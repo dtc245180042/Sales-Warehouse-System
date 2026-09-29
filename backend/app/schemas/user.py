@@ -1,12 +1,19 @@
 from datetime import datetime
 from typing import List, Optional
-from pydantic import BaseModel, ConfigDict, Field
+import email_validator
+from pydantic import BaseModel, ConfigDict, Field, EmailStr
 from app.schemas.role import RoleResponse
+
+# Cho phép các domain môi trường nội bộ/kiểm thử như .local, .localhost
+if hasattr(email_validator, "SPECIAL_USE_DOMAIN_NAMES"):
+    email_validator.SPECIAL_USE_DOMAIN_NAMES = [
+        d for d in email_validator.SPECIAL_USE_DOMAIN_NAMES if d not in ("local", "localhost", "internal")
+    ]
 
 
 class UserBase(BaseModel):
     username: str
-    email: str = Field(..., description="Địa chỉ email người dùng")
+    email: EmailStr = Field(..., description="Địa chỉ email người dùng")
     full_name: Optional[str] = None
     phone_number: Optional[str] = None
     is_active: Optional[bool] = True

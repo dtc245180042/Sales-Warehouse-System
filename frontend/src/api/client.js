@@ -1,5 +1,5 @@
-// API Client kết nối trực tiếp với FastAPI backend
-const API_BASE_URL = 'http://localhost:8000/api/v1';
+// API Client kết nối trực tiếp với FastAPI backend (hỗ trợ cả localhost và mạng LAN)
+const API_BASE_URL = import.meta.env.VITE_API_URL || `http://${window.location.hostname}:8000/api/v1`;
 
 /**
  * Hàm gọi API tổng quát có tự động gán Bearer Token và xử lý lỗi chuẩn RESTful

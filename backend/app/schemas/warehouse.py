@@ -1,17 +1,23 @@
 from pydantic import BaseModel
 from typing import List, Optional
 
-# --- Dữ liệu gửi lên (Request Body) ---
+# --- Model đơn vị tính ---
 class UnitConversionCreate(BaseModel):
     unit_name: str
     conversion_rate: float
 
+# --- Request khai báo mới ---
 class SKUUnitCreateRequest(BaseModel):
     sku: str
     base_unit: str
     conversions: List[UnitConversionCreate]
 
-# --- Dữ liệu trả về (Response Body) ---
+# --- Request cập nhật ---
+class SKUUnitUpdateRequest(BaseModel):
+    base_unit: Optional[str] = None
+    conversions: List[UnitConversionCreate]
+
+# --- Response trả về dữ liệu ---
 class UnitConversionResponse(BaseModel):
     unit_name: str
     conversion_rate: float

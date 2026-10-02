@@ -1,12 +1,14 @@
 from fastapi import FastAPI
-from tests.tvp.router import router as tvp_router
+from app.api.warehouse_router import router as warehouse_router
 
-# Phải có dòng khai báo biến 'app' này
-app = FastAPI(title="Sales Warehouse System - TVP Test")
+app = FastAPI(
+    title="Sales Warehouse System - TVP Test",
+    description="API Quy đổi đơn vị tính kho & ghi sổ giao dịch (SCRUM-215)"
+)
 
-# Nhúng router của thư mục tests/tvp vào app chính
-app.include_router(tvp_router, prefix="/tvp", tags=["tvp"])
+# Đăng ký Router
+app.include_router(warehouse_router, prefix="/api/v1", tags=["Warehouse"])
 
 @app.get("/")
 def read_root():
-    return {"message": "Backend is running", "tvp_docs": "/docs"}
+    return {"status": "online", "docs": "/docs"}

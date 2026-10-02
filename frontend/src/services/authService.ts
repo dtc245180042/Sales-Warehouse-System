@@ -24,6 +24,8 @@ export function mapBackendUserToFrontend(apiUser: any): User {
   else role = (rawRole as UserRole) || 'Staff';
 
   const displayName = apiUser.full_name || apiUser.username || apiUser.email;
+  const isSalesRole = ['SalesManager', 'SalesStaff'].includes(role);
+  const location = apiUser.assigned_warehouse || '';
 
   return {
     id: String(apiUser.id),
@@ -34,12 +36,13 @@ export function mapBackendUserToFrontend(apiUser: any): User {
     status: apiUser.is_active ? 'active' : 'locked',
     avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=6366f1&color=fff`,
     phone: apiUser.phone_number || '',
-    warehouse: apiUser.assigned_warehouse || '',
+    warehouse: isSalesRole ? '' : location,
+    territory: isSalesRole ? location : '',
     lockReason: apiUser.lock_reason || undefined,
     lastLogin: apiUser.created_at || new Date().toISOString(),
     createdAt: apiUser.created_at || new Date().toISOString(),
   };
-}
+};
 
 export const authService = {
   getCurrentUser: (): User | null => {

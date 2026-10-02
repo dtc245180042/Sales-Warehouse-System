@@ -55,7 +55,7 @@ def send_password_reset_email(
 
     cfg = _get_smtp_config()
     reset_url = f"{cfg['frontend_url']}/#/reset-password?token={reset_token}"
-    subject = "[KhoVận Pro] Hướng dẫn đặt lại mật khẩu của bạn (Hiệu lực 30 phút)"
+    subject = f"[KhoVận Pro] Mã xác minh đặt lại mật khẩu (Hiệu lực {expire_minutes} phút)"
 
     # Lưu vào hộp thư giả lập
     email_record = {
@@ -68,7 +68,7 @@ def send_password_reset_email(
     }
     MOCK_OUTBOX.append(email_record)
 
-    # HTML Email Template
+    # HTML Email Template tập trung nổi bật vào Mã Xác Minh
     html_content = f"""
     <!DOCTYPE html>
     <html lang="vi">
@@ -80,9 +80,12 @@ def send_password_reset_email(
             .header {{ background: #1e293b; color: #ffffff; padding: 24px; text-align: center; border-bottom: 3px solid #2563eb; }}
             .header h1 {{ margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.5px; }}
             .content {{ padding: 32px 28px; color: #334155; line-height: 1.6; font-size: 14px; }}
-            .btn-container {{ text-align: center; margin: 28px 0; }}
-            .btn {{ background-color: #2563eb; color: #ffffff !important; padding: 12px 28px; text-decoration: none; border-radius: 6px; font-weight: 600; display: inline-block; font-size: 14px; }}
-            .link-box {{ background: #f8fafc; border: 1px dashed #cbd5e1; padding: 12px; word-break: break-all; font-size: 12px; color: #64748b; border-radius: 6px; }}
+            .code-container {{ text-align: center; margin: 24px 0; background: #f8fafc; border: 2px dashed #2563eb; border-radius: 8px; padding: 20px; }}
+            .code-label {{ font-size: 13px; color: #475569; font-weight: 600; text-transform: uppercase; margin-bottom: 10px; letter-spacing: 0.5px; }}
+            .code-box {{ font-family: 'Consolas', 'Courier New', monospace; font-size: 18px; font-weight: 700; color: #1e293b; background: #ffffff; padding: 12px 16px; border: 1px solid #cbd5e1; border-radius: 6px; word-break: break-all; display: inline-block; user-select: all; }}
+            .code-hint {{ font-size: 12px; color: #64748b; margin-top: 10px; }}
+            .btn-container {{ text-align: center; margin: 20px 0; }}
+            .btn {{ background-color: #2563eb; color: #ffffff !important; padding: 10px 24px; text-decoration: none; border-radius: 6px; font-weight: 600; display: inline-block; font-size: 13px; }}
             .badge-warn {{ background: #fef2f2; color: #dc2626; border: 1px solid #fee2e2; padding: 10px 14px; border-radius: 6px; font-size: 13px; margin-top: 20px; }}
             .footer {{ background: #f8fafc; padding: 18px 24px; text-align: center; font-size: 12px; color: #94a3b8; border-top: 1px solid #f1f5f9; }}
         </style>
@@ -93,23 +96,28 @@ def send_password_reset_email(
                 <h1>Hệ Thống Kho Vận & Quản Lý Bán Hàng (KhoVận Pro)</h1>
             </div>
             <div class="content">
-                <p>Kính gửi quý người dùng,</p>
-                <p>Hệ thống nhận được yêu cầu đặt lại mật khẩu cho tài khoản liên kết với địa chỉ email: <strong>{to_email}</strong>.</p>
-                <p>Vui lòng nhấn vào nút xác nhận bên dưới để khởi tạo mật khẩu mới:</p>
-                <div class="btn-container">
-                    <a href="{reset_url}" class="btn" target="_blank">Đặt Lại Mật Khẩu Ngay</a>
+                <p>Xin chào,</p>
+                <p>Bạn vừa yêu cầu cấp lại mật khẩu cho tài khoản liên kết với email: <strong>{to_email}</strong>.</p>
+                
+                <div class="code-container">
+                    <div class="code-label">🔑 Mã Xác Minh Đặt Lại Mật Khẩu</div>
+                    <div class="code-box">{reset_token}</div>
+                    <div class="code-hint">👉 Sao chép mã trên và dán vào ô <strong>"Mã Token xác nhận"</strong> trên màn hình Đặt lại mật khẩu.</div>
                 </div>
-                <p>Hoặc bạn có thể sao chép liên kết này vào trình duyệt:</p>
-                <div class="link-box">{reset_url}</div>
+
+                <div class="btn-container">
+                    <a href="{reset_url}" class="btn" target="_blank">Hoặc nhấn vào đây để mở trang đặt lại mật khẩu</a>
+                </div>
+
                 <div class="badge-warn">
-                    ⏱ <strong>Thời hạn liên kết:</strong> Liên kết chỉ có hiệu lực đúng <strong>{expire_minutes} phút</strong> và chỉ được sử dụng một lần duy nhất.
+                    ⏱ <strong>Thời hạn sử dụng:</strong> Mã xác minh chỉ có hiệu lực đúng <strong>{expire_minutes} phút</strong> và chỉ được sử dụng một lần duy nhất.
                 </div>
                 <p style="margin-top: 16px; font-size: 12px; color: #64748b;">
-                    Nếu bạn không yêu cầu hành động này, vui lòng bỏ qua email. Mật khẩu hiện tại của bạn vẫn được bảo mật an toàn.
+                    Nếu bạn không thực hiện yêu cầu này, vui lòng bỏ qua thư này. Tài khoản của bạn vẫn được bảo vệ tuyệt đối an toàn.
                 </p>
             </div>
             <div class="footer">
-                <p>&copy; KhoVận Pro. Email tự động từ hệ thống quản lý, vui lòng không phản hồi.</p>
+                <p>&copy; KhoVận Pro. Email gửi tự động từ hệ thống quản lý, vui lòng không trả lời thư này.</p>
             </div>
         </div>
     </body>

@@ -203,27 +203,36 @@ def gia_han_phien(
 @router.post(
     "/forgot-password",
     response_model=MessageResponse,
-    summary="Yêu cầu đặt lại mật khẩu qua email có hiệu lực 30 phút (SCRUM-200)"
+    summary="Yêu cầu đặt lại mật khẩu qua email (SCRUM-200)"
 )
 def quen_mat_khau(
     du_lieu_yeu_cau: ForgotPasswordRequest,
     phien_db: Session = Depends(lay_phien_db)
 ):
     """Gửi liên kết đặt lại mật khẩu:
-    - Token có hiệu lực đúng 30 phút.
-    - Dù email không tồn tại vẫn trả về cùng thông điệp chung (tránh rò rỉ dữ liệu).
+    - Bắt buộc kiểm tra tài khoản tồn tại trong hệ thống.
+    - Nếu không tồn tại: Báo lỗi 404 để người dùng biết nhập sai tài khoản.
+    - Nếu tồn tại: Cấp mã OTP 5 chữ số có hạn 5 phút và kích hoạt gửi email.
     """
-    email_nhan = du_lieu_yeu_cau.email.strip().lower()
-    nguoi_dung = phien_db.query(User).filter(User.email == email_nhan).first()
+    dinh_danh = du_lieu_yeu_cau.email.strip().lower()
+    nguoi_dung = phien_db.query(User).filter(
+        (User.email == dinh_danh) | (User.username == dinh_danh)
+    ).first()
 
-    if nguoi_dung:
-        token_dat_lai = secrets.token_urlsafe(32)
-        nguoi_dung.reset_password_token = token_dat_lai
-        nguoi_dung.reset_password_expires_at = datetime.now(timezone.utc) + timedelta(minutes=30)
-        phien_db.commit()
+    if not nguoi_dung:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Tài khoản hoặc email '{dinh_danh}' không tồn tại trong hệ thống. Vui lòng kiểm tra lại."
+        )
+
+    # Sinh mã OTP 5 chữ số ngẫu nhiên
+    otp_5_so = f"{secrets.randbelow(90000) + 10000}"
+    nguoi_dung.reset_password_token = otp_5_so
+    nguoi_dung.reset_password_expires_at = datetime.now(timezone.utc) + timedelta(minutes=5)
+    phien_db.commit()
 
     return MessageResponse(
-        message="Nếu email tồn tại trong hệ thống, hướng dẫn đặt lại mật khẩu đã được gửi đến email của bạn."
+        message=f"Nếu email tồn tại trong hệ thống, hướng dẫn đặt lại mật khẩu đã được gửi đến email '{nguoi_dung.email}' của bạn."
     )
 
 

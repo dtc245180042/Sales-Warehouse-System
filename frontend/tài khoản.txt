@@ -1,0 +1,29 @@
+DANH SÁCH 7 VAI TRÒ NGHIỆP VỤ SPRINT 1 (HỆ THỐNG OMS PRO):
+
+1. Quản trị hệ thống (System Admin):
+Email: admin@khovanpro.vn
+Mật khẩu: admin@1234
+
+2. Quản lý kinh doanh (Sales Manager) - Xem giá vốn & biên lợi nhuận:
+Email: salesmanager@khovanpro.vn
+Mật khẩu: sales@1234
+
+3. Nhân viên kinh doanh (Sales Staff / Rep) - Gắn địa bàn, chăm sóc đại lý:
+Email: salesstaff@khovanpro.vn
+Mật khẩu: staff@1234
+
+4. Quản lý kho (Warehouse Manager) - Gắn kho cụ thể:
+Email: whmanager@khovanpro.vn
+Mật khẩu: wh@1234
+
+5. Thủ kho (Warehouse Staff) - Gắn kho cụ thể, ẩn giá vốn:
+Email: whstaff@khovanpro.vn
+Mật khẩu: staff@1234
+
+6. Kế toán (Accountant) - Quản lý công nợ & hóa đơn:
+Email: accountant@khovanpro.vn
+Mật khẩu: acc@1234
+
+7. Ban giám đốc (Director / Executive) - Toàn quyền báo cáo:
+Email: director@khovanpro.vn
+Mật khẩu: director@1234

@@ -16,6 +16,8 @@ load_dotenv()
 logger = logging.getLogger("email_service")
 
 def _get_smtp_config():
+    from dotenv import load_dotenv
+    load_dotenv(override=True)
     return {
         "host": os.getenv("SMTP_HOST", ""),
         "port": int(os.getenv("SMTP_PORT", "587")),
@@ -52,7 +54,7 @@ def send_password_reset_email(
         expires_at = datetime.now(timezone.utc) + timedelta(minutes=expire_minutes)
 
     cfg = _get_smtp_config()
-    reset_url = f"{cfg['frontend_url']}/#/reset-password?token={reset_token}"
+    reset_url = f"{cfg['frontend_url']}/reset-password?token={reset_token}"
     subject = f"[KhoVận Pro] Mã xác minh đặt lại mật khẩu của bạn ({reset_token}) - Hiệu lực {expire_minutes} phút"
 
     # Lưu vào hộp thư giả lập
@@ -123,14 +125,63 @@ def send_password_reset_email(
     </html>
     """
 
-    # In thông báo ra console terminal
-    print(f"\n" + "=" * 70)
-    print(f" [EMAIL SERVICE SIMULATOR - SCRUM-200 / SCRUM-295]")
-    print(f" Gửi đến:      {to_email}")
-    print(f" Tiêu đề:      {subject}")
-    print(f" Mã OTP:       {reset_token} (5 chữ số)")
-    print(f" Thời hạn:     {expire_minutes} phút (Hết hạn lúc: {expires_at.strftime('%Y-%m-%d %H:%M:%S UTC')})")
-    print(f"=" * 70 + "\n")
+    # In thông báo ra console terminal an toàn với Windows cp1252
+    try:
+        print(f"\n======================================================================")
+        print(f" [EMAIL SERVICE - SCRUM-200 / SCRUM-295]")
+        print(f" To:           {to_email}")
+        print(f" Subject:      {subject}")
+        print(f" OTP Code:     {reset_token} (5 digits)")
+        print(f" Expire:       {expire_minutes} minutes")
+        print(f"======================================================================\n")
+    except Exception:
+        pass
+
+    # 1. Hỗ trợ gửi trực tiếp qua Resend REST API nếu dùng mã re_...
+    resend_api_key = os.getenv("RESEND_API_KEY") or (cfg["password"] if cfg["password"].startswith("re_") else None)
+    if resend_api_key:
+        try:
+            import json
+            import urllib.request
+            import urllib.error
+
+            target_recipient = to_email
+            fallback_recipient = os.getenv("RESEND_TEST_EMAIL", "dtc245180006@ictu.edu.vn")
+
+            def _send_to(recipient: str, mail_subject: str):
+                request_data = {
+                    "from": f"{cfg['from_name']} <{cfg['from_email']}>",
+                    "to": [recipient],
+                    "subject": mail_subject,
+                    "html": html_content,
+                }
+                req = urllib.request.Request(
+                    "https://api.resend.com/emails",
+                    data=json.dumps(request_data).encode("utf-8"),
+                    headers={
+                        "Authorization": f"Bearer {resend_api_key}",
+                        "Content-Type": "application/json",
+                        "User-Agent": "resend-python/2.0.0",
+                    },
+                )
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    return resp.status in (200, 201)
+
+            try:
+                if _send_to(target_recipient, subject):
+                    logger.info(f"Đã gửi email qua Resend API thành công đến {target_recipient}")
+                    return True
+            except urllib.error.HTTPError as http_err:
+                # Nếu Resend báo 403 (chỉ cho phép gửi đến email đã xác thực dtc245180006@ictu.edu.vn ở bản miễn phí)
+                if http_err.code == 403 and target_recipient != fallback_recipient:
+                    fwd_subject = f"[Chuyển tiếp cho {target_recipient}] {subject}"
+                    logger.warning(f"Resend Sandbox chỉ cho phép gửi về {fallback_recipient}. Đang chuyển tiếp email cho {target_recipient}...")
+                    if _send_to(fallback_recipient, fwd_subject):
+                        logger.info(f"Đã chuyển tiếp email qua Resend về {fallback_recipient} thành công!")
+                        return True
+                raise http_err
+        except Exception as err:
+            logger.error(f"Lỗi khi gửi qua Resend API: {err}")
 
     if not cfg["host"]:
         return True

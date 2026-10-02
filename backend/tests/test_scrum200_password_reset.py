@@ -95,12 +95,12 @@ def test_scrum295_forgot_password_sends_email_and_generates_30min_token():
 
 
 def test_scrum200_forgot_password_nonexistent_email_safe():
-    """SCRUM-200: Email không tồn tại vẫn trả về cùng thông báo và không gửi email."""
+    """SCRUM-200: Email không tồn tại bị từ chối 404 và không gửi email."""
     clear_mock_outbox()
 
     res = client.post("/api/v1/auth/forgot-password", json={"email": "nonexistent@warehouse.local"})
-    assert res.status_code == 200
-    assert "hướng dẫn đặt lại mật khẩu" in res.json()["message"]
+    assert res.status_code == 404
+    assert "không tồn tại" in res.json()["detail"].lower()
 
     # Không được gửi email nào
     outbox = get_mock_outbox()

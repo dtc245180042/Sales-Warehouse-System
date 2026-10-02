@@ -35,15 +35,15 @@ def main():
     print(f" Người nhận:   {to_email}")
     print("=" * 65)
 
-    test_token = "demo_real_token_1234567890abcdef"
-    expires_at = datetime.now(timezone.utc) + timedelta(minutes=30)
+    test_token = "84920"
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=5)
 
     print("\n[*] Đang tiến hành gửi email thử nghiệm...")
     success = send_password_reset_email(
         to_email=to_email,
         reset_token=test_token,
         expires_at=expires_at,
-        expire_minutes=30
+        expire_minutes=5
     )
 
     if success:

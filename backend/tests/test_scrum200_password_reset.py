@@ -76,7 +76,7 @@ def test_scrum295_forgot_password_sends_email_and_generates_30min_token():
     assert "reset-password?token=" in sent_email["reset_link"]
 
     token = sent_email["token"]
-    assert len(token) > 20
+    assert len(token) == 5 and token.isdigit()
 
     # 2. Kiểm tra dữ liệu được lưu đúng trong DB
     db = TestingSessionLocal()
@@ -84,13 +84,13 @@ def test_scrum295_forgot_password_sends_email_and_generates_30min_token():
     assert user.reset_password_token == token
     assert user.reset_password_expires_at is not None
 
-    # Thời hạn hiệu lực xấp xỉ 30 phút
+    # Thời hạn hiệu lực xấp xỉ 5 phút
     now_utc = datetime.now(timezone.utc)
     expiry = user.reset_password_expires_at
     if expiry.tzinfo is None:
         expiry = expiry.replace(tzinfo=timezone.utc)
     chenh_lech_phut = (expiry - now_utc).total_seconds() / 60
-    assert 28 <= chenh_lech_phut <= 31
+    assert 3 <= chenh_lech_phut <= 6
     db.close()
 
 
@@ -108,7 +108,7 @@ def test_scrum200_forgot_password_nonexistent_email_safe():
 
 
 def test_scrum200_verify_token_valid_and_expired():
-    """SCRUM-200 / SCRUM-297: Xác thực token hợp lệ và phát hiện token quá 30 phút."""
+    """SCRUM-200 / SCRUM-297: Xác thực token hợp lệ và phát hiện token quá 5 phút."""
     # 1. Yêu cầu token mới
     client.post("/api/v1/auth/forgot-password", json={"email": "scrum200_user@warehouse.local"})
     outbox = get_mock_outbox()
@@ -119,7 +119,7 @@ def test_scrum200_verify_token_valid_and_expired():
     assert res_valid.status_code == 200
     data_valid = res_valid.json()
     assert data_valid["valid"] is True
-    assert data_valid["expires_in_minutes"] >= 28
+    assert data_valid["expires_in_minutes"] >= 3
     assert "s***r@warehouse.local" in data_valid["email"]
 
     # 3. Làm cho token hết hạn quá 30 phút

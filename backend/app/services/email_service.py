@@ -9,16 +9,21 @@ from email.mime.text import MIMEText
 from sqlalchemy import event, inspect
 from app.models.auth import User
 
+from dotenv import load_dotenv
+load_dotenv()
+
 logger = logging.getLogger("email_service")
 
-# Cấu hình SMTP (nếu triển khai production)
-SMTP_HOST = os.getenv("SMTP_HOST", "")
-SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
-SMTP_USER = os.getenv("SMTP_USER", "")
-SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
-EMAILS_FROM_EMAIL = os.getenv("EMAILS_FROM_EMAIL", "noreply@saleswarehouse.com")
-EMAILS_FROM_NAME = os.getenv("EMAILS_FROM_NAME", "KhoVận Pro - Quản Lý Bán Hàng & Kho")
-FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
+def _get_smtp_config():
+    return {
+        "host": os.getenv("SMTP_HOST", ""),
+        "port": int(os.getenv("SMTP_PORT", "587")),
+        "user": os.getenv("SMTP_USER", ""),
+        "password": os.getenv("SMTP_PASSWORD", ""),
+        "from_email": os.getenv("EMAILS_FROM_EMAIL", os.getenv("SMTP_USER", "noreply@saleswarehouse.com")),
+        "from_name": os.getenv("EMAILS_FROM_NAME", "KhoVận Pro - Quản Lý Bán Hàng & Kho"),
+        "frontend_url": os.getenv("FRONTEND_URL", "http://localhost:5173"),
+    }
 
 # Hộp thư giả lập trong bộ nhớ phục vụ kiểm thử và demo (SCRUM-295)
 MOCK_OUTBOX: List[Dict] = []
@@ -48,7 +53,8 @@ def send_password_reset_email(
     if not expires_at:
         expires_at = datetime.now(timezone.utc) + timedelta(minutes=expire_minutes)
 
-    reset_url = f"{FRONTEND_URL}/#/reset-password?token={reset_token}"
+    cfg = _get_smtp_config()
+    reset_url = f"{cfg['frontend_url']}/#/reset-password?token={reset_token}"
     subject = "[KhoVận Pro] Hướng dẫn đặt lại mật khẩu của bạn (Hiệu lực 30 phút)"
 
     # Lưu vào hộp thư giả lập
@@ -121,23 +127,23 @@ def send_password_reset_email(
     print(f"=" * 70 + "\n")
 
     # Nếu không có SMTP Host, coi như hoàn thành giả lập thành công
-    if not SMTP_HOST:
+    if not cfg["host"]:
         return True
 
     try:
         msg = MIMEMultipart("alternative")
         msg["Subject"] = subject
-        msg["From"] = f"{EMAILS_FROM_NAME} <{EMAILS_FROM_EMAIL}>"
+        msg["From"] = f"{cfg['from_name']} <{cfg['from_email']}>"
         msg["To"] = to_email
 
         part = MIMEText(html_content, "html")
         msg.attach(part)
 
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=10) as server:
+        with smtplib.SMTP(cfg["host"], cfg["port"], timeout=10) as server:
             server.starttls()
-            if SMTP_USER and SMTP_PASSWORD:
-                server.login(SMTP_USER, SMTP_PASSWORD)
-            server.sendmail(EMAILS_FROM_EMAIL, [to_email], msg.as_string())
+            if cfg["user"] and cfg["password"]:
+                server.login(cfg["user"], cfg["password"])
+            server.sendmail(cfg["from_email"], [to_email], msg.as_string())
 
         logger.info(f"Đã gửi email đặt lại mật khẩu thành công đến {to_email}")
         return True

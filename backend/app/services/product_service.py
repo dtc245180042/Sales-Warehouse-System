@@ -4,7 +4,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
-from app.models.auth import User
+from app.models.auth import User, UserRole
 from app.models.product import Product, ProductStatus
 from app.schemas.product import (
     ProductCreateRequest,
@@ -15,11 +15,31 @@ from app.schemas.product import (
 
 
 class ProductService:
-    """Service xử lý nghiệp vụ Quản lý danh mục sản phẩm (SCRUM-376)."""
+    """Service xử lý nghiệp vụ Quản lý danh mục sản phẩm (SCRUM-220)."""
+
+    @staticmethod
+    def is_sales_manager_or_admin(user: Optional[User]) -> bool:
+        """Kiểm tra quyền Quản lý kinh doanh hoặc Quản trị viên (SCRUM-378).
+        Chỉ hai vai trò này mới được xem và sửa giá vốn (cost_price).
+        """
+        if not user:
+            return False
+        user_role = (user.role or "").strip().lower()
+        allowed_roles = {
+            UserRole.SALES_MANAGER.value.lower(),
+            UserRole.ADMIN.value.lower(),
+            "sales_manager",
+            "sales manager",
+            "admin",
+        }
+        return user_role in allowed_roles
 
     @classmethod
     def serialize_product(cls, product: Product, current_user: Optional[User] = None) -> ProductResponse:
-        """Chuyển đổi Product model sang ProductResponse."""
+        """Chuyển đổi Product model sang ProductResponse với phân quyền giá vốn (SCRUM-378).
+        Nếu người dùng không phải Quản lý kinh doanh/Admin, ẩn trường giá vốn (`cost_price = None`).
+        """
+        can_view_cost = cls.is_sales_manager_or_admin(current_user)
         return ProductResponse(
             id=product.id,
             sku=product.sku,
@@ -27,7 +47,7 @@ class ProductService:
             category=product.category,
             unit=product.unit,
             packaging_spec=product.packaging_spec,
-            cost_price=product.cost_price,
+            cost_price=product.cost_price if can_view_cost else None,
             image_url=product.image_url,
             status=product.status,
             has_transactions=product.has_transactions,
@@ -54,13 +74,21 @@ class ProductService:
                 detail=f"Mã SKU '{normalized_sku}' đã tồn tại trong hệ thống. Vui lòng nhập mã khác."
             )
 
+        # Kiểm tra quyền sửa giá vốn (SCRUM-378)
+        cost_price = data.cost_price or 0.0
+        if not cls.is_sales_manager_or_admin(current_user) and data.cost_price not in (None, 0.0):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Chỉ Quản lý kinh doanh mới có quyền thiết lập giá vốn cho sản phẩm."
+            )
+
         product = Product(
             sku=normalized_sku,
             name=data.name.strip(),
             category=data.category.strip(),
             unit=data.unit.strip(),
             packaging_spec=data.packaging_spec.strip() if data.packaging_spec else None,
-            cost_price=data.cost_price or 0.0,
+            cost_price=cost_price if cls.is_sales_manager_or_admin(current_user) else 0.0,
             image_url=data.image_url,
             status=data.status or ProductStatus.ACTIVE,
             has_transactions=False,
@@ -74,8 +102,9 @@ class ProductService:
     def update_product(
         cls, db: Session, product_id: int, data: ProductUpdateRequest, current_user: User
     ) -> Product:
-        """Cập nhật thông tin sản phẩm trong danh mục (SCRUM-376, SCRUM-377):
+        """Cập nhật thông tin sản phẩm trong danh mục (SCRUM-376, SCRUM-377, SCRUM-378):
         - Kiểm tra tính duy nhất khi thay đổi mã SKU (SCRUM-377).
+        - Kiểm tra quyền sửa giá vốn (SCRUM-378).
         """
         product = db.query(Product).filter(Product.id == product_id).first()
         if not product:
@@ -98,6 +127,15 @@ class ProductService:
                         detail=f"Mã SKU '{normalized_sku}' đã được sử dụng bởi sản phẩm khác."
                     )
                 product.sku = normalized_sku
+
+        # Cập nhật giá vốn (SCRUM-378)
+        if data.cost_price is not None:
+            if not cls.is_sales_manager_or_admin(current_user):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Chỉ Quản lý kinh doanh mới có quyền xem và sửa giá vốn."
+                )
+            product.cost_price = data.cost_price
         if data.name is not None:
             product.name = data.name.strip()
         if data.category is not None:

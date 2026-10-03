@@ -4,6 +4,7 @@ import {
   LayoutDashboard,
   ShieldCheck,
   Settings,
+  FolderTree,
   ChevronDown,
   X,
 } from 'lucide-react';
@@ -64,6 +65,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
             'Manager',
             'Staff',
             'User',
+          ],
+        },
+      ],
+    },
+    {
+      heading: 'KINH DOANH & KHO HÀNG',
+      items: [
+        {
+          title: 'Nhóm hàng & Ngành hàng',
+          path: '/categories',
+          icon: <FolderTree className="w-5 h-5" />,
+          allowedRoles: [
+            'Admin',
+            'SalesManager',
+            'Manager',
+            'Staff',
           ],
         },
       ],

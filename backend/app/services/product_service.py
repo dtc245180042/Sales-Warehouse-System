@@ -210,3 +210,12 @@ class ProductService:
             page_size=page_size,
             total_pages=total_pages,
         )
+
+    @classmethod
+    def update_image(cls, db: Session, product_id: int, image_url: str) -> Product:
+        """Cập nhật ảnh sản phẩm và lưu thông tin hiển thị trên danh mục (SCRUM-379)."""
+        product = cls.get_product(db, product_id)
+        product.image_url = image_url
+        db.commit()
+        db.refresh(product)
+        return product

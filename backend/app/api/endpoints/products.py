@@ -1,0 +1,102 @@
+from typing import Optional
+from fastapi import APIRouter, Depends, Query, status
+from sqlalchemy.orm import Session
+
+from app.core.database import lay_phien_db
+from app.core.dependencies import lay_nguoi_dung_hien_tai
+from app.models.auth import User
+from app.schemas.product import (
+    ProductCreateRequest,
+    ProductUpdateRequest,
+    ProductResponse,
+    ProductListResponse,
+)
+from app.services.product_service import ProductService
+
+# Router tự động được nạp vào /api và /api/v1 theo cơ chế Auto-Discovery (AGENTS.md)
+router = APIRouter(prefix="/products", tags=["Quản lý danh mục sản phẩm (SCRUM-220)"])
+
+
+@router.get(
+    "",
+    response_model=ProductListResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Tra cứu và phân trang danh mục sản phẩm (SCRUM-376)"
+)
+def lay_danh_sach_san_pham(
+    page: int = Query(1, ge=1, description="Số trang hiển thị"),
+    page_size: int = Query(20, ge=1, le=100, description="Số sản phẩm mỗi trang"),
+    search: Optional[str] = Query(None, description="Tìm kiếm theo mã SKU hoặc Tên sản phẩm"),
+    category: Optional[str] = Query(None, description="Lọc theo nhóm hàng"),
+    status: Optional[str] = Query(None, description="Lọc theo trạng thái: ACTIVE hoặc INACTIVE"),
+    current_user: User = Depends(lay_nguoi_dung_hien_tai),
+    db: Session = Depends(lay_phien_db),
+):
+    """Lấy danh sách sản phẩm có tìm kiếm, lọc và phân trang (SCRUM-376)."""
+    return ProductService.list_products(
+        db=db,
+        current_user=current_user,
+        page=page,
+        page_size=page_size,
+        search=search,
+        category=category,
+        product_status=status,
+    )
+
+
+@router.post(
+    "",
+    response_model=ProductResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Tạo mới sản phẩm vào danh mục (SCRUM-376)"
+)
+def tao_san_pham_moi(
+    data: ProductCreateRequest,
+    current_user: User = Depends(lay_nguoi_dung_hien_tai),
+    db: Session = Depends(lay_phien_db),
+):
+    """Khai báo sản phẩm mới trong danh mục (SCRUM-376)."""
+    product = ProductService.create_product(
+        db=db,
+        data=data,
+        current_user=current_user,
+    )
+    return ProductService.serialize_product(product, current_user)
+
+
+@router.get(
+    "/{product_id}",
+    response_model=ProductResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Xem thông tin chi tiết một sản phẩm (SCRUM-376)"
+)
+def xem_chi_tiet_san_pham(
+    product_id: int,
+    current_user: User = Depends(lay_nguoi_dung_hien_tai),
+    db: Session = Depends(lay_phien_db),
+):
+    """Lấy chi tiết sản phẩm theo ID (SCRUM-376)."""
+    product = ProductService.get_product(db=db, product_id=product_id)
+    return ProductService.serialize_product(product, current_user)
+
+
+@router.put(
+    "/{product_id}",
+    response_model=ProductResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Cập nhật thông tin sản phẩm (SCRUM-376)"
+)
+def cap_nhat_san_pham(
+    product_id: int,
+    data: ProductUpdateRequest,
+    current_user: User = Depends(lay_nguoi_dung_hien_tai),
+    db: Session = Depends(lay_phien_db),
+):
+    """Cập nhật thông tin sản phẩm trong danh mục (SCRUM-376)."""
+    product = ProductService.update_product(
+        db=db,
+        product_id=product_id,
+        data=data,
+        current_user=current_user,
+    )
+    return ProductService.serialize_product(product, current_user)

@@ -1,79 +1,203 @@
-from typing import List, Optional
-from fastapi import APIRouter, Depends, Query, status
+import os
+import uuid
+from typing import Optional
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy.orm import Session
+
 from app.core.database import lay_phien_db
+from app.core.dependencies import lay_nguoi_dung_hien_tai
+from app.models.auth import User
 from app.schemas.product import (
-    ProductCreate,
-    ProductUpdate,
-    ProductStockUpdate,
+    ProductCreateRequest,
+    ProductUpdateRequest,
     ProductResponse,
+    ProductListResponse,
 )
-from app.services import product_service
+from app.services.product_service import ProductService
 
-router = APIRouter(prefix="/products", tags=["Sản phẩm"])
+# Router tự động được nạp vào /api và /api/v1 theo cơ chế Auto-Discovery (AGENTS.md)
+router = APIRouter(prefix="/products", tags=["Quản lý danh mục sản phẩm (SCRUM-220)"])
 
 
-@router.get("", response_model=List[ProductResponse])
-@router.get("/", response_model=List[ProductResponse], include_in_schema=False)
-def get_products(
-    search: Optional[str] = Query(None, description="Tìm theo tên, mã SKU hoặc Barcode"),
-    category: Optional[str] = Query(None, description="Lọc theo danh mục"),
-    stock_status: Optional[str] = Query(None, description="Lọc theo trạng thái tồn kho (active, low_stock, out_of_stock)"),
+@router.get(
+    "",
+    response_model=ProductListResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Tra cứu và phân trang danh mục sản phẩm (SCRUM-376)"
+)
+def lay_danh_sach_san_pham(
+    page: int = Query(1, ge=1, description="Số trang hiển thị"),
+    page_size: int = Query(20, ge=1, le=100, description="Số sản phẩm mỗi trang"),
+    search: Optional[str] = Query(None, description="Tìm kiếm theo mã SKU hoặc Tên sản phẩm"),
+    category: Optional[str] = Query(None, description="Lọc theo nhóm hàng"),
+    status: Optional[str] = Query(None, description="Lọc theo trạng thái: ACTIVE hoặc INACTIVE"),
+    current_user: User = Depends(lay_nguoi_dung_hien_tai),
     db: Session = Depends(lay_phien_db),
 ):
-    """Lấy danh sách tất cả sản phẩm trong hệ thống với các bộ lọc tìm kiếm."""
-    return product_service.get_all_products(
+    """Lấy danh sách sản phẩm có tìm kiếm, lọc và phân trang (SCRUM-376)."""
+    return ProductService.list_products(
         db=db,
+        current_user=current_user,
+        page=page,
+        page_size=page_size,
         search=search,
         category=category,
-        stock_status=stock_status,
+        product_status=status,
     )
 
 
-@router.get("/{product_id}", response_model=ProductResponse)
-def get_product_detail(
-    product_id: str,
+@router.post(
+    "",
+    response_model=ProductResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Tạo mới sản phẩm vào danh mục (SCRUM-376)"
+)
+def tao_san_pham_moi(
+    data: ProductCreateRequest,
+    current_user: User = Depends(lay_nguoi_dung_hien_tai),
     db: Session = Depends(lay_phien_db),
 ):
-    """Lấy thông tin chi tiết của một sản phẩm qua ID hoặc SKU."""
-    return product_service.get_product_by_id(db=db, product_id=product_id)
+    """Khai báo sản phẩm mới trong danh mục (SCRUM-376)."""
+    product = ProductService.create_product(
+        db=db,
+        data=data,
+        current_user=current_user,
+    )
+    return ProductService.serialize_product(product, current_user)
 
 
-@router.post("", response_model=ProductResponse, status_code=status.HTTP_201_CREATED)
-@router.post("/", response_model=ProductResponse, status_code=status.HTTP_201_CREATED, include_in_schema=False)
-def create_new_product(
-    product_in: ProductCreate,
+@router.get(
+    "/{product_id}",
+    response_model=ProductResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Xem thông tin chi tiết một sản phẩm (SCRUM-376)"
+)
+def xem_chi_tiet_san_pham(
+    product_id: int,
+    current_user: User = Depends(lay_nguoi_dung_hien_tai),
     db: Session = Depends(lay_phien_db),
 ):
-    """Tạo mới một sản phẩm vào danh mục."""
-    return product_service.create_product(db=db, product_in=product_in)
+    """Lấy chi tiết sản phẩm theo ID (SCRUM-376)."""
+    product = ProductService.get_product(db=db, product_id=product_id)
+    return ProductService.serialize_product(product, current_user)
 
 
-@router.put("/{product_id}", response_model=ProductResponse)
-def update_existing_product(
-    product_id: str,
-    product_in: ProductUpdate,
+@router.put(
+    "/{product_id}",
+    response_model=ProductResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Cập nhật thông tin sản phẩm (SCRUM-376)"
+)
+def cap_nhat_san_pham(
+    product_id: int,
+    data: ProductUpdateRequest,
+    current_user: User = Depends(lay_nguoi_dung_hien_tai),
     db: Session = Depends(lay_phien_db),
 ):
-    """Cập nhật thông tin sản phẩm."""
-    return product_service.update_product(db=db, product_id=product_id, product_in=product_in)
+    """Cập nhật thông tin sản phẩm trong danh mục (SCRUM-376)."""
+    product = ProductService.update_product(
+        db=db,
+        product_id=product_id,
+        data=data,
+        current_user=current_user,
+    )
+    return ProductService.serialize_product(product, current_user)
 
 
-@router.delete("/{product_id}")
-def delete_existing_product(
-    product_id: str,
+@router.delete(
+    "/{product_id}",
+    status_code=status.HTTP_200_OK,
+    summary="Xóa sản phẩm khỏi danh mục (SCRUM-375)"
+)
+def xoa_san_pham(
+    product_id: int,
+    current_user: User = Depends(lay_nguoi_dung_hien_tai),
     db: Session = Depends(lay_phien_db),
 ):
-    """Xóa một sản phẩm khỏi hệ thống."""
-    product_service.delete_product(db=db, product_id=product_id)
-    return {"message": f"Đã xóa sản phẩm '{product_id}' thành công."}
+    """Xóa sản phẩm trong danh mục:
+    - Nếu sản phẩm ĐÃ PHÁT SINH GIAO DỊCH (`has_transactions = True`): Hệ thống ngăn chặn xóa
+      và yêu cầu chuyển sang trạng thái Ngừng kinh doanh (SCRUM-375).
+    - Nếu chưa phát sinh giao dịch: Cho phép xóa khỏi danh mục.
+    """
+    return ProductService.delete_product(db=db, product_id=product_id)
 
 
-@router.patch("/{product_id}/stock", response_model=ProductResponse)
-def update_product_stock_delta(
-    product_id: str,
-    stock_in: ProductStockUpdate,
+@router.post(
+    "/{product_id}/deactivate",
+    response_model=ProductResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Ngừng kinh doanh sản phẩm (SCRUM-375)"
+)
+def ngung_kinh_doanh_san_pham(
+    product_id: int,
+    current_user: User = Depends(lay_nguoi_dung_hien_tai),
     db: Session = Depends(lay_phien_db),
 ):
-    """Cập nhật số lượng tồn kho (tăng hoặc giảm delta)."""
-    return product_service.update_product_stock(db=db, product_id=product_id, delta=stock_in.delta)
+    """Chuyển trạng thái sản phẩm sang Ngừng kinh doanh (INACTIVE) thay vì xóa (SCRUM-375)."""
+    product = ProductService.deactivate_product(db=db, product_id=product_id)
+    return ProductService.serialize_product(product, current_user)
+
+
+@router.post(
+    "/{product_id}/activate",
+    response_model=ProductResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Kích hoạt lại trạng thái Đang kinh doanh"
+)
+def kich_hoat_kinh_doanh_san_pham(
+    product_id: int,
+    current_user: User = Depends(lay_nguoi_dung_hien_tai),
+    db: Session = Depends(lay_phien_db),
+):
+    """Chuyển trạng thái sản phẩm trở lại Đang kinh doanh (ACTIVE)."""
+    product = ProductService.activate_product(db=db, product_id=product_id)
+    return ProductService.serialize_product(product, current_user)
+
+
+UPLOAD_DIR = os.path.join("uploads", "products")
+ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
+MAX_IMAGE_SIZE = 5 * 1024 * 1024  # 5MB
+
+
+@router.post(
+    "/{product_id}/image",
+    response_model=ProductResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Tải lên và quản lý ảnh sản phẩm (SCRUM-379)"
+)
+async def tai_len_anh_san_pham(
+    product_id: int,
+    file: UploadFile = File(..., description="File ảnh sản phẩm (jpg, png, webp, max 5MB)"),
+    current_user: User = Depends(lay_nguoi_dung_hien_tai),
+    db: Session = Depends(lay_phien_db),
+):
+    """Tải lên ảnh sản phẩm và lưu đường dẫn hiển thị trên danh mục (SCRUM-379):
+    - Kiểm tra định dạng ảnh cho phép (jpg, png, webp, gif).
+    - Giới hạn dung lượng tối đa 5MB.
+    - Cập nhật trường `image_url` cho sản phẩm tương ứng.
+    """
+    filename = file.filename or ""
+    _, ext = os.path.splitext(filename.lower())
+    if ext not in ALLOWED_IMAGE_EXTENSIONS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Định dạng file không hợp lệ. Chỉ chấp nhận các định dạng: {', '.join(sorted(ALLOWED_IMAGE_EXTENSIONS))}."
+        )
+
+    content = await file.read()
+    if len(content) > MAX_IMAGE_SIZE:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Dung lượng file ảnh vượt quá giới hạn cho phép (tối đa 5MB)."
+        )
+
+    os.makedirs(UPLOAD_DIR, exist_ok=True)
+    unique_filename = f"{uuid.uuid4().hex}{ext}"
+    file_path = os.path.join(UPLOAD_DIR, unique_filename)
+
+    with open(file_path, "wb") as f:
+        f.write(content)
+
+    image_url = f"/static/products/{unique_filename}"
+    product = ProductService.update_image(db=db, product_id=product_id, image_url=image_url)
+    return ProductService.serialize_product(product, current_user)

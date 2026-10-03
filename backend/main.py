@@ -52,6 +52,8 @@ def khoi_tao_tai_khoan_ban_dau(phien_db: Session):
                 existing.phone_number = sdt
             if not existing.assigned_warehouse and kho:
                 existing.assigned_warehouse = kho
+            if existing.role != vai_tro:
+                existing.role = vai_tro
     phien_db.commit()
 
 

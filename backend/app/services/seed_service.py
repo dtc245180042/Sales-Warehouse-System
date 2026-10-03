@@ -386,9 +386,10 @@ def seed_default_admin(db: Session) -> Dict[str, Any]:
     if not admin_user:
         admin_user = User(
             username="admin",
-            email="admin@saleswarehouse.com",
-            full_name="System Administrator",
-            hashed_password=get_password_hash("Admin@123456"),
+            email="admin@warehouse.local",
+            full_name="Trần Quản Trị Hệ Thống",
+            hashed_password=get_password_hash("Admin@1234"),
+            role="Admin",
             is_active=True
         )
         if admin_role:
@@ -398,10 +399,14 @@ def seed_default_admin(db: Session) -> Dict[str, Any]:
         db.refresh(admin_user)
         return {"created": True, "username": admin_user.username, "email": admin_user.email}
     else:
-        # Đảm bảo admin có role ADMIN
+        # Đảm bảo admin có role ADMIN và thông tin chuẩn
         if admin_role and admin_role not in admin_user.roles:
             admin_user.roles.append(admin_role)
-            db.commit()
+        if admin_user.role != "Admin":
+            admin_user.role = "Admin"
+        if admin_user.email == "admin@saleswarehouse.com":
+            admin_user.email = "admin@warehouse.local"
+        db.commit()
         return {"created": False, "username": admin_user.username, "email": admin_user.email}
 
 

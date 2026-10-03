@@ -45,16 +45,18 @@ export const userService = {
   // 2. Tạo tài khoản người dùng mới trong CSDL Backend
   create: async (data: Omit<User, 'id' | 'createdAt' | 'lastLogin'>): Promise<User> => {
     const backendRole = mapFrontendRoleToBackend(data.role);
-    const username = data.email.split('@')[0] + Math.floor(Math.random() * 1000);
+    const baseUsername = data.email.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '') || 'user';
+    const username = `${baseUsername}_${Math.floor(1000 + Math.random() * 9000)}`;
 
     const payload = {
       username: username,
       email: data.email.trim().toLowerCase(),
-      full_name: data.name,
-      phone_number: data.phone || null,
+      full_name: data.name.trim(),
+      phone_number: data.phone?.trim() || null,
       password: data.password || 'Warehouse@1234', // Mật khẩu mặc định/tạm nếu không nhập
       role: backendRole,
-      assigned_warehouse: data.warehouse || null,
+      role_names: data.roles && data.roles.length > 0 ? data.roles.map(mapFrontendRoleToBackend) : [backendRole],
+      assigned_warehouse: data.warehouse || data.territory || null,
     };
 
     const response = await apiClient.post('/users', payload);
@@ -65,10 +67,15 @@ export const userService = {
   update: async (id: string, data: Partial<User>): Promise<User> => {
     const payload: Record<string, any> = {};
 
-    if (data.name !== undefined) payload.full_name = data.name;
-    if (data.phone !== undefined) payload.phone_number = data.phone;
-    if (data.warehouse !== undefined) payload.assigned_warehouse = data.warehouse;
+    if (data.name !== undefined) payload.full_name = data.name.trim();
+    if (data.phone !== undefined) payload.phone_number = data.phone?.trim() || null;
+    if (data.warehouse !== undefined || data.territory !== undefined) {
+      payload.assigned_warehouse = data.warehouse || data.territory || null;
+    }
     if (data.role) payload.role = mapFrontendRoleToBackend(data.role);
+    if (data.roles && data.roles.length > 0) {
+      payload.role_names = data.roles.map(mapFrontendRoleToBackend);
+    }
     if (data.status) payload.is_active = data.status === 'active';
 
     const response = await apiClient.put(`/users/${id}`, payload);

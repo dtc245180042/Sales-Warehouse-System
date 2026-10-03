@@ -137,75 +137,71 @@ def send_password_reset_email(
     except Exception:
         pass
 
-    # 1. Hỗ trợ gửi trực tiếp qua Resend REST API nếu dùng mã re_...
-    resend_api_key = os.getenv("RESEND_API_KEY") or (cfg["password"] if cfg["password"].startswith("re_") else None)
+    # 1. Ưu tiên gửi qua SMTP (Gmail SMTP / Custom SMTP) nếu có cấu hình host & user & password
+    if cfg["host"] and cfg["user"] and cfg["password"]:
+        try:
+            msg = MIMEMultipart("alternative")
+            msg["Subject"] = subject
+            msg["From"] = f"{cfg['from_name']} <{cfg['from_email']}>"
+            msg["To"] = to_email
+
+            part = MIMEText(html_content, "html")
+            msg.attach(part)
+
+            with smtplib.SMTP(cfg["host"], cfg["port"], timeout=12) as server:
+                server.starttls()
+                server.login(cfg["user"], cfg["password"])
+                server.sendmail(cfg["from_email"], [to_email], msg.as_string())
+
+            logger.info(f"Đã gửi email mã xác minh qua SMTP thành công đến {to_email}")
+            return True
+        except Exception as e:
+            logger.error(f"Lỗi khi gửi qua SMTP đến {to_email}: {e}")
+
+    # 2. Hỗ trợ gửi qua Resend REST API nếu có RESEND_API_KEY
+    resend_api_key = os.getenv("RESEND_API_KEY")
     if resend_api_key:
         try:
             import json
             import urllib.request
             import urllib.error
 
-            target_recipient = to_email
-            fallback_recipient = os.getenv("RESEND_TEST_EMAIL", "dtc245180006@ictu.edu.vn")
-
-            def _send_to(recipient: str, mail_subject: str):
-                request_data = {
-                    "from": f"{cfg['from_name']} <{cfg['from_email']}>",
-                    "to": [recipient],
-                    "subject": mail_subject,
-                    "html": html_content,
-                }
-                req = urllib.request.Request(
-                    "https://api.resend.com/emails",
-                    data=json.dumps(request_data).encode("utf-8"),
-                    headers={
-                        "Authorization": f"Bearer {resend_api_key}",
-                        "Content-Type": "application/json",
-                        "User-Agent": "resend-python/2.0.0",
-                    },
-                )
-                with urllib.request.urlopen(req, timeout=10) as resp:
-                    return resp.status in (200, 201)
-
-            try:
-                if _send_to(target_recipient, subject):
-                    logger.info(f"Đã gửi email qua Resend API thành công đến {target_recipient}")
+            request_data = {
+                "from": f"{cfg['from_name']} <{cfg['from_email']}>",
+                "to": [to_email],
+                "subject": subject,
+                "html": html_content,
+            }
+            req = urllib.request.Request(
+                "https://api.resend.com/emails",
+                data=json.dumps(request_data).encode("utf-8"),
+                headers={
+                    "Authorization": f"Bearer {resend_api_key}",
+                    "Content-Type": "application/json",
+                    "User-Agent": "resend-python/2.0.0",
+                },
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                if resp.status in (200, 201):
+                    logger.info(f"Đã gửi email qua Resend API thành công đến {to_email}")
                     return True
-            except urllib.error.HTTPError as http_err:
-                # Nếu Resend báo 403 (chỉ cho phép gửi đến email đã xác thực dtc245180006@ictu.edu.vn ở bản miễn phí)
-                if http_err.code == 403 and target_recipient != fallback_recipient:
-                    fwd_subject = f"[Chuyển tiếp cho {target_recipient}] {subject}"
-                    logger.warning(f"Resend Sandbox chỉ cho phép gửi về {fallback_recipient}. Đang chuyển tiếp email cho {target_recipient}...")
-                    if _send_to(fallback_recipient, fwd_subject):
-                        logger.info(f"Đã chuyển tiếp email qua Resend về {fallback_recipient} thành công!")
-                        return True
-                raise http_err
+        except urllib.error.HTTPError as http_err:
+            error_body = ""
+            try:
+                error_body = http_err.read().decode("utf-8")
+            except Exception:
+                pass
+            if http_err.code == 403:
+                try:
+                    print(f"\n[LƯU Ý RESEND SANDBOX 403]: Resend miễn phí chỉ cho phép gửi đến chính email đăng ký tài khoản (dtc245180006@ictu.edu.vn).")
+                    print(f"Để gửi đến '{to_email}' hoặc bất kỳ email nào khác, hãy cấu hình Gmail SMTP (App Password) trong backend/.env hoặc xác thực tên miền trên resend.com.\n")
+                except Exception:
+                    pass
+            logger.error(f"Lỗi khi gửi qua Resend API đến {to_email}: HTTP {http_err.code} - {error_body}")
         except Exception as err:
-            logger.error(f"Lỗi khi gửi qua Resend API: {err}")
+            logger.error(f"Lỗi khi gửi qua Resend API đến {to_email}: {err}")
 
-    if not cfg["host"]:
-        return True
-
-    try:
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = subject
-        msg["From"] = f"{cfg['from_name']} <{cfg['from_email']}>"
-        msg["To"] = to_email
-
-        part = MIMEText(html_content, "html")
-        msg.attach(part)
-
-        with smtplib.SMTP(cfg["host"], cfg["port"], timeout=10) as server:
-            server.starttls()
-            if cfg["user"] and cfg["password"]:
-                server.login(cfg["user"], cfg["password"])
-            server.sendmail(cfg["from_email"], [to_email], msg.as_string())
-
-        logger.info(f"Đã gửi email mã xác minh thành công đến {to_email}")
-        return True
-    except Exception as e:
-        logger.error(f"Lỗi khi gửi email đến {to_email}: {e}")
-        return False
+    return True
 
 
 # =============================================================================

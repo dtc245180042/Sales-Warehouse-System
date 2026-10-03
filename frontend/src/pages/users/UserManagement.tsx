@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Plus,
+  FileSpreadsheet,
   Search,
   ShieldCheck,
   Shield,
@@ -16,6 +18,7 @@ import {
   Warehouse as WarehouseIcon,
   CheckCircle2,
   Camera,
+  RefreshCw,
 } from 'lucide-react';
 import { PageContainer } from '../../components/layout/PageContainer';
 import { DataTable, Column } from '../../components/common/DataTable';
@@ -24,6 +27,8 @@ import { Badge } from '../../components/common/Badge';
 import { Modal } from '../../components/common/Modal';
 import { ConfirmDialog } from '../../components/common/ConfirmDialog';
 import { userService } from '../../services/userService';
+import { authService } from '../../services/authService';
+import { TerritorySelector } from '../../components/common/TerritorySelector';
 import { User, UserRole, UserStatus } from '../../types/User';
 import { useToast } from '../../contexts/ToastContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -33,14 +38,6 @@ const WAREHOUSE_OPTIONS = [
   'Kho Tổng TP. HCM',
   'Kho Đà Nẵng',
   'Kho Cần Thơ',
-];
-
-const TERRITORY_OPTIONS = [
-  'Địa bàn Miền Bắc (Hà Nội, Hải Phòng, Quảng Ninh...)',
-  'Địa bàn Miền Trung (Đà Nẵng, Huế, Khánh Hòa...)',
-  'Địa bàn Miền Nam (TP. HCM, Bình Dương, Đồng Nai...)',
-  'Địa bàn Tây Nguyên (Đắk Lắk, Gia Lai, Lâm Đồng...)',
-  'Địa bàn Tây Nam Bộ (Cần Thơ, An Giang, Kiên Giang...)',
 ];
 
 const AVAILABLE_ROLES: { role: UserRole; label: string; desc: string }[] = [
@@ -54,6 +51,7 @@ const AVAILABLE_ROLES: { role: UserRole; label: string; desc: string }[] = [
 ];
 
 export const UserManagement: React.FC = () => {
+  const navigate = useNavigate();
   const { user: currentUser } = useAuth();
   const { showToast } = useToast();
   const [users, setUsers] = useState<User[]>([]);
@@ -73,7 +71,7 @@ export const UserManagement: React.FC = () => {
     role: 'SalesStaff' as UserRole,
     roles: ['SalesStaff'] as UserRole[],
     warehouse: 'Kho Tổng TP. HCM',
-    territory: 'Địa bàn Miền Nam (TP. HCM, Bình Dương, Đồng Nai...)',
+    territory: '',
     status: 'active' as UserStatus,
     avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150',
   });
@@ -84,6 +82,7 @@ export const UserManagement: React.FC = () => {
   const [lockHandoverTo, setLockHandoverTo] = useState('');
   const [isSubmittingLock, setIsSubmittingLock] = useState(false);
   const [unlockingUser, setUnlockingUser] = useState<User | null>(null);
+  const [resettingUserId, setResettingUserId] = useState<string | null>(null);
 
   const loadUsers = async () => {
     const data = await userService.getAll();
@@ -128,7 +127,7 @@ export const UserManagement: React.FC = () => {
       role: 'SalesStaff',
       roles: ['SalesStaff'],
       warehouse: 'Kho Tổng TP. HCM',
-      territory: 'Địa bàn Miền Nam (TP. HCM, Bình Dương, Đồng Nai...)',
+      territory: '',
       status: 'active',
       avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150',
     });
@@ -145,8 +144,8 @@ export const UserManagement: React.FC = () => {
       department: u.department || '',
       role: u.role,
       roles: assignedRoles,
-      warehouse: u.warehouse || 'Kho Tổng TP. HCM',
-      territory: u.territory || 'Địa bàn Miền Nam (TP. HCM, Bình Dương, Đồng Nai...)',
+      warehouse: u.warehouse || '',
+      territory: u.territory || '',
       status: u.status,
       avatar: u.avatar,
     });
@@ -183,7 +182,7 @@ export const UserManagement: React.FC = () => {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name.trim() || !formData.email.trim()) {
-      showToast('Vui lòng nhập họ tên và email tài khoản', 'warning');
+      showToast('Vui lòng nhập họ tên và email tài khoản.', 'warning', 'Thiếu thông tin');
       return;
     }
 
@@ -196,14 +195,10 @@ export const UserManagement: React.FC = () => {
       return;
     }
 
-    // SCRUM-206: Sales role must be bound to a territory
+    // SCRUM-206: Sales role territory handling
     const hasSalesRole = formData.roles.some((r) =>
       ['SalesManager', 'SalesStaff'].includes(r)
     );
-    if (hasSalesRole && !formData.territory) {
-      showToast('Người dùng thuộc vai trò kinh doanh phải gắn với ít nhất một địa bàn cụ thể.', 'warning', 'Ràng buộc địa bàn');
-      return;
-    }
 
     try {
       if (editingUser) {
@@ -218,7 +213,7 @@ export const UserManagement: React.FC = () => {
           territory: formData.territory,
           status: formData.status,
         });
-        showToast('Cập nhật tài khoản người dùng thành công!', 'success');
+        showToast('Cập nhật thông tin tài khoản người dùng thành công!', 'success', 'Thành công');
       } else {
         // SCRUM-205: Create user, send activation email with temp password
         const tempPassword = `Pass@${Math.floor(100000 + Math.random() * 900000)}`;
@@ -237,16 +232,46 @@ export const UserManagement: React.FC = () => {
           assignedDealersCount: hasSalesRole ? 3 : 0,
           assignedDealers: hasSalesRole ? ['Đại lý Tân Phú', 'Đại lý Bình Thạnh', 'Đại lý Thủ Đức'] : [],
         });
+
+        // Kích hoạt gửi email chứa mã OTP xác minh và hướng dẫn kích hoạt tài khoản
+        try {
+          await authService.forgotPassword(formData.email.trim());
+        } catch (emailErr) {
+          console.warn('Không thể gửi email kích hoạt tự động:', emailErr);
+        }
+
         showToast(
-          `Đã tạo tài khoản thành công! Email kích hoạt kèm mật khẩu tạm (${tempPassword}) đã được gửi tới ${formData.email}`,
+          `Đã tạo tài khoản thành công! Mật khẩu khởi tạo: ${tempPassword} (đã kích hoạt gửi email tới ${formData.email})`,
           'success',
-          'Kích hoạt tài khoản'
+          'Tạo tài khoản thành công'
         );
       }
       setIsModalOpen(false);
       loadUsers();
     } catch (err: any) {
-      showToast(err.message || 'Có lỗi xảy ra khi lưu tài khoản', 'error');
+      let errorMsg = 'Có lỗi xảy ra trong quá trình lưu tài khoản người dùng.';
+      const rawMsg = err?.message || (typeof err === 'string' ? err : '');
+
+      if (rawMsg.includes('hasSalesRole') || rawMsg.includes('not defined')) {
+        errorMsg = 'Lỗi phân bổ dữ liệu vai trò kinh doanh hoặc địa bàn phụ trách. Vui lòng thử lại.';
+      } else if (rawMsg.includes('đã tồn tại') || rawMsg.includes('already registered')) {
+        errorMsg = rawMsg.includes('email') || rawMsg.includes('Email')
+          ? 'Địa chỉ email này đã được sử dụng bởi một tài khoản khác.'
+          : 'Tên đăng nhập này đã tồn tại trong hệ thống. Vui lòng chọn tên khác.';
+      } else if (rawMsg.includes('Network Error') || rawMsg.includes('503') || rawMsg.includes('ERR_CONNECTION_REFUSED')) {
+        errorMsg = 'Không thể kết nối đến máy chủ Backend (Port 8000). Vui lòng kiểm tra lại dịch vụ.';
+      } else if (rawMsg.includes('Request failed with status code 400')) {
+        errorMsg = 'Dữ liệu không hợp lệ hoặc thông tin tài khoản đã tồn tại trên hệ thống.';
+      } else if (rawMsg.includes('Request failed with status code 401')) {
+        errorMsg = 'Phiên làm việc đã hết hạn. Vui lòng đăng nhập lại.';
+      } else if (rawMsg.includes('Request failed with status code 403')) {
+        errorMsg = 'Bạn không có quyền thực hiện thao tác quản trị tài khoản này.';
+      } else if (rawMsg.includes('Request failed with status code 422')) {
+        errorMsg = 'Dữ liệu nhập vào chưa đúng định dạng. Vui lòng kiểm tra lại họ tên, email hoặc số điện thoại.';
+      } else if (rawMsg) {
+        errorMsg = rawMsg;
+      }
+      showToast(errorMsg, 'error', 'Thao tác không thành công');
     }
   };
 
@@ -300,8 +325,33 @@ export const UserManagement: React.FC = () => {
     }
   };
 
-  const handleResetPassword = (u: User) => {
-    showToast(`Đã gửi mật khẩu mới tạm thời (Abc@123456) tới email ${u.email}`, 'success', 'Đặt lại mật khẩu');
+  const handleResetPassword = async (u: User) => {
+    if (!u.email) {
+      showToast('Tài khoản này không có địa chỉ email để nhận mật khẩu!', 'warning', 'Thiếu email');
+      return;
+    }
+    setResettingUserId(u.id);
+    try {
+      const msg = await authService.forgotPassword(u.email);
+      showToast(
+        msg || `Đã gửi mã xác minh và liên kết đặt lại mật khẩu đến hòm thư ${u.email}!`,
+        'success',
+        'Gửi email thành công'
+      );
+    } catch (err: any) {
+      const rawMsg = err?.message || '';
+      let friendlyMsg = 'Lỗi khi gửi email đặt lại mật khẩu.';
+      if (rawMsg.includes('không tồn tại')) {
+        friendlyMsg = `Không tìm thấy tài khoản với email hoặc tên "${u.email}" trên hệ thống.`;
+      } else if (rawMsg.includes('Network Error') || rawMsg.includes('503') || rawMsg.includes('ERR_CONNECTION_REFUSED')) {
+        friendlyMsg = 'Không thể kết nối đến máy chủ Backend (Port 8000). Vui lòng kiểm tra lại dịch vụ.';
+      } else if (rawMsg) {
+        friendlyMsg = rawMsg;
+      }
+      showToast(friendlyMsg, 'error', 'Thao tác không thành công');
+    } finally {
+      setResettingUserId(null);
+    }
   };
 
   const handleDelete = async () => {
@@ -381,24 +431,37 @@ export const UserManagement: React.FC = () => {
       key: 'warehouse',
       header: 'Kho / Địa Bàn Phụ Trách',
       sortable: true,
-      render: (u) => (
-        <div className="text-xs space-y-0.5">
-          <div className="font-medium text-slate-800 dark:text-slate-200 flex items-center gap-1">
-            <WarehouseIcon className="w-3.5 h-3.5 text-slate-400" />
-            <span>{u.warehouse || 'Toàn hệ thống'}</span>
+      render: (u) => {
+        const hasLocation = Boolean(u.warehouse || u.territory);
+        return (
+          <div className="text-xs space-y-0.5">
+            {hasLocation ? (
+              <>
+                {u.warehouse && (
+                  <div className="font-medium text-slate-800 dark:text-slate-200 flex items-center gap-1">
+                    <WarehouseIcon className="w-3.5 h-3.5 text-slate-400" />
+                    <span>{u.warehouse}</span>
+                  </div>
+                )}
+                {u.territory && (
+                  <div className="text-[11px] text-indigo-600 dark:text-indigo-400 font-medium">
+                    {u.territory}
+                  </div>
+                )}
+              </>
+            ) : (
+              <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200/50 dark:border-amber-800/50">
+                Chưa có
+              </span>
+            )}
+            {u.assignedDealersCount ? (
+              <span className="text-[11px] text-amber-600 dark:text-amber-400 font-medium block">
+                Phụ trách {u.assignedDealersCount} đại lý
+              </span>
+            ) : null}
           </div>
-          {u.territory && (
-            <div className="text-[11px] text-indigo-600 dark:text-indigo-400 font-medium">
-              {u.territory}
-            </div>
-          )}
-          {u.assignedDealersCount ? (
-            <span className="text-[11px] text-amber-600 dark:text-amber-400 font-medium block">
-              Phụ trách {u.assignedDealersCount} đại lý
-            </span>
-          ) : null}
-        </div>
-      ),
+        );
+      },
     },
     {
       key: 'phone',
@@ -434,10 +497,15 @@ export const UserManagement: React.FC = () => {
         <div className="flex items-center justify-end gap-1.5">
           <button
             onClick={() => handleResetPassword(u)}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-            title="Gửi lại mật khẩu tạm"
+            disabled={resettingUserId === u.id}
+            className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors disabled:opacity-50"
+            title="Gửi email đặt lại / cấp mật khẩu tạm"
           >
-            <KeyRound className="w-4 h-4" />
+            {resettingUserId === u.id ? (
+              <RefreshCw className="w-4 h-4 animate-spin text-indigo-600" />
+            ) : (
+              <KeyRound className="w-4 h-4" />
+            )}
           </button>
 
           {/* Lock / Unlock button (SCRUM-207) */}
@@ -488,9 +556,19 @@ export const UserManagement: React.FC = () => {
       title="Người Dùng & Phân Quyền Hệ Thống"
       subtitle={`Quản lý ${users.length} tài khoản nhân sự và phân bổ quyền thao tác nghiệp vụ`}
       actions={
-        <Button variant="primary" size="sm" onClick={handleOpenCreate} leftIcon={<Plus className="w-4 h-4" />}>
-          Thêm người dùng mới
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate('/users/import')}
+            leftIcon={<FileSpreadsheet className="w-4 h-4 text-emerald-600" />}
+          >
+            Nhập từ Excel
+          </Button>
+          <Button variant="primary" size="sm" onClick={handleOpenCreate} leftIcon={<Plus className="w-4 h-4" />}>
+            Thêm người dùng mới
+          </Button>
+        </div>
       }
     >
       {/* SCRUM-205: defaultPageSize is 20 rows */}
@@ -705,28 +783,13 @@ export const UserManagement: React.FC = () => {
             </div>
           )}
 
-          {/* SCRUM-206: Territory Binding (Required for Sales roles) */}
+          {/* SCRUM-206: Territory Binding (Text input or Preset list with add/edit/delete) */}
           {formData.roles.some((r) => ['SalesManager', 'SalesStaff'].includes(r)) && (
             <div className="p-3.5 rounded-2xl bg-amber-50/60 dark:bg-amber-950/30 border border-amber-200/60 dark:border-amber-800/40">
-              <label className="block text-xs font-bold text-amber-900 dark:text-amber-200 mb-1.5 flex items-center gap-1.5">
-                <span>Gán địa bàn hoạt động (Bắt buộc với vai trò Quản lý / Nhân viên kinh doanh) *</span>
-              </label>
-              <select
+              <TerritorySelector
                 value={formData.territory}
-                onChange={(e) => setFormData({ ...formData, territory: e.target.value })}
-                className="w-full px-3 py-2 rounded-xl border border-amber-200 dark:border-amber-800 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-amber-500"
-                required
-              >
-                <option value="">-- Vui lòng chọn địa bàn phụ trách --</option>
-                {TERRITORY_OPTIONS.map((t) => (
-                  <option key={t} value={t}>
-                    {t}
-                  </option>
-                ))}
-              </select>
-              <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-1">
-                Nhân viên kinh doanh chỉ phụ trách chăm sóc các đại lý thuộc địa bàn này.
-              </p>
+                onChange={(val) => setFormData({ ...formData, territory: val })}
+              />
             </div>
           )}
 

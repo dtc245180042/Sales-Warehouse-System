@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User, UserRole } from '../types/User';
 import { authService } from '../services/authService';
+import { setStorageItem } from '../services/storage';
 
 interface AuthContextType {
   user: User | null;
@@ -10,6 +11,8 @@ interface AuthContextType {
   login: (email: string, pass: string, remember?: boolean) => Promise<User>;
   logout: () => Promise<void>;
   changePassword: (currentPass: string, newPass: string, revokeOthers?: boolean) => Promise<void>;
+  updateUserAvatar: (newAvatarUrl: string) => void;
+  updateUserProfile: (data: { name: string; phone: string }) => void;
   switchRole: (role: UserRole) => void;
   canAccess: (allowedRoles: UserRole[]) => boolean;
 }
@@ -98,6 +101,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUser(updatedUser);
   };
 
+  const updateUserAvatar = (newAvatarUrl: string) => {
+    if (!user) return;
+    const updated = { ...user, avatar: newAvatarUrl };
+    setUser(updated);
+    setStorageItem('kv_current_user', updated);
+  };
+
+  const updateUserProfile = (data: { name: string; phone: string }) => {
+    if (!user) return;
+    const updated = { ...user, name: data.name, phone: data.phone };
+    setUser(updated);
+    setStorageItem('kv_current_user', updated);
+  };
+
   const switchRole = (newRole: UserRole) => {
     const switchedUser = authService.switchRole(newRole);
     setUser(switchedUser);
@@ -121,6 +138,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         login,
         logout,
         changePassword,
+        updateUserAvatar,
+        updateUserProfile,
         switchRole,
         canAccess,
       }}

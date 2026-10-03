@@ -205,6 +205,19 @@ export const UserManagement: React.FC = () => {
       return;
     }
 
+    // Ràng buộc số điện thoại 10 số di động bắt đầu bằng 0
+    if (formData.phone) {
+      const cleanPhone = formData.phone.replace(/\D/g, '');
+      if (cleanPhone.length !== 10) {
+        showToast(`Số điện thoại phải gồm đúng 10 chữ số (hiện có ${cleanPhone.length}/10 số).`, 'warning', 'Ràng buộc số điện thoại');
+        return;
+      }
+      if (!cleanPhone.startsWith('0')) {
+        showToast('Số điện thoại phải bắt đầu bằng chữ số 0.', 'warning', 'Ràng buộc số điện thoại');
+        return;
+      }
+    }
+
     try {
       if (editingUser) {
         await userService.update(editingUser.id, {
@@ -584,14 +597,23 @@ export const UserManagement: React.FC = () => {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                Số điện thoại
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
+                <span>Số điện thoại</span>
+                <span className="text-[11px] text-slate-400 font-mono">
+                  {formData.phone ? `${formData.phone.length}/10 số` : '10 số'}
+                </span>
               </label>
               <input
                 type="tel"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                maxLength={10}
                 value={formData.phone}
-                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                placeholder="0912345678"
+                onChange={(e) => {
+                  const digits = e.target.value.replace(/\D/g, '').slice(0, 10);
+                  setFormData({ ...formData, phone: digits });
+                }}
+                placeholder="Nhập 10 chữ số (ví dụ: 0901234567)"
                 className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-indigo-500"
               />
             </div>

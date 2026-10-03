@@ -92,6 +92,16 @@ export const SupplierList: React.FC = () => {
       return;
     }
 
+    const cleanPhone = formData.phone.replace(/\D/g, '');
+    if (cleanPhone.length !== 10) {
+      showToast(`Số điện thoại nhà cung cấp phải gồm đúng 10 chữ số (hiện có ${cleanPhone.length}/10 số).`, 'warning');
+      return;
+    }
+    if (!cleanPhone.startsWith('0')) {
+      showToast('Số điện thoại phải bắt đầu bằng chữ số 0.', 'warning');
+      return;
+    }
+
     try {
       if (editingSupplier) {
         await supplierService.update(editingSupplier.id, formData);
@@ -279,14 +289,23 @@ export const SupplierList: React.FC = () => {
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                Số điện thoại *
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
+                <span>Số điện thoại *</span>
+                <span className="text-[11px] text-slate-400 font-mono">
+                  {formData.phone ? `${formData.phone.length}/10 số` : '10 số'}
+                </span>
               </label>
               <input
                 type="tel"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                maxLength={10}
                 value={formData.phone}
-                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                placeholder="028 1234 5678"
+                onChange={(e) => {
+                  const digits = e.target.value.replace(/\D/g, '').slice(0, 10);
+                  setFormData({ ...formData, phone: digits });
+                }}
+                placeholder="0912345678"
                 className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm focus:ring-2 focus:ring-indigo-500"
                 required
               />

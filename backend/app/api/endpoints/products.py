@@ -104,6 +104,56 @@ def cap_nhat_san_pham(
     return ProductService.serialize_product(product, current_user)
 
 
+@router.delete(
+    "/{product_id}",
+    status_code=status.HTTP_200_OK,
+    summary="Xóa sản phẩm khỏi danh mục (SCRUM-375)"
+)
+def xoa_san_pham(
+    product_id: int,
+    current_user: User = Depends(lay_nguoi_dung_hien_tai),
+    db: Session = Depends(lay_phien_db),
+):
+    """Xóa sản phẩm trong danh mục:
+    - Nếu sản phẩm ĐÃ PHÁT SINH GIAO DỊCH (`has_transactions = True`): Hệ thống ngăn chặn xóa
+      và yêu cầu chuyển sang trạng thái Ngừng kinh doanh (SCRUM-375).
+    - Nếu chưa phát sinh giao dịch: Cho phép xóa khỏi danh mục.
+    """
+    return ProductService.delete_product(db=db, product_id=product_id)
+
+
+@router.post(
+    "/{product_id}/deactivate",
+    response_model=ProductResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Ngừng kinh doanh sản phẩm (SCRUM-375)"
+)
+def ngung_kinh_doanh_san_pham(
+    product_id: int,
+    current_user: User = Depends(lay_nguoi_dung_hien_tai),
+    db: Session = Depends(lay_phien_db),
+):
+    """Chuyển trạng thái sản phẩm sang Ngừng kinh doanh (INACTIVE) thay vì xóa (SCRUM-375)."""
+    product = ProductService.deactivate_product(db=db, product_id=product_id)
+    return ProductService.serialize_product(product, current_user)
+
+
+@router.post(
+    "/{product_id}/activate",
+    response_model=ProductResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Kích hoạt lại trạng thái Đang kinh doanh"
+)
+def kich_hoat_kinh_doanh_san_pham(
+    product_id: int,
+    current_user: User = Depends(lay_nguoi_dung_hien_tai),
+    db: Session = Depends(lay_phien_db),
+):
+    """Chuyển trạng thái sản phẩm trở lại Đang kinh doanh (ACTIVE)."""
+    product = ProductService.activate_product(db=db, product_id=product_id)
+    return ProductService.serialize_product(product, current_user)
+
+
 UPLOAD_DIR = os.path.join("uploads", "products")
 ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
 MAX_IMAGE_SIZE = 5 * 1024 * 1024  # 5MB

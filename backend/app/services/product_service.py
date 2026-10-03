@@ -212,6 +212,45 @@ class ProductService:
         )
 
     @classmethod
+    def delete_product(cls, db: Session, product_id: int) -> dict:
+        """Xóa sản phẩm hoặc ngăn xóa nếu đã có giao dịch (SCRUM-375):
+        - Nếu `has_transactions` là True -> Chặn xóa, yêu cầu ngừng kinh doanh.
+        - Nếu chưa phát sinh giao dịch -> Cho phép xóa thành công.
+        """
+        product = cls.get_product(db, product_id)
+
+        if product.has_transactions:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    f"Sản phẩm '{product.name}' (SKU: {product.sku}) đã phát sinh giao dịch "
+                    f"trong hệ thống, không thể xóa. Vui lòng chuyển trạng thái sang Ngừng kinh doanh."
+                )
+            )
+
+        db.delete(product)
+        db.commit()
+        return {"message": f"Đã xóa sản phẩm '{product.name}' khỏi danh mục thành công."}
+
+    @classmethod
+    def deactivate_product(cls, db: Session, product_id: int) -> Product:
+        """Chuyển trạng thái sản phẩm sang Ngừng kinh doanh (SCRUM-375)."""
+        product = cls.get_product(db, product_id)
+        product.status = ProductStatus.INACTIVE
+        db.commit()
+        db.refresh(product)
+        return product
+
+    @classmethod
+    def activate_product(cls, db: Session, product_id: int) -> Product:
+        """Kích hoạt lại trạng thái Đang kinh doanh cho sản phẩm."""
+        product = cls.get_product(db, product_id)
+        product.status = ProductStatus.ACTIVE
+        db.commit()
+        db.refresh(product)
+        return product
+
+    @classmethod
     def update_image(cls, db: Session, product_id: int, image_url: str) -> Product:
         """Cập nhật ảnh sản phẩm và lưu thông tin hiển thị trên danh mục (SCRUM-379)."""
         product = cls.get_product(db, product_id)

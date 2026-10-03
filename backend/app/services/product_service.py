@@ -39,9 +39,23 @@ class ProductService:
     def create_product(
         cls, db: Session, data: ProductCreateRequest, current_user: User
     ) -> Product:
-        """Tạo mới sản phẩm vào danh mục (SCRUM-376)."""
+        """Tạo mới sản phẩm vào danh mục (SCRUM-376, SCRUM-377):
+        - Kiểm tra tính duy nhất của mã SKU (SCRUM-377).
+        """
+        normalized_sku = data.sku.strip().upper()
+
+        # Kiểm tra trùng mã SKU (SCRUM-377)
+        existing = db.query(Product).filter(
+            func.upper(Product.sku) == normalized_sku
+        ).first()
+        if existing:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Mã SKU '{normalized_sku}' đã tồn tại trong hệ thống. Vui lòng nhập mã khác."
+            )
+
         product = Product(
-            sku=data.sku.strip(),
+            sku=normalized_sku,
             name=data.name.strip(),
             category=data.category.strip(),
             unit=data.unit.strip(),
@@ -60,7 +74,9 @@ class ProductService:
     def update_product(
         cls, db: Session, product_id: int, data: ProductUpdateRequest, current_user: User
     ) -> Product:
-        """Cập nhật thông tin sản phẩm trong danh mục (SCRUM-376)."""
+        """Cập nhật thông tin sản phẩm trong danh mục (SCRUM-376, SCRUM-377):
+        - Kiểm tra tính duy nhất khi thay đổi mã SKU (SCRUM-377).
+        """
         product = db.query(Product).filter(Product.id == product_id).first()
         if not product:
             raise HTTPException(
@@ -68,8 +84,20 @@ class ProductService:
                 detail="Không tìm thấy sản phẩm trong danh mục."
             )
 
+        # Cập nhật và kiểm tra duy nhất mã SKU (SCRUM-377)
         if data.sku is not None:
-            product.sku = data.sku.strip()
+            normalized_sku = data.sku.strip().upper()
+            if normalized_sku != product.sku:
+                existing = db.query(Product).filter(
+                    func.upper(Product.sku) == normalized_sku,
+                    Product.id != product_id
+                ).first()
+                if existing:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Mã SKU '{normalized_sku}' đã được sử dụng bởi sản phẩm khác."
+                    )
+                product.sku = normalized_sku
         if data.name is not None:
             product.name = data.name.strip()
         if data.category is not None:

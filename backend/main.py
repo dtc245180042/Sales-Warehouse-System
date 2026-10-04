@@ -1,14 +1,11 @@
 from fastapi import FastAPI
 from app.api.warehouse_router import router as warehouse_router
+from app.api.import_router import router as import_router
 
-app = FastAPI(
-    title="Sales Warehouse System - TVP Test",
-    description="API Quy đổi đơn vị tính kho & ghi sổ giao dịch (SCRUM-215)"
-)
+app = FastAPI(title="Sales & Warehouse System")
 
-# Đăng ký Router
-app.include_router(warehouse_router, prefix="/api/v1", tags=["Warehouse"])
+# Giữ nguyên router quy đổi kho cũ (SCRUM-215)
+app.include_router(warehouse_router)
 
-@app.get("/")
-def read_root():
-    return {"status": "online", "docs": "/docs"}
+# Thêm router import Excel mới (SCRUM-216)
+app.include_router(import_router)

@@ -1,31 +1,17 @@
-from typing import Generator
 from sqlalchemy import create_engine
-from sqlalchemy.orm import declarative_base, sessionmaker, Session
-from app.core.config import settings
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
 
-DATABASE_URL = settings.DATABASE_URL
+SQLALCHEMY_DATABASE_URL = "sqlite:///./sql_app.db" # Hoặc PostgreSQL/MySQL của bạn
 
-# Cấu hình engine: nếu sử dụng SQLite thì cần check_same_thread=False
-la_sqlite = DATABASE_URL.startswith("sqlite")
-engine = create_engine(
-    DATABASE_URL,
-    connect_args={"check_same_thread": False} if la_sqlite else {},
-    pool_pre_ping=True
-)
-
+engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
 Base = declarative_base()
 
-
-def lay_phien_db() -> Generator[Session, None, None]:
-    """FastAPI Dependency cung cấp SQLAlchemy Session cho mỗi request."""
-    phien_db = SessionLocal()
+# Hàm get_db cung cấp Session cho FastAPI
+def get_db():
+    db = SessionLocal()
     try:
-        yield phien_db
+        yield db
     finally:
-        phien_db.close()
-
-
-# Bí danh tương thích ngược (aliases)
-get_db = lay_phien_db
+        db.close()

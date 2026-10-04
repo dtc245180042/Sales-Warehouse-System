@@ -4,6 +4,7 @@ import {
   LayoutDashboard,
   ShieldCheck,
   Settings,
+  FolderTree,
   ChevronDown,
   X,
   Tag,
@@ -72,6 +73,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
     {
       heading: 'KINH DOANH & BÁN HÀNG',
       items: [
+        {
+          title: 'Nhóm hàng & Ngành hàng',
+          path: '/categories',
+          icon: <FolderTree className="w-5 h-5" />,
+          allowedRoles: [
+            'Admin',
+            'SalesManager',
+            'Manager',
+            'Staff',
+          ],
+        },
         {
           title: 'Bảng Giá Phân Phối',
           path: '/price-lists',
@@ -186,7 +198,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                                 to={sub.path}
                                 onClick={onMobileClose}
                                 className={({ isActive }) =>
-                                  `flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                                   `flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
                                     isActive
                                       ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-200 dark:shadow-none'
                                       : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800/40'

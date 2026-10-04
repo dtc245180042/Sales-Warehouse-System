@@ -19,6 +19,7 @@ import { UserManagement } from '../pages/users/UserManagement';
 import { UserImportPage } from '../pages/users/UserImportPage';
 import { Settings } from '../pages/settings/Settings';
 import { PriceListManagement } from '../pages/sales/PriceListManagement';
+import { CategoryManagement } from '../pages/categories/CategoryManagement';
 
 // All 7 business roles allowed in Sprint 1 backoffice
 const ALL_BACKOFFICE_ROLES: UserRole[] = [
@@ -70,7 +71,7 @@ export const AppRoutes: React.FC = () => {
       />
 
       {/* ================================================================ */}
-      {/* SPRINT 1 BACKOFFICE ROUTES                                       */}
+      {/* SPRINT 1 & 2 BACKOFFICE ROUTES                                   */}
       {/* ================================================================ */}
       <Route
         element={
@@ -115,6 +116,16 @@ export const AppRoutes: React.FC = () => {
           element={
             <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
               <PriceListManagement />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Quản lý Nhóm hàng nhiều cấp - Quản lý kinh doanh & Admin (SCRUM-214) */}
+        <Route
+          path="/categories"
+          element={
+            <ProtectedRoute allowedRoles={['Admin', 'SalesManager', 'Manager', 'Staff']}>
+              <CategoryManagement />
             </ProtectedRoute>
           }
         />

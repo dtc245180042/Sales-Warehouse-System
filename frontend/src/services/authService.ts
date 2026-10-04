@@ -34,7 +34,7 @@ export function mapBackendUserToFrontend(apiUser: any): User {
     role: role,
     roles: apiUser.roles?.map((r: any) => r.name || r) || [role],
     status: apiUser.is_active ? 'active' : 'locked',
-    avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=6366f1&color=fff`,
+    avatar: apiUser.avatar_url || apiUser.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=6366f1&color=fff`,
     phone: apiUser.phone_number || '',
     warehouse: isSalesRole ? '' : location,
     territory: isSalesRole ? location : '',
@@ -66,6 +66,17 @@ export const authService = {
     localStorage.setItem('access_token', access_token); // Hỗ trợ tương thích ngược
 
     const user = mapBackendUserToFrontend(apiUser);
+
+    // Tự động kiểm tra và đồng bộ ảnh đại diện đã tải lên từ backend (SCRUM-364)
+    try {
+      const avatarRes = await apiClient.get('/user-avatars/me');
+      if (avatarRes.data?.avatar_url) {
+        user.avatar = avatarRes.data.avatar_url;
+      }
+    } catch {
+      // Bỏ qua nếu người dùng chưa cài đặt avatar
+    }
+
     setStorageItem(STORAGE_KEYS.CURRENT_USER, user);
 
     if (remember) {
@@ -80,6 +91,16 @@ export const authService = {
   getMe: async (): Promise<User> => {
     const response = await apiClient.get('/auth/me');
     const user = mapBackendUserToFrontend(response.data);
+
+    try {
+      const avatarRes = await apiClient.get('/user-avatars/me');
+      if (avatarRes.data?.avatar_url) {
+        user.avatar = avatarRes.data.avatar_url;
+      }
+    } catch {
+      // Bỏ qua nếu người dùng chưa cài đặt avatar
+    }
+
     setStorageItem(STORAGE_KEYS.CURRENT_USER, user);
     return user;
   },

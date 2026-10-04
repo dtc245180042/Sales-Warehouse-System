@@ -18,9 +18,11 @@ import { formatCurrency, formatDate } from '../../utils/formatters';
 import { orderService } from '../../services/orderService';
 import { Order, OrderStatus } from '../../types/Order';
 import { useToast } from '../../contexts/ToastContext';
+import { useAuth } from '../../contexts/AuthContext';
 
 export const Orders: React.FC = () => {
   const { showToast } = useToast();
+  const { user } = useAuth();
   const [orders, setOrders] = useState<Order[]>([]);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -161,9 +163,29 @@ export const Orders: React.FC = () => {
     },
     {
       key: 'staffName',
-      header: 'Nhân Viên',
+      header: 'Người Tạo Đơn',
       sortable: true,
-      render: (o) => <span className="text-xs text-slate-600 dark:text-slate-400">{o.staffName}</span>,
+      render: (o) => {
+        const isCurrentUser = user && (user.name === o.staffName || String(user.id) === String(o.staffId));
+        const avatarSrc = isCurrentUser && user?.avatar
+          ? user.avatar
+          : (o as any).staffAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(o.staffName)}&background=6366f1&color=fff&size=128`;
+        return (
+          <div className="flex items-center gap-2">
+            <img
+              src={avatarSrc}
+              alt={o.staffName}
+              className="w-7 h-7 rounded-full object-cover ring-2 ring-indigo-500/20 shadow-sm shrink-0"
+              onError={(e) => {
+                (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${encodeURIComponent(o.staffName)}&background=6366f1&color=fff&size=128`;
+              }}
+            />
+            <span className="text-xs font-semibold text-slate-700 dark:text-slate-300 whitespace-nowrap">
+              {o.staffName}
+            </span>
+          </div>
+        );
+      },
     },
     {
       key: 'actions',

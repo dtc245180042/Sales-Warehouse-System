@@ -25,11 +25,13 @@ import { formatCurrency, formatDate } from '../../utils/formatters';
 import { orderService } from '../../services/orderService';
 import { Order, OrderStatus } from '../../types/Order';
 import { useToast } from '../../contexts/ToastContext';
+import { useAuth } from '../../contexts/AuthContext';
 
 export const OrderDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { showToast } = useToast();
+  const { user } = useAuth();
 
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
@@ -252,6 +254,38 @@ export const OrderDetail: React.FC = () => {
 
         {/* Right: Customer & Financials (1 col) */}
         <div className="space-y-6">
+          {/* Creator / Staff info (SCRUM-362, SCRUM-364, SCRUM-367) */}
+          <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-card space-y-3">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+              <User className="w-4 h-4 text-indigo-500" />
+              Người Lập Đơn Hàng
+            </h3>
+            <div className="flex items-center gap-3.5 pt-1">
+              <img
+                src={
+                  user && (user.name === order.staffName || String(user.id) === String(order.staffId)) && user.avatar
+                    ? user.avatar
+                    : `https://ui-avatars.com/api/?name=${encodeURIComponent(order.staffName)}&background=6366f1&color=fff&size=128`
+                }
+                alt={order.staffName}
+                className="w-12 h-12 rounded-full object-cover ring-2 ring-indigo-500/30 shadow-md shrink-0"
+              />
+              <div>
+                <p className="text-sm font-bold text-slate-900 dark:text-white">
+                  {order.staffName}
+                </p>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <span className="text-xs text-indigo-600 dark:text-indigo-400 font-medium">
+                    Nhân viên bán hàng
+                  </span>
+                  <span className="text-[11px] text-slate-400 font-mono">
+                    ({order.staffId})
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* Customer info */}
           <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-card space-y-3">
             <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">

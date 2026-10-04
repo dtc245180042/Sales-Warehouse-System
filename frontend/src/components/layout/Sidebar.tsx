@@ -6,6 +6,7 @@ import {
   Settings,
   ChevronDown,
   X,
+  Tag,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { UserRole } from '../../types/User';
@@ -69,6 +70,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
       ],
     },
     {
+      heading: 'KINH DOANH & BÁN HÀNG',
+      items: [
+        {
+          title: 'Bảng Giá Phân Phối',
+          path: '/price-lists',
+          icon: <Tag className="w-5 h-5" />,
+          allowedRoles: [
+            'Admin',
+            'SalesManager',
+            'SalesStaff',
+            'Director',
+            'Accountant',
+            'Manager',
+            'Staff',
+          ],
+        },
+      ],
+    },
+    {
       heading: 'HỆ THỐNG',
       items: [
         {
@@ -78,7 +98,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           allowedRoles: ['Admin'],
         },
         {
-          title: 'Cài đặt & Bảo mật tài khoản',
+          title: 'Hồ sơ cá nhân & Bảo mật',
           path: '/settings',
           icon: <Settings className="w-5 h-5" />,
           allowedRoles: [
@@ -91,7 +111,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
             'Director',
             'Manager',
             'Staff',
-            'User',
           ],
         },
       ],

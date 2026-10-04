@@ -136,16 +136,18 @@ export const Header: React.FC<HeaderProps> = ({
                     <KeyRound className="w-4 h-4 text-indigo-500" />
                     <span>Đổi mật khẩu tài khoản</span>
                   </button>
-                  <button
-                    onClick={() => {
-                      setIsProfileOpen(false);
-                      navigate('/settings');
-                    }}
-                    className="w-full flex items-center gap-2.5 px-4 py-2 text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
-                  >
-                    <Settings className="w-4 h-4 text-slate-400" />
-                    <span>Cài đặt tài khoản</span>
-                  </button>
+                  {role !== 'User' && (
+                    <button
+                      onClick={() => {
+                        setIsProfileOpen(false);
+                        navigate('/settings');
+                      }}
+                      className="w-full flex items-center gap-2.5 px-4 py-2 text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                    >
+                      <Settings className="w-4 h-4 text-slate-400" />
+                      <span>Hồ sơ cá nhân & Bảo mật</span>
+                    </button>
+                  )}
                   {role === 'Admin' && (
                     <button
                       onClick={() => {

@@ -16,7 +16,9 @@ import { ErrorPage } from '../pages/error/ErrorPage';
 // Core Dashboard & Management Pages (Sprint 1: SCRUM-198, SCRUM-201, SCRUM-202, SCRUM-205, SCRUM-206, SCRUM-207)
 import { Dashboard } from '../pages/dashboard/Dashboard';
 import { UserManagement } from '../pages/users/UserManagement';
+import { UserImportPage } from '../pages/users/UserImportPage';
 import { Settings } from '../pages/settings/Settings';
+import { PriceListManagement } from '../pages/sales/PriceListManagement';
 import { CategoryManagement } from '../pages/categories/CategoryManagement';
 
 // All 7 business roles allowed in Sprint 1 backoffice
@@ -69,7 +71,7 @@ export const AppRoutes: React.FC = () => {
       />
 
       {/* ================================================================ */}
-      {/* SPRINT 1 BACKOFFICE ROUTES                                       */}
+      {/* SPRINT 1 & 2 BACKOFFICE ROUTES                                   */}
       {/* ================================================================ */}
       <Route
         element={
@@ -94,6 +96,26 @@ export const AppRoutes: React.FC = () => {
           element={
             <ProtectedRoute allowedRoles={['Admin']}>
               <UserManagement />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Nhập người dùng hàng loạt từ Excel - SC-209 */}
+        <Route
+          path="/users/import"
+          element={
+            <ProtectedRoute allowedRoles={['Admin']}>
+              <UserImportPage />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Quản lý Bảng giá theo nhóm khách hàng (SCRUM-420, SCRUM-421) */}
+        <Route
+          path="/price-lists"
+          element={
+            <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
+              <PriceListManagement />
             </ProtectedRoute>
           }
         />

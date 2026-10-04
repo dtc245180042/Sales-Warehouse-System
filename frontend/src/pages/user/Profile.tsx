@@ -17,12 +17,16 @@ import {
 } from 'lucide-react';
 import { mockUserApi } from '../../services/api';
 import { UserProfileData } from '../../data/mockData';
+import { useAuth } from '../../contexts/AuthContext';
+import { AvatarUploadModal } from '../../components/common/AvatarUploadModal';
 
 export const ProfilePage: React.FC = () => {
+  const { user, updateUserAvatar } = useAuth();
   const [profile, setProfile] = useState<UserProfileData | null>(null);
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [isAvatarModalOpen, setIsAvatarModalOpen] = useState(false);
 
   // Editable fields
   const [fullName, setFullName] = useState('');
@@ -57,19 +61,29 @@ export const ProfilePage: React.FC = () => {
     e.preventDefault();
     if (!profile) return;
 
+    const cleanPhone = phone.replace(/\D/g, '');
+    if (cleanPhone.length !== 10) {
+      alert('Số điện thoại phải gồm đúng 10 chữ số (hiện có ' + cleanPhone.length + '/10).');
+      return;
+    }
+    if (!cleanPhone.startsWith('0')) {
+      alert('Số điện thoại phải bắt đầu bằng chữ số 0.');
+      return;
+    }
+
     setIsSaving(true);
     try {
       const updated = {
         name: fullName,
         email,
-        phone,
+        phone: cleanPhone,
         avatar: avatarUrl,
       };
 
       const res = await mockUserApi.updateProfile(updated);
       if (res.data.success && res.data.data) {
         setProfile(res.data.data);
-        setToastMessage('✓ Cập nhật thông tin hồ sơ thành công!');
+        setToastMessage('Đã lưu thông tin hồ sơ người dùng thành công!');
         setTimeout(() => setToastMessage(null), 3500);
       }
     } catch (err) {
@@ -94,10 +108,10 @@ export const ProfilePage: React.FC = () => {
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
-      {/* Toast Alert */}
+    <div className="max-w-6xl mx-auto space-y-6">
+      {/* Toast Alert - Bottom Right Corner */}
       {toastMessage && (
-        <div className="fixed bottom-6 left-6 z-50 bg-emerald-600 text-white px-5 py-3 rounded-2xl shadow-xl flex items-center gap-3 animate-bounce">
+        <div className="fixed bottom-6 right-6 z-50 bg-emerald-600 text-white px-5 py-3.5 rounded-2xl shadow-2xl flex items-center gap-3 animate-slide-left border border-emerald-400/30">
           <CheckCircle2 className="w-5 h-5" />
           <span className="text-sm font-semibold">{toastMessage}</span>
         </div>
@@ -122,11 +136,29 @@ export const ProfilePage: React.FC = () => {
               <img
                 src={avatarUrl || profile.avatar}
                 alt={profile.name}
-                className="w-28 h-28 rounded-full object-cover ring-4 ring-blue-500/20 shadow-md"
+                className="w-28 h-28 rounded-full object-cover ring-4 ring-blue-500/20 shadow-md cursor-pointer hover:opacity-90 transition-opacity"
+                onClick={() => setIsAvatarModalOpen(true)}
+                title="Nhấp để thay đổi ảnh đại diện"
               />
-              <div className="absolute bottom-1 right-1 p-2 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-md cursor-pointer transition-colors" title="Đổi ảnh">
+              <button
+                type="button"
+                onClick={() => setIsAvatarModalOpen(true)}
+                className="absolute bottom-1 right-1 p-2 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-md cursor-pointer transition-colors"
+                title="Thay đổi ảnh đại diện (JPG/PNG <= 2MB)"
+              >
                 <Camera className="w-4 h-4" />
-              </div>
+              </button>
+            </div>
+
+            <div className="mb-3">
+              <button
+                type="button"
+                onClick={() => setIsAvatarModalOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 hover:bg-blue-100 text-xs font-semibold transition-colors"
+              >
+                <Camera className="w-3.5 h-3.5" />
+                Tải lên ảnh mới
+              </button>
             </div>
 
             <h2 className="text-lg font-bold text-slate-900 dark:text-white">
@@ -247,16 +279,21 @@ export const ProfilePage: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                  Số điện thoại <span className="text-rose-500">*</span>
+                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5 flex justify-between items-center">
+                  <span>Số điện thoại <span className="text-rose-500">*</span></span>
+                  <span className="text-xs font-mono text-slate-400">{phone.length}/10 số</span>
                 </label>
                 <div className="relative">
                   <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                   <input
                     type="tel"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    maxLength={10}
+                    placeholder="Ví dụ: 0901234567"
                     required
                     value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
+                    onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
                     className="w-full pl-9 pr-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
@@ -330,6 +367,21 @@ export const ProfilePage: React.FC = () => {
           </form>
         </div>
       </div>
+
+      {/* Modal Tải Lên & Xem Trước Ảnh Đại Diện (SCRUM-363, SCRUM-365, SCRUM-366) */}
+      <AvatarUploadModal
+        isOpen={isAvatarModalOpen}
+        onClose={() => setIsAvatarModalOpen(false)}
+        currentAvatar={avatarUrl || profile.avatar}
+        userId={user?.id}
+        onAvatarUpdated={(newAvatarUrl) => {
+          setAvatarUrl(newAvatarUrl);
+          if (profile) {
+            setProfile({ ...profile, avatar: newAvatarUrl });
+          }
+          updateUserAvatar(newAvatarUrl);
+        }}
+      />
     </div>
   );
 };

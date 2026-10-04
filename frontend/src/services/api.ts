@@ -14,7 +14,7 @@ import {
 
 // Create base Axios instance (ready for real backend URL)
 export const apiClient = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'https://api.salepro-warehouse.vn/v1',
+  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1',
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json',
@@ -23,7 +23,10 @@ export const apiClient = axios.create({
 
 // Request interceptor to attach JWT token
 apiClient.interceptors.request.use((config) => {
-  const token = localStorage.getItem('user_token');
+  const token =
+    localStorage.getItem('kv_auth_token') ||
+    localStorage.getItem('user_token') ||
+    localStorage.getItem('access_token');
   if (token && config.headers) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -71,12 +74,30 @@ export const api = {
       page?: number;
       limit?: number;
     }): Promise<{ products: ProductItem[]; total: number; page: number; totalPages: number }> => {
-      await delay(200);
       let list = getStored<ProductItem[]>(STORAGE_KEYS.PRODUCTS, initialMockProducts);
-      // Cleanse removed Anker 737 product from cache if present
-      if (list && list.some((p) => p.id === 'PRD-001' || p.code === 'SP-ANK-737')) {
-        list = list.filter((p) => p.id !== 'PRD-001' && p.code !== 'SP-ANK-737');
-        setStored(STORAGE_KEYS.PRODUCTS, list);
+      try {
+        const res = await apiClient.get('/products');
+        if (Array.isArray(res.data) && res.data.length > 0) {
+          list = res.data.map((p: any) => ({
+            id: p.id,
+            code: p.sku || p.code || p.id,
+            name: p.name,
+            category: p.category,
+            price: Number(p.salePrice ?? p.sale_price ?? 0),
+            originalPrice: Number(p.salePrice ?? p.sale_price ?? 0) * 1.1,
+            stock: Number(p.stock ?? 0),
+            unit: p.unit || 'Chiếc',
+            image: p.image || '/images/products/placeholder.jpg',
+            description: p.description || '',
+            rating: 4.8,
+            reviewsCount: 15,
+            isNew: false,
+            isHot: true,
+          }));
+          setStored(STORAGE_KEYS.PRODUCTS, list);
+        }
+      } catch {
+        // Fallback to cached products
       }
       if (!list || list.length === 0) {
         list = initialMockProducts;
@@ -207,8 +228,46 @@ export const api = {
       search?: string;
       staffId?: string;
     }): Promise<UserOrder[]> => {
-      await delay(250);
       let list = getStored<UserOrder[]>(STORAGE_KEYS.ORDERS, initialMockOrders);
+      try {
+        const res = await apiClient.get('/orders');
+        if (Array.isArray(res.data) && res.data.length > 0) {
+          list = res.data.map((o: any) => ({
+            id: o.id,
+            code: o.code,
+            customerId: o.customerId || o.customer_id,
+            customerName: o.customerName || o.customer_name,
+            customerPhone: o.customerPhone || o.customer_phone,
+            customerEmail: 'customer@warehouse.local',
+            customerAddress: o.customerAddress || o.customer_address || '',
+            items: (o.items || []).map((itm: any) => ({
+              productId: itm.productId || itm.product_id,
+              productName: itm.name,
+              productCode: itm.sku,
+              quantity: Number(itm.quantity || 1),
+              price: Number(itm.price || 0),
+              subtotal: Number(itm.subtotal || 0),
+            })),
+            subtotal: Number(o.subtotal || 0),
+            discount: Number(o.discount || 0),
+            tax: Number(o.tax || 0),
+            total: Number(o.total || 0),
+            paidAmount: Number(o.paidAmount ?? o.paid_amount ?? 0),
+            changeAmount: Number(o.changeAmount ?? o.change_amount ?? 0),
+            paymentMethod: o.paymentMethod || o.payment_method || 'transfer',
+            paymentStatus: o.paymentStatus || o.payment_status || 'paid',
+            status: o.status || 'pending',
+            staffId: o.staffId || o.staff_id || 'USR-004',
+            staffName: o.staffName || o.staff_name || '',
+            note: o.note || '',
+            createdAt: o.createdAt || (o.created_at ? o.created_at.replace('T', ' ').slice(0, 16) : new Date().toISOString().replace('T', ' ').slice(0, 16)),
+            updatedAt: o.updatedAt || (o.updated_at ? o.updated_at.replace('T', ' ').slice(0, 16) : new Date().toISOString().replace('T', ' ').slice(0, 16)),
+          }));
+          setStored(STORAGE_KEYS.ORDERS, list);
+        }
+      } catch {
+        // Fallback
+      }
       if (!list || list.length === 0) {
         list = initialMockOrders;
         setStored(STORAGE_KEYS.ORDERS, list);

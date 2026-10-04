@@ -1,81 +1,63 @@
-import datetime
+import sys
+import os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
-# Danh mục quy đổi đơn vị tính
-PRODUCT_UNITS = [
-    {"product_id": 101, "unit_name": "Thùng", "conversion_rate": 24.0, "is_active": True},
-    {"product_id": 101, "unit_name": "Lốc", "conversion_rate": 6.0, "is_active": True},
-    {"product_id": 101, "unit_name": "Lon", "conversion_rate": 1.0, "is_active": True}
-]
+from app.services.conversion_service import ConversionService  # Dòng cũ của mày từ dòng này trở đi...
+import pytest
+from datetime import datetime, timedelta
+from app.services.conversion_service import ConversionService
 
-# Sổ kho lưu trữ giao dịch
-WAREHOUSE_LEDGER = []
-
-def ghi_so_kho(ma_giao_dich: str, loai_giao_dich: str, product_id: int, unit_name: str, so_luong_nhap: float):
-    """Ghi sổ giao dịch và lưu snapshot hệ số quy đổi."""
-    don_vi = next((u for u in PRODUCT_UNITS if u["product_id"] == product_id and u["unit_name"] == unit_name and u["is_active"]), None)
-    if not don_vi:
-        return None
-
-    he_so = don_vi["conversion_rate"]
-    so_luong_co_so = so_luong_nhap * he_so
-
-    ban_ghi = {
-        "id": len(WAREHOUSE_LEDGER) + 1,
-        "ma_giao_dich": ma_giao_dich,
-        "loai_giao_dich": loai_giao_dich,
-        "product_id": product_id,
-        "don_vi_nhap": unit_name,
-        "so_luong_nhap": so_luong_nhap,
-        "he_so_quy_doi": he_so,
-        "so_luong_co_so": so_luong_co_so,
-        "ngay_tao": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    }
-    WAREHOUSE_LEDGER.append(ban_ghi)
-    return ban_ghi
-
-def lay_bao_cao_lich_su_giao_dich(product_id: int = None):
-    """
-    HÀM THỰC HIỆN YÊU CẦU SCRUM-392:
-    Trả về dữ liệu báo cáo gồm song song cả số lượng theo đơn vị nhập
-    và số lượng quy đổi về đơn vị cơ sở phục vụ hiển thị chứng từ, báo cáo.
-    """
-    ket_qua_bao_cao = []
+def test_full_warehouse_workflow():
+    # 1. Giả lập dữ liệu SKU với Versioning (SCRUM-394 & SCRUM-393)
+    time_v1 = datetime.utcnow() - timedelta(days=10)
+    time_v2 = datetime.utcnow() - timedelta(days=2)
     
-    for bg in WAREHOUSE_LEDGER:
-        if product_id is None or bg["product_id"] == product_id:
-            bao_cao_item = {
-                "ma_giao_dich": bg["ma_giao_dich"],
-                "loai_giao_dich": bg["loai_giao_dich"],
-                "hien_thi_don_hang": f"{bg['so_luong_nhap']} {bg['don_vi_nhap']}", # Hiển thị trên chứng từ nhập
-                "hien_thi_quy_doi": f"{bg['so_luong_co_so']} Lon (Đơn vị cơ sở)",  # Hiển thị trên báo cáo tồn kho
-                "chi_tiet": {
-                    "so_luong_nhap": bg["so_luong_nhap"],
-                    "don_vi_nhap": bg["don_vi_nhap"],
-                    "he_so_quy_doi": bg["he_so_quy_doi"],
-                    "so_luong_co_so": bg["so_luong_co_so"]
-                },
-                "ngay_tao": bg["ngay_tao"]
+    sku_data = {
+        "sku": "SKU_STING_RED",
+        "current_version": 2,
+        "versions": [
+            {
+                "version": 1,
+                "base_unit": "Lon",
+                "units": {"Thùng": 24.0, "Lốc": 6.0, "Lon": 1.0}, # Phiên bản cũ: 1 Thùng = 24 lon
+                "created_at": time_v1
+            },
+            {
+                "version": 2,
+                "base_unit": "Lon",
+                "units": {"Thùng": 30.0, "Lốc": 6.0, "Lon": 1.0}, # Phiên bản mới: 1 Thùng = 30 lon (đã sửa)
+                "created_at": time_v2
             }
-            ket_qua_bao_cao.append(bao_cao_item)
-            
-    return ket_qua_bao_cao
+        ]
+    }
+
+    # 2. TEST CASE 1: Kiểm tra tính toán giao dịch HIỆN TẠI dùng Version 2 (SCRUM-391 & SCRUM-392)
+    # Nhập 10 Thùng ở thời điểm hiện tại -> Phải ra 300 Lon
+    res_current = ConversionService.convert_to_base_quantity(
+        sku_data=sku_data, quantity=10, unit_name="Thùng"
+    )
+    assert res_current["base_quantity"] == 300.0
+    assert res_current["applied_version"] == 2
+    print("\n✅ PASS Test Case 1: Quy đổi giao dịch hiện tại chuẩn xác.")
+
+    # 3. TEST CASE 2: Kiểm tra khóa lịch sử QUÁ KHỨ dùng Version 1 (SCRUM-393)
+    # Giao dịch tạo cách đây 5 ngày (sau v1 nhưng trước v2) -> Phải giữ nguyên 1 Thùng = 24 lon (Tổng 240 lon)
+    past_transaction_time = datetime.utcnow() - timedelta(days=5)
+    res_past = ConversionService.convert_to_base_quantity(
+        sku_data=sku_data, quantity=10, unit_name="Thùng", transaction_time=past_transaction_time
+    )
+    assert res_past["base_quantity"] == 240.0
+    assert res_past["applied_version"] == 1
+    print("✅ PASS Test Case 2: Khóa lịch sử quy đổi không bị hỏng dữ liệu cũ.")
+
+    # 4. TEST CASE 3: Kiểm tra lỗi khi nhập Đơn vị tính không tồn tại
+    try:
+        ConversionService.convert_to_base_quantity(sku_data=sku_data, quantity=5, unit_name="Chai")
+        assert False, "Chưa bắt được lỗi đơn vị không hợp lệ"
+    except ValueError as e:
+        assert "không tồn tại" in str(e)
+        print("✅ PASS Test Case 3: Bắt lỗi validation đơn vị tính thành công.")
 
 if __name__ == "__main__":
-    print("--- KIỂM THỬ TÍNH TOÁN VÀ HIỂN THỊ BÁO CÁO QUA SCRUM-392 ---")
-    
-    # 1. Phát sinh các giao dịch
-    ghi_so_kho("NK001", "NHAP_KHO", 101, "Thùng", 10) # 10 Thùng = 240 Lon
-    ghi_so_kho("XK001", "XUAT_KHO", 101, "Lốc", 5)    # 5 Lốc = 30 Lon
-    ghi_so_kho("NK002", "NHAP_KHO", 101, "Lon", 50)   # 50 Lon = 50 Lon
-
-    # 2. Lấy dữ liệu báo cáo lịch sử giao dịch (SCRUM-392)
-    danh_sach_bao_cao = lay_bao_cao_lich_su_giao_dich(product_id=101)
-
-    # 3. Hiển thị dạng bảng dữ liệu trả về cho Frontend/Báo cáo
-    print("\n📋 KẾT QUẢ TRẢ VỀ DỮ LIỆU HIỂN THỊ CHỨNG TỪ & BÁO CÁO:")
-    print("-" * 75)
-    print(f"{'MÃ GD':<10} | {'LOẠI GD':<10} | {'ĐƠN VỊ NHẬP':<15} | {'QUY ĐỔI CƠ SỞ':<25}")
-    print("-" * 75)
-    for item in danh_sach_bao_cao:
-        print(f"{item['ma_giao_dich']:<10} | {item['loai_giao_dich']:<10} | {item['hien_thi_don_hang']:<15} | {item['hien_thi_quy_doi']:<25}")
-    print("-" * 75)
+    test_full_warehouse_workflow()
+    print("\n🎉 TẤT CẢ TEST CASES ĐÃ ĐẠT (PASSED) 100%!")

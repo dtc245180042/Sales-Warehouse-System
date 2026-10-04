@@ -1,85 +1,85 @@
-from fastapi import APIRouter, HTTPException
-from typing import List
-from app.schemas.warehouse import SKUUnitCreateRequest, SKUUnitUpdateRequest
+from fastapi import APIRouter, HTTPException, status
+from datetime import datetime
+from typing import Dict
 
-router = APIRouter()
+from app.schemas.warehouse import SKUUnitUpdateRequest, ConvertQuantityRequest
+from app.services.conversion_service import ConversionService
 
-# Mock Database lưu trữ danh sách đơn vị tính theo SKU
-sku_configs_db = {}
+router = APIRouter(prefix="/api/v1/warehouse", tags=["Warehouse SKU Units"])
 
-# 1. API Khai báo mới (POST)
-@router.post("/sku-units")
-def create_sku_unit_config(data: SKUUnitCreateRequest):
-    """Khai báo danh sách đơn vị tính và hệ số quy đổi cho SKU"""
-    sku = data.sku
+# Database giả lập lưu trữ cấu hình SKU kèm Versioning
+sku_configs_db: Dict[str, dict] = {}
+
+@router.post("/sku-units/{sku}")
+def update_sku_unit_config(sku: str, data: SKUUnitUpdateRequest):
+    """
+    SCRUM-394 & SCRUM-393: Tạo mới hoặc cập nhật đơn vị tính cho SKU.
+    Mỗi lần sửa hệ số sẽ TẠO VERSION MỚI thay vì ghi đè lên version cũ.
+    """
+    if sku not in sku_configs_db:
+        sku_configs_db[sku] = {
+            "sku": sku,
+            "current_version": 0,
+            "versions": []
+        }
     
-    units = [{"unit_name": data.base_unit, "conversion_rate": 1.0, "is_base": True}]
-    for item in data.conversions:
-        if item.unit_name != data.base_unit:
-            units.append({
-                "unit_name": item.unit_name,
-                "conversion_rate": item.conversion_rate,
-                "is_base": False
-            })
-            
-    sku_configs_db[sku] = {
-        "sku": sku,
+    # Tăng version lên để lưu lịch sử
+    new_version = sku_configs_db[sku]["current_version"] + 1
+    sku_configs_db[sku]["current_version"] = new_version
+    
+    # Đảm bảo đơn vị cơ sở luôn có hệ số quy đổi là 1
+    new_units = data.units.copy()
+    new_units[data.base_unit] = 1.0
+
+    version_entry = {
+        "version": new_version,
         "base_unit": data.base_unit,
-        "units": units
+        "units": new_units,
+        "created_at": datetime.utcnow()
     }
+    
+    sku_configs_db[sku]["versions"].append(version_entry)
     
     return {
         "success": True,
-        "message": f"Khai báo cấu hình đơn vị tính cho SKU {sku} thành công!",
-        "data": sku_configs_db[sku]
+        "message": f"Cập nhật đơn vị tính cho SKU {sku} thành công (Phiên bản {new_version})!",
+        "data": version_entry
     }
 
-# 2. API Tra cứu cấu hình theo SKU (GET)
 @router.get("/sku-units/{sku}")
 def get_sku_unit_config(sku: str):
-    """Tra cứu danh sách đơn vị tính quy đổi của SKU"""
-    if sku not in sku_configs_db:
-        raise HTTPException(status_code=404, detail=f"Không tìm thấy cấu hình đơn vị tính cho SKU {sku}")
+    """
+    SCRUM-395: Tra cứu cấu hình đơn vị tính hiện tại của SKU
+    """
+    if sku not in sku_configs_db or not sku_configs_db[sku]["versions"]:
+        raise HTTPException(status_code=404, detail="Không tìm thấy cấu hình SKU")
+    
+    latest_version = sku_configs_db[sku]["versions"][-1]
     return {
         "success": True,
-        "data": sku_configs_db[sku]
-    }
-
-# 3. API Tra cứu tất cả các SKU đã cấu hình (GET) - Phục vụ màn hình quản trị
-@router.get("/sku-units")
-def list_all_sku_unit_configs():
-    """Lấy toàn bộ danh sách cấu hình đơn vị tính phục vụ màn trị"""
-    return {
-        "success": True,
-        "data": list(sku_configs_db.values())
-    }
-
-# 4. API Cập nhật/Sửa đơn vị tính của SKU (PUT)
-@router.put("/sku-units/{sku}")
-def update_sku_unit_config(sku: str, data: SKUUnitUpdateRequest):
-    """Cập nhật/sửa danh sách đơn vị tính và hệ số quy đổi của SKU"""
-    if sku not in sku_configs_db:
-        raise HTTPException(status_code=404, detail=f"Không tìm thấy SKU {sku} để cập nhật")
-    
-    current_base = data.base_unit if data.base_unit else sku_configs_db[sku]["base_unit"]
-    
-    new_units = [{"unit_name": current_base, "conversion_rate": 1.0, "is_base": True}]
-    for item in data.conversions:
-        if item.unit_name != current_base:
-            new_units.append({
-                "unit_name": item.unit_name,
-                "conversion_rate": item.conversion_rate,
-                "is_base": False
-            })
-            
-    sku_configs_db[sku] = {
         "sku": sku,
-        "base_unit": current_base,
-        "units": new_units
+        "current_version": sku_configs_db[sku]["current_version"],
+        "config": latest_version
     }
-    
-    return {
-        "success": True,
-        "message": f"Cập nhật đơn vị tính cho SKU {sku} thành công!",
-        "data": sku_configs_db[sku]
-    }
+
+@router.post("/convert-quantity")
+def convert_quantity(request: ConvertQuantityRequest):
+    """
+    SCRUM-391 & SCRUM-392: API tính toán và quy đổi số lượng cho chứng từ/báo cáo
+    """
+    if request.sku not in sku_configs_db:
+        raise HTTPException(status_code=404, detail="SKU chưa được khai báo đơn vị tính")
+        
+    try:
+        result = ConversionService.convert_to_base_quantity(
+            sku_data=sku_configs_db[request.sku],
+            quantity=request.quantity,
+            unit_name=request.unit_name,
+            transaction_time=request.transaction_time
+        )
+        return {
+            "success": True,
+            "data": result
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))

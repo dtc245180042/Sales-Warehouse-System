@@ -1,29 +1,13 @@
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import Dict, Optional
+from datetime import datetime
 
-# --- Model đơn vị tính ---
-class UnitConversionCreate(BaseModel):
-    unit_name: str
-    conversion_rate: float
-
-# --- Request khai báo mới ---
-class SKUUnitCreateRequest(BaseModel):
-    sku: str
-    base_unit: str
-    conversions: List[UnitConversionCreate]
-
-# --- Request cập nhật ---
 class SKUUnitUpdateRequest(BaseModel):
-    base_unit: Optional[str] = None
-    conversions: List[UnitConversionCreate]
-
-# --- Response trả về dữ liệu ---
-class UnitConversionResponse(BaseModel):
-    unit_name: str
-    conversion_rate: float
-    is_base: bool
-
-class SKUUnitResponse(BaseModel):
-    sku: str
     base_unit: str
-    units: List[UnitConversionResponse]
+    units: Dict[str, float]  # Ví dụ: {"Thùng": 24, "Lốc": 6, "Lon": 1}
+
+class ConvertQuantityRequest(BaseModel):
+    sku: str
+    quantity: float
+    unit_name: str
+    transaction_time: Optional[datetime] = None

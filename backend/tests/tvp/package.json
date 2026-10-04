@@ -1,9 +1,0 @@
-{
-  "name": "sales-warehouse-tvp-tests",
-  "private": true,
-  "description": "Dependencies for standalone TVP JavaScript examples",
-  "dependencies": {
-    "bcryptjs": "^3.0.2",
-    "jsonwebtoken": "^9.0.2"
-  }
-}

@@ -1,4 +1,4 @@
-﻿# THƯ MỤC: backend/app/core/
+# THƯ MỤC: backend/app/core/
 MỤC ĐÍCH:
 - Chứa các cấu hình toàn cục và các tiện ích dùng chung của hệ thống.
 - Cấu hình biến môi trường (config.py / settings).

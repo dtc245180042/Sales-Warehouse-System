@@ -18,10 +18,25 @@ import { Dashboard } from '../pages/dashboard/Dashboard';
 import { UserManagement } from '../pages/users/UserManagement';
 import { UserImportPage } from '../pages/users/UserImportPage';
 import { Settings } from '../pages/settings/Settings';
+import { Profile } from '../pages/profile/Profile';
 import { PriceListManagement } from '../pages/sales/PriceListManagement';
 import { CategoryManagement } from '../pages/categories/CategoryManagement';
 
-// All 7 business roles allowed in Sprint 1 backoffice
+// Supplier Management Pages (SCRUM-217)
+import { SupplierList } from '../pages/suppliers/SupplierList';
+import { SupplierDetail } from '../pages/suppliers/SupplierDetail';
+
+// Sprint 2 Pages - Activity Log (SCRUM-212)
+import ActivityLogPage from '../pages/activitylog/ActivityLogPage';
+
+// Product Catalog Pages (Sprint 2: SCRUM-220, SCRUM-380, SCRUM-381, SCRUM-215, SCRUM-216)
+import { ProductList } from '../pages/products/ProductList';
+import { ProductDetail } from '../pages/products/ProductDetail';
+import { ProductCreate } from '../pages/products/ProductCreate';
+import { ProductEdit } from '../pages/products/ProductEdit';
+import { ProductUnitPage } from '../pages/products/ProductUnitPage';
+
+// All 7 business roles allowed in Sprint 1 & 2 backoffice
 const ALL_BACKOFFICE_ROLES: UserRole[] = [
   'Admin',
   'SalesManager',
@@ -130,12 +145,102 @@ export const AppRoutes: React.FC = () => {
           }
         />
 
+        {/* Quản lý Nhà cung cấp (SCRUM-217) */}
+        <Route
+          path="/suppliers"
+          element={
+            <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
+              <SupplierList />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/suppliers/:id"
+          element={
+            <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
+              <SupplierDetail />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Hồ sơ cá nhân - Xem và cập nhật họ tên, SĐT Việt Nam - Mọi vai trò (SCRUM-210, SCRUM-361) */}
+        <Route
+          path="/profile"
+          element={
+            <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
+              <Profile />
+            </ProtectedRoute>
+          }
+        />
+
         {/* Cài đặt & Bảo mật tài khoản / Đổi mật khẩu - Mọi vai trò (SCRUM-201) */}
         <Route
           path="/settings"
           element={
             <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
               <Settings />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Nhật ký thao tác - Chỉ Admin (Sprint 2 - SCRUM-212) */}
+        <Route
+          path="/activity-log"
+          element={
+            <ProtectedRoute allowedRoles={['Admin']}>
+              <ActivityLogPage />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* ============================================================ */}
+        {/* DANH MỤC SẢN PHẨM (SCRUM-220, SCRUM-380, SCRUM-381)          */}
+        {/* ============================================================ */}
+        <Route
+          path="/products"
+          element={
+            <ProtectedRoute allowedRoles={['Admin', 'SalesManager', 'SalesStaff', 'WarehouseManager', 'WarehouseStaff', 'Director', 'Manager', 'Staff']}>
+              <ProductList />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/products/new"
+          element={
+            <ProtectedRoute allowedRoles={['Admin', 'SalesManager', 'WarehouseManager', 'Director', 'Manager']}>
+              <ProductCreate />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/products/create"
+          element={
+            <ProtectedRoute allowedRoles={['Admin', 'SalesManager', 'WarehouseManager', 'Director', 'Manager']}>
+              <ProductCreate />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/products/units"
+          element={
+            <ProtectedRoute allowedRoles={['Admin', 'SalesManager', 'WarehouseManager', 'Director', 'Manager']}>
+              <ProductUnitPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/products/:id"
+          element={
+            <ProtectedRoute allowedRoles={['Admin', 'SalesManager', 'SalesStaff', 'WarehouseManager', 'WarehouseStaff', 'Director', 'Manager', 'Staff']}>
+              <ProductDetail />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/products/:id/edit"
+          element={
+            <ProtectedRoute allowedRoles={['Admin', 'SalesManager', 'WarehouseManager', 'Director', 'Manager']}>
+              <ProductEdit />
             </ProtectedRoute>
           }
         />

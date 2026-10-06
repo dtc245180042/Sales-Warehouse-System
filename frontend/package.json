@@ -8,7 +8,8 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test": "node scripts/test-rbac.js"
+    "test": "node scripts/test-rbac.js",
+    "test:units": "node scripts/test-unit-conversion-history.js"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",

@@ -63,8 +63,8 @@ apiClient.interceptors.response.use(
       return Promise.reject(enhancedError);
     }
 
-    //kiểm tra netwwork localhost hoặc trong lan
-    const networkError = new Error('Không thể kết nối đến máy chủ Backend (Port 8000). Vui lòng kiểm tra file run.bat.');
+    // Kiểm tra kết nối mạng hoặc server không phản hồi
+    const networkError = new Error('Không thể kết nối đến máy chủ. Vui lòng kiểm tra kết nối mạng hoặc thử lại sau.');
     (networkError as any).status = 503;
     return Promise.reject(networkError);
   }

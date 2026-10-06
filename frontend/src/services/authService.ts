@@ -1,6 +1,7 @@
 import { User, UserRole } from '../types/User';
 import { apiClient } from '../api/client';
 import { getStorageItem, setStorageItem, removeStorageItem } from './storage';
+import { validateVNPhoneNumber } from '../utils/phoneUtils';
 
 const STORAGE_KEYS = {
   CURRENT_USER: 'kv_current_user',
@@ -151,6 +152,46 @@ export const authService = {
       new_password: newPassword,
     });
     return res.data?.message || 'Đặt lại mật khẩu thành công.';
+  },
+
+  updateProfile: async (data: { name: string; phone: string; avatar?: string }): Promise<User> => {
+    const trimmedName = data.name ? data.name.trim() : '';
+    if (!trimmedName || trimmedName.length < 2) {
+      throw new Error('Họ và tên không được để trống (tối thiểu 2 ký tự).');
+    }
+
+    const phoneValidation = validateVNPhoneNumber(data.phone);
+    if (!phoneValidation.valid) {
+      throw new Error(phoneValidation.message || 'Số điện thoại không hợp lệ.');
+    }
+
+    try {
+      const res = await apiClient.put('/profile/me', {
+        full_name: trimmedName,
+        phone_number: phoneValidation.normalized || data.phone.trim(),
+        avatar_url: data.avatar,
+      });
+      if (res.data) {
+        const user = mapBackendUserToFrontend(res.data);
+        setStorageItem(STORAGE_KEYS.CURRENT_USER, user);
+        return user;
+      }
+    } catch {
+      // Fallback local
+    }
+
+    const currentUser = authService.getCurrentUser();
+    if (!currentUser) throw new Error('Chưa đăng nhập');
+
+    const updatedUser: User = {
+      ...currentUser,
+      name: trimmedName,
+      phone: phoneValidation.normalized || data.phone.trim(),
+      ...(data.avatar ? { avatar: data.avatar } : {}),
+    };
+
+    setStorageItem(STORAGE_KEYS.CURRENT_USER, updatedUser);
+    return updatedUser;
   },
 
   getRememberedEmail: (): string => {

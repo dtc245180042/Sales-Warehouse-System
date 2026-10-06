@@ -20,7 +20,10 @@ export interface StockInItem {
   productId: string;
   sku: string;
   name: string;
-  quantity: number;
+  quantity: number;       // Số lượng theo đơn vị nhập
+  unitName?: string;      // Đơn vị nhập (VD: Thùng, Lốc, Chiếc)
+  unitRatio?: number;     // Hệ số quy đổi (1 unitName = unitRatio đơn vị cơ sở)
+  baseQty?: number;       // Số lượng quy đổi về đơn vị cơ sở
   costPrice: number;
   subtotal: number;
 }
@@ -46,7 +49,10 @@ export interface StockOutItem {
   sku: string;
   name: string;
   currentStock: number;
-  quantity: number;
+  quantity: number;       // Số lượng theo đơn vị xuất
+  unitName?: string;      // Đơn vị xuất (VD: Thùng, Lốc, Chiếc)
+  unitRatio?: number;     // Hệ số quy đổi (1 unitName = unitRatio đơn vị cơ sở)
+  baseQty?: number;       // Số lượng quy đổi về đơn vị cơ sở
   costPrice: number;
   subtotal: number;
 }

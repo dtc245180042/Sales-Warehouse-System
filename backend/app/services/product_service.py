@@ -258,3 +258,62 @@ class ProductService:
         db.commit()
         db.refresh(product)
         return product
+
+
+def ensure_seed_products(db: Session):
+    """Tự động chèn danh mục sản phẩm mẫu nếu bảng products chưa có dữ liệu."""
+    if db.query(Product).count() == 0:
+        seed_products_data = [
+            {
+                "sku": "IP15P-128-TI",
+                "name": "iPhone 15 Pro 128GB Titanium",
+                "category": "Điện Thoại & Phụ Kiện",
+                "unit": "Chiếc",
+                "packaging_spec": "1 máy/hộp",
+                "cost_price": 24000000.0,
+                "price": 28990000.0,
+                "status": ProductStatus.ACTIVE,
+                "is_active": True,
+                "has_transactions": True,
+            },
+            {
+                "sku": "SS-S24U-256",
+                "name": "Samsung Galaxy S24 Ultra 256GB",
+                "category": "Điện Thoại & Phụ Kiện",
+                "unit": "Chiếc",
+                "packaging_spec": "1 máy/hộp",
+                "cost_price": 25000000.0,
+                "price": 29990000.0,
+                "status": ProductStatus.ACTIVE,
+                "is_active": True,
+                "has_transactions": True,
+            },
+            {
+                "sku": "MBP-14-M3",
+                "name": "MacBook Pro 14 M3 8GB 512GB",
+                "category": "Laptop & Máy Tính",
+                "unit": "Chiếc",
+                "packaging_spec": "1 máy/thùng",
+                "cost_price": 35000000.0,
+                "price": 39990000.0,
+                "status": ProductStatus.ACTIVE,
+                "is_active": True,
+                "has_transactions": False,
+            },
+            {
+                "sku": "SN-WH1000XM5-BK",
+                "name": "Tai nghe Sony WH-1000XM5 Black",
+                "category": "Thiết Bị Âm Thanh",
+                "unit": "Chiếc",
+                "packaging_spec": "1 tai nghe/hộp",
+                "cost_price": 6200000.0,
+                "price": 7990000.0,
+                "status": ProductStatus.ACTIVE,
+                "is_active": True,
+                "has_transactions": False,
+            },
+        ]
+        for p_data in seed_products_data:
+            db.add(Product(**p_data))
+        db.commit()
+

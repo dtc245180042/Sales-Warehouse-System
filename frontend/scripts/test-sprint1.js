@@ -152,7 +152,7 @@ assert(afterLogout.token === null && afterLogout.user === null, 'TC-199-04', 'Sa
 // ── SCRUM-200 ───────────────────────────────────────────
 suite('SCRUM-200: Dat lai mat khau qua email');
 
-function mockForgotPwd() { return { msg: 'Neu email ton tai, huong dan da duoc gui.' }; }
+function mockForgotPwd(email) { void email; return { msg: 'Neu email ton tai, huong dan da duoc gui.' }; }
 assert(mockForgotPwd('admin@khovanpro.vn').msg === mockForgotPwd('khong_ton_tai@test.vn').msg, 'TC-200-01+02', 'Email ton tai/khong ton tai → cung 1 thong bao (chong liet ke tai khoan)');
 const resetToken = `reset_token_${Date.now()}`;
 usedResetTokens.push(resetToken);
@@ -222,7 +222,7 @@ assert(whStaff.warehouse && whStaff.warehouse.length > 0, 'TC-203-05', 'Warehous
 // ── SCRUM-204 ───────────────────────────────────────────
 suite('SCRUM-204: Trang bao loi dung chung');
 
-function getErrorConfig(code, role) {
+function getErrorConfig(code, role, _pathname) {
   const is403 = code === '403'; const is500 = code === '500';
   return {
     title: is403 ? '403-title' : is500 ? '500-title' : '404-title',

@@ -19,9 +19,11 @@ function mapApiProduct(p: any): Product {
     stock: Number(p.stock ?? 0),
     minStock: Number(p.minStock ?? p.min_stock ?? 5),
     unit: p.unit || 'Chiếc',
+    packagingSpecification: p.packagingSpecification || p.packaging_specification || '1 chiếc/hộp',
     image: p.image || '/images/products/placeholder.jpg',
     description: p.description || '',
     status: p.status || 'active',
+    hasTransactions: Boolean(p.hasTransactions ?? p.has_transactions ?? false),
     createdAt: p.createdAt || (p.created_at ? p.created_at.split('T')[0] : new Date().toISOString().split('T')[0]),
     updatedAt: p.updatedAt || (p.updated_at ? p.updated_at.split('T')[0] : new Date().toISOString().split('T')[0]),
   };
@@ -56,9 +58,16 @@ export const productService = {
   },
 
   create: async (data: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>): Promise<Product> => {
+    const cleanSku = data.sku.trim().toUpperCase();
+    const products = getStorageItem<Product[]>(STORAGE_KEY, initialProducts);
+    const existingSku = products.find((p) => p.sku.trim().toUpperCase() === cleanSku);
+    if (existingSku) {
+      throw new Error(`Mã SKU "${cleanSku}" đã tồn tại trong danh mục sản phẩm.`);
+    }
+
     try {
       const payload = {
-        sku: data.sku,
+        sku: cleanSku,
         barcode: data.barcode,
         name: data.name,
         category: data.category,
@@ -69,6 +78,7 @@ export const productService = {
         stock: data.stock,
         min_stock: data.minStock,
         unit: data.unit,
+        packaging_specification: data.packagingSpecification || '1 chiếc/hộp',
         image: data.image,
         description: data.description,
         status: data.status,
@@ -80,9 +90,11 @@ export const productService = {
       return created;
     } catch (err) {
       console.warn('[productService] Backend error, fallback to local creation:', err);
-      const products = getStorageItem<Product[]>(STORAGE_KEY, initialProducts);
       const newProduct: Product = {
         ...data,
+        sku: cleanSku,
+        packagingSpecification: data.packagingSpecification || '1 chiếc/hộp',
+        hasTransactions: false,
         id: `PRD-${String(products.length + 1).padStart(3, '0')}`,
         createdAt: new Date().toISOString().split('T')[0],
         updatedAt: new Date().toISOString().split('T')[0],
@@ -93,6 +105,16 @@ export const productService = {
   },
 
   update: async (id: string, data: Partial<Product>): Promise<Product> => {
+    if (data.sku) {
+      const cleanSku = data.sku.trim().toUpperCase();
+      const products = getStorageItem<Product[]>(STORAGE_KEY, initialProducts);
+      const existingSku = products.find((p) => p.id !== id && p.sku.trim().toUpperCase() === cleanSku);
+      if (existingSku) {
+        throw new Error(`Mã SKU "${cleanSku}" đã được sử dụng bởi sản phẩm khác.`);
+      }
+      data.sku = cleanSku;
+    }
+
     try {
       const payload: any = {};
       if (data.sku !== undefined) payload.sku = data.sku;
@@ -106,6 +128,7 @@ export const productService = {
       if (data.stock !== undefined) payload.stock = data.stock;
       if (data.minStock !== undefined) payload.min_stock = data.minStock;
       if (data.unit !== undefined) payload.unit = data.unit;
+      if (data.packagingSpecification !== undefined) payload.packaging_specification = data.packagingSpecification;
       if (data.image !== undefined) payload.image = data.image;
       if (data.description !== undefined) payload.description = data.description;
       if (data.status !== undefined) payload.status = data.status;
@@ -138,17 +161,33 @@ export const productService = {
   },
 
   delete: async (id: string): Promise<boolean> => {
+    const products = await productService.getAll();
+    const target = products.find((p) => p.id === id);
+    if (target?.hasTransactions) {
+      throw new Error(
+        `Sản phẩm "${target.name}" (${target.sku}) đã phát sinh giao dịch, không thể xóa. Vui lòng chuyển sang ngừng kinh doanh.`
+      );
+    }
+
     try {
       await apiClient.delete(`/products/${encodeURIComponent(id)}`);
     } catch (err) {
       console.warn('[productService] Backend error, deleting locally:', err);
     }
-    const products = getStorageItem<Product[]>(STORAGE_KEY, initialProducts);
-    setStorageItem(STORAGE_KEY, products.filter((p) => p.id !== id));
+    const cached = getStorageItem<Product[]>(STORAGE_KEY, initialProducts);
+    setStorageItem(STORAGE_KEY, cached.filter((p) => p.id !== id));
     return true;
   },
 
   bulkDelete: async (ids: string[]): Promise<boolean> => {
+    const products = await productService.getAll();
+    const hasTx = products.filter((p) => ids.includes(p.id) && p.hasTransactions);
+    if (hasTx.length > 0) {
+      throw new Error(
+        `Có ${hasTx.length} sản phẩm đã phát sinh giao dịch, không thể xóa. Vui lòng chuyển sang ngừng kinh doanh.`
+      );
+    }
+
     for (const id of ids) {
       try {
         await apiClient.delete(`/products/${encodeURIComponent(id)}`);
@@ -156,9 +195,13 @@ export const productService = {
         console.warn(e);
       }
     }
-    const products = getStorageItem<Product[]>(STORAGE_KEY, initialProducts);
-    setStorageItem(STORAGE_KEY, products.filter((p) => !ids.includes(p.id)));
+    const cached = getStorageItem<Product[]>(STORAGE_KEY, initialProducts);
+    setStorageItem(STORAGE_KEY, cached.filter((p) => !ids.includes(p.id)));
     return true;
+  },
+
+  deactivateProduct: async (id: string): Promise<Product> => {
+    return productService.update(id, { status: 'inactive' });
   },
 
   updateStock: async (id: string, delta: number): Promise<Product> => {

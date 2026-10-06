@@ -45,7 +45,7 @@ export const OrdersPage: React.FC = () => {
   const filteredOrders = useMemo(() => {
     return orders.filter((order) => {
       const matchesSearch =
-        order.orderNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (order.orderNumber || order.id || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
         order.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
         order.customerPhone.includes(searchTerm);
 
@@ -288,6 +288,8 @@ export const OrdersPage: React.FC = () => {
           <Pagination
             currentPage={currentPage}
             totalPages={totalPages}
+            totalItems={filteredOrders.length}
+            pageSize={itemsPerPage}
             onPageChange={setCurrentPage}
           />
         </div>

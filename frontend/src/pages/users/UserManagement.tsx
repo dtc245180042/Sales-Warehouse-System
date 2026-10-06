@@ -32,6 +32,7 @@ import { TerritorySelector } from '../../components/common/TerritorySelector';
 import { User, UserRole, UserStatus } from '../../types/User';
 import { useToast } from '../../contexts/ToastContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { validateVNPhoneNumber } from '../../utils/phoneUtils';
 
 const WAREHOUSE_OPTIONS = [
   'Kho Tổng Hà Nội',
@@ -63,6 +64,7 @@ export const UserManagement: React.FC = () => {
   // Add / Edit Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [phoneError, setPhoneError] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -119,6 +121,7 @@ export const UserManagement: React.FC = () => {
 
   const handleOpenCreate = () => {
     setEditingUser(null);
+    setPhoneError(null);
     setFormData({
       name: '',
       email: '',
@@ -136,6 +139,7 @@ export const UserManagement: React.FC = () => {
 
   const handleOpenEdit = (u: User) => {
     setEditingUser(u);
+    setPhoneError(null);
     const assignedRoles = u.roles && u.roles.length > 0 ? u.roles : [u.role];
     setFormData({
       name: u.name,
@@ -272,7 +276,7 @@ export const UserManagement: React.FC = () => {
           ? 'Địa chỉ email này đã được sử dụng bởi một tài khoản khác.'
           : 'Tên đăng nhập này đã tồn tại trong hệ thống. Vui lòng chọn tên khác.';
       } else if (rawMsg.includes('Network Error') || rawMsg.includes('503') || rawMsg.includes('ERR_CONNECTION_REFUSED')) {
-        errorMsg = 'Không thể kết nối đến máy chủ Backend (Port 8000). Vui lòng kiểm tra lại dịch vụ.';
+        errorMsg = 'Không thể kết nối đến máy chủ. Vui lòng kiểm tra kết nối mạng hoặc thử lại sau.';
       } else if (rawMsg.includes('Request failed with status code 400')) {
         errorMsg = 'Dữ liệu không hợp lệ hoặc thông tin tài khoản đã tồn tại trên hệ thống.';
       } else if (rawMsg.includes('Request failed with status code 401')) {
@@ -357,7 +361,7 @@ export const UserManagement: React.FC = () => {
       if (rawMsg.includes('không tồn tại')) {
         friendlyMsg = `Không tìm thấy tài khoản với email hoặc tên "${u.email}" trên hệ thống.`;
       } else if (rawMsg.includes('Network Error') || rawMsg.includes('503') || rawMsg.includes('ERR_CONNECTION_REFUSED')) {
-        friendlyMsg = 'Không thể kết nối đến máy chủ Backend (Port 8000). Vui lòng kiểm tra lại dịch vụ.';
+        friendlyMsg = 'Không thể kết nối đến máy chủ. Vui lòng kiểm tra kết nối mạng hoặc thử lại sau.';
       } else if (rawMsg) {
         friendlyMsg = rawMsg;
       }
@@ -675,25 +679,32 @@ export const UserManagement: React.FC = () => {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
-                <span>Số điện thoại</span>
-                <span className="text-[11px] text-slate-400 font-mono">
-                  {formData.phone ? `${formData.phone.length}/10 số` : '10 số'}
-                </span>
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                Số điện thoại (Việt Nam)
               </label>
               <input
                 type="tel"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                maxLength={10}
                 value={formData.phone}
                 onChange={(e) => {
-                  const digits = e.target.value.replace(/\D/g, '').slice(0, 10);
-                  setFormData({ ...formData, phone: digits });
+                  const val = e.target.value;
+                  setFormData({ ...formData, phone: val });
+                  if (val.trim()) {
+                    const check = validateVNPhoneNumber(val);
+                    setPhoneError(check.valid ? null : check.message || 'Số điện thoại không hợp lệ.');
+                  } else {
+                    setPhoneError(null);
+                  }
                 }}
-                placeholder="Nhập 10 chữ số (ví dụ: 0901234567)"
-                className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-indigo-500"
+                placeholder="Ví dụ: 0912345678"
+                className={`w-full px-3 py-2 rounded-xl border text-sm font-mono focus:ring-2 ${
+                  phoneError
+                    ? 'border-rose-500 bg-rose-50/50 dark:bg-rose-950/20 text-rose-900 focus:ring-rose-500'
+                    : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-indigo-500'
+                }`}
               />
+              {phoneError && (
+                <p className="text-xs text-rose-500 mt-1 font-medium">{phoneError}</p>
+              )}
             </div>
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
@@ -834,7 +845,7 @@ export const UserManagement: React.FC = () => {
             <Button variant="secondary" type="button" onClick={() => setIsModalOpen(false)}>
               Hủy
             </Button>
-            <Button variant="primary" type="submit">
+            <Button variant="primary" type="submit" disabled={!!phoneError}>
               {editingUser ? 'Lưu thay đổi' : 'Tạo tài khoản & Gửi email kích hoạt'}
             </Button>
           </div>
@@ -956,7 +967,7 @@ export const UserManagement: React.FC = () => {
         title="Mở Khóa Tài Khoản"
         message={`Bạn có chắc chắn muốn mở khóa tài khoản cho ${unlockingUser?.name}? Nhân sự sẽ được khôi phục quyền đăng nhập và tạo đơn theo quyền hạn phân bổ.`}
         confirmText="Mở khóa tài khoản"
-        variant="primary"
+        variant="info"
       />
 
       {/* Delete User Confirmation */}

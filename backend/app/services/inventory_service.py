@@ -4,8 +4,24 @@ from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
 from app.models.inventory import StockReceipt, StockReceiptItem, InventoryHistory
 from app.models.product import Product
+from app.models.product_stock_profile import ProductStockProfile
 from app.schemas.inventory import StockReceiptCreate
 from app.services.product_service import ensure_seed_products
+
+
+def _get_or_create_stock_profile(db: Session, product: Product, default_stock: int = 0) -> ProductStockProfile:
+    profile = db.query(ProductStockProfile).filter(ProductStockProfile.product_id == product.id).first()
+    if not profile:
+        profile = ProductStockProfile(
+            product_id=product.id,
+            sku=product.sku,
+            stock=default_stock,
+            min_stock=10,
+            warehouse="Kho Tổng Hà Nội"
+        )
+        db.add(profile)
+        db.flush()
+    return profile
 
 
 def get_stock_in_receipts(db: Session) -> List[StockReceipt]:
@@ -44,14 +60,21 @@ def create_stock_in_receipt(db: Session, receipt_in: StockReceiptCreate) -> Stoc
         receipt.items.append(StockReceiptItem(**itm.model_dump()))
 
         # Tăng tồn kho sản phẩm
-        prod = db.query(Product).filter(Product.id == itm.product_id).first()
+        prod = None
+        str_pid = str(itm.product_id).strip()
+        if str_pid.isdigit():
+            prod = db.query(Product).filter(Product.id == int(str_pid)).first()
+        if not prod and itm.sku:
+            prod = db.query(Product).filter(Product.sku == itm.sku).first()
+
         new_balance = itm.quantity
         if prod:
-            prod.stock += itm.quantity
-            new_balance = prod.stock
-            if prod.stock > prod.min_stock:
+            stock_profile = _get_or_create_stock_profile(db, prod, default_stock=0)
+            stock_profile.stock += itm.quantity
+            new_balance = stock_profile.stock
+            if stock_profile.stock > stock_profile.min_stock:
                 prod.status = "active"
-            elif prod.stock > 0:
+            elif stock_profile.stock > 0:
                 prod.status = "low_stock"
 
         # Ghi thẻ kho (Inventory History)
@@ -81,12 +104,20 @@ def create_stock_out_receipt(db: Session, receipt_in: StockReceiptCreate) -> Sto
     ensure_seed_products(db)
     # Kiểm tra tồn kho trước khi xuất
     for itm in receipt_in.items:
-        prod = db.query(Product).filter(Product.id == itm.product_id).first()
-        if prod and prod.stock < itm.quantity:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Sản phẩm '{prod.name}' không đủ tồn kho để xuất (Còn {prod.stock}, yêu cầu {itm.quantity})."
-            )
+        prod = None
+        str_pid = str(itm.product_id).strip()
+        if str_pid.isdigit():
+            prod = db.query(Product).filter(Product.id == int(str_pid)).first()
+        if not prod and itm.sku:
+            prod = db.query(Product).filter(Product.sku == itm.sku).first()
+
+        if prod:
+            stock_profile = _get_or_create_stock_profile(db, prod, default_stock=100)
+            if stock_profile.stock < itm.quantity:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Sản phẩm '{prod.name}' không đủ tồn kho để xuất (Còn {stock_profile.stock}, yêu cầu {itm.quantity})."
+                )
 
     count = db.query(StockReceipt).filter(StockReceipt.type == "out").count() + 1
     receipt_id = f"STK-OUT-{str(count).zfill(3)}"
@@ -115,14 +146,21 @@ def create_stock_out_receipt(db: Session, receipt_in: StockReceiptCreate) -> Sto
         receipt.items.append(StockReceiptItem(**itm.model_dump()))
 
         # Giảm tồn kho sản phẩm
-        prod = db.query(Product).filter(Product.id == itm.product_id).first()
+        prod = None
+        str_pid = str(itm.product_id).strip()
+        if str_pid.isdigit():
+            prod = db.query(Product).filter(Product.id == int(str_pid)).first()
+        if not prod and itm.sku:
+            prod = db.query(Product).filter(Product.sku == itm.sku).first()
+
         new_balance = 0
         if prod:
-            prod.stock = max(0, prod.stock - itm.quantity)
-            new_balance = prod.stock
-            if prod.stock == 0:
+            stock_profile = _get_or_create_stock_profile(db, prod, default_stock=100)
+            stock_profile.stock = max(0, stock_profile.stock - itm.quantity)
+            new_balance = stock_profile.stock
+            if stock_profile.stock == 0:
                 prod.status = "out_of_stock"
-            elif prod.stock <= prod.min_stock:
+            elif stock_profile.stock <= stock_profile.min_stock:
                 prod.status = "low_stock"
 
         # Ghi thẻ kho (Inventory History)

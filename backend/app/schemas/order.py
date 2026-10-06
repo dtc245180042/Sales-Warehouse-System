@@ -1,10 +1,10 @@
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Optional, Union
 from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 
 class OrderItemBase(BaseModel):
-    product_id: str = Field(..., description="ID sản phẩm")
+    product_id: Union[str, int] = Field(..., description="ID sản phẩm")
     sku: Optional[str] = Field(None, description="Mã SKU")
     name: str = Field(..., description="Tên sản phẩm")
     price: float = Field(0.0, ge=0, description="Đơn giá")

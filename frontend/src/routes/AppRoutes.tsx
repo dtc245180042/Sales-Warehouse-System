@@ -144,6 +144,14 @@ export const AppRoutes: React.FC = () => {
             </ProtectedRoute>
           }
         />
+        <Route
+          path="/products/categories"
+          element={
+            <ProtectedRoute allowedRoles={['Admin', 'SalesManager', 'Manager', 'Staff']}>
+              <CategoryManagement />
+            </ProtectedRoute>
+          }
+        />
 
         {/* Quản lý Nhà cung cấp (SCRUM-217) */}
         <Route

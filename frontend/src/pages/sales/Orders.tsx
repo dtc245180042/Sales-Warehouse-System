@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   Eye,
   Ban,
@@ -15,6 +15,7 @@ import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/common/Badge';
 import { ConfirmDialog } from '../../components/common/ConfirmDialog';
 import { formatCurrency, formatDate } from '../../utils/formatters';
+import { exportToCSV } from '../../utils/csvExporter';
 import { orderService } from '../../services/orderService';
 import { Order, OrderStatus } from '../../types/Order';
 import { useToast } from '../../contexts/ToastContext';
@@ -23,10 +24,37 @@ import { useAuth } from '../../contexts/AuthContext';
 export const Orders: React.FC = () => {
   const { showToast } = useToast();
   const { user } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const urlSearch = searchParams.get('q') || '';
+  const urlStatus = searchParams.get('status') || 'all';
+
   const [orders, setOrders] = useState<Order[]>([]);
-  const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [search, setSearch] = useState(urlSearch);
+  const [statusFilter, setStatusFilter] = useState<string>(urlStatus);
   const [cancelOrderId, setCancelOrderId] = useState<string | null>(null);
+
+  // Đồng bộ hai chiều từ URL -> State khi người dùng nhấn Back / Forward trên trình duyệt
+  useEffect(() => {
+    setSearch(urlSearch);
+    setStatusFilter(urlStatus);
+  }, [urlSearch, urlStatus]);
+
+  const handleSearchChange = (newSearch: string) => {
+    setSearch(newSearch);
+    const params = new URLSearchParams(searchParams);
+    if (newSearch.trim()) params.set('q', newSearch.trim());
+    else params.delete('q');
+    setSearchParams(params, { replace: true });
+  };
+
+  const handleStatusChange = (newStatus: string) => {
+    setStatusFilter(newStatus);
+    const params = new URLSearchParams(searchParams);
+    if (newStatus && newStatus !== 'all') params.set('status', newStatus);
+    else params.delete('status');
+    setSearchParams(params, { replace: true });
+  };
 
   const loadOrders = async () => {
     const data = await orderService.getAll();
@@ -62,25 +90,21 @@ export const Orders: React.FC = () => {
   };
 
   const handleExportCSV = () => {
-    const rows = [
-      ['Mã đơn', 'Khách hàng', 'SĐT', 'Ngày tạo', 'Tổng tiền', 'Phương thức', 'Trạng thái', 'Nhân viên'],
-      ...filteredOrders.map((o) => [
+    exportToCSV({
+      filename: `danh_sach_don_hang_${Date.now()}`,
+      headers: ['Mã đơn', 'Khách hàng', 'SĐT', 'Ngày tạo', 'Tổng tiền', 'Phương thức', 'Trạng thái', 'Nhân viên'],
+      rows: filteredOrders.map((o) => [
         o.code,
-        `"${o.customerName.replace(/"/g, '""')}"`,
+        o.customerName,
         o.customerPhone,
         o.createdAt,
         o.total,
         o.paymentMethod,
         o.status,
-        `"${o.staffName.replace(/"/g, '""')}"`,
+        o.staffName,
       ]),
-    ];
-    const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + rows.map((e) => e.join(',')).join('\n');
-    const link = document.createElement('a');
-    link.href = encodeURI(csvContent);
-    link.download = `danh_sach_don_hang_${Date.now()}.csv`;
-    link.click();
-    showToast('Đã xuất danh sách đơn hàng sang CSV', 'success');
+    });
+    showToast(`Đã xuất ${filteredOrders.length} đơn hàng sang CSV thành công!`, 'success');
   };
 
   const statusConfigs: Record<OrderStatus, { label: string; variant: 'success' | 'warning' | 'danger' | 'info' | 'primary' }> = {
@@ -247,7 +271,7 @@ export const Orders: React.FC = () => {
               <input
                 type="text"
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => handleSearchChange(e.target.value)}
                 placeholder="Tìm mã đơn, tên khách, số điện thoại, nhân viên..."
                 className="w-full pl-9 pr-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs sm:text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
@@ -255,7 +279,7 @@ export const Orders: React.FC = () => {
 
             <select
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
+              onChange={(e) => handleStatusChange(e.target.value)}
               className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs sm:text-sm text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
             >
               <option value="all">Tất cả trạng thái</option>

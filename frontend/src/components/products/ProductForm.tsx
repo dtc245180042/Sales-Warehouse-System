@@ -9,6 +9,8 @@ import { productCategories } from '../../mock/products';
 import { initialSuppliers } from '../../mock/suppliers';
 
 import { productService } from '../../services/productService';
+import { categoryService } from '../../services/categoryService';
+import { CategoryTree } from '../../types/Category';
 import { useAuth } from '../../contexts/AuthContext';
 
 const productSchema = z.object({
@@ -16,6 +18,7 @@ const productSchema = z.object({
   sku: z.string().min(2, 'Mã SKU tối thiểu 2 ký tự'),
   barcode: z.string().min(6, 'Mã vạch tối thiểu 6 ký tự'),
   category: z.string().min(1, 'Vui lòng chọn danh mục'),
+  categoryId: z.number().optional(),
   supplierId: z.string().min(1, 'Vui lòng chọn nhà cung cấp'),
   costPrice: z.number().min(0, 'Giá nhập phải >= 0'),
   salePrice: z.number().min(0, 'Giá bán phải >= 0'),
@@ -49,6 +52,18 @@ export const ProductForm: React.FC<ProductFormProps> = ({
   const [existingSkus, setExistingSkus] = React.useState<string[]>([]);
   const [skuError, setSkuError] = React.useState<string>('');
 
+  // Phân cấp nhóm hàng / ngành hàng 3 cấp (SCRUM-214)
+  interface CategoryOption {
+    id: number;
+    name: string;
+    level: number;
+    isLeaf: boolean;
+    displayLabel: string;
+  }
+  const [categoryOptions, setCategoryOptions] = React.useState<CategoryOption[]>([]);
+  const [selectedCatId, setSelectedCatId] = React.useState<number | undefined>(initialValues?.categoryId);
+  const [isLeafSelected, setIsLeafSelected] = React.useState<boolean>(true);
+
   React.useEffect(() => {
     productService.getAll().then((products) => {
       const skus = products
@@ -56,7 +71,54 @@ export const ProductForm: React.FC<ProductFormProps> = ({
         .map((p) => p.sku.trim().toUpperCase());
       setExistingSkus(skus);
     });
-  }, [isEdit, initialValues?.id]);
+
+    // Tải cấu trúc Cây nhóm hàng từ Backend
+    categoryService.getTree().then((tree) => {
+      if (tree && tree.length > 0) {
+        const flat: CategoryOption[] = [];
+        const traverse = (nodes: CategoryTree[], depth: number = 0) => {
+          nodes.forEach((node) => {
+            const hasChildren = node.children && node.children.length > 0;
+            const prefix = '  '.repeat(depth);
+            const levelIcon = node.level === 1 ? '📁 [Ngành]' : node.level === 2 ? '📁 [Nhóm]' : '📄 [Tiểu nhóm]';
+            const suffix = !hasChildren ? ' ★ (Khuyên dùng)' : ' (Nhóm cha)';
+            flat.push({
+              id: node.id,
+              name: node.name,
+              level: node.level,
+              isLeaf: !hasChildren,
+              displayLabel: `${prefix}${levelIcon} ${node.name}${suffix}`,
+            });
+            if (hasChildren) {
+              traverse(node.children, depth + 1);
+            }
+          });
+        };
+        traverse(tree);
+        setCategoryOptions(flat);
+
+        // Khớp giá trị khởi tạo
+        if (initialValues?.categoryId) {
+          const match = flat.find((o) => o.id === initialValues.categoryId);
+          if (match) {
+            setSelectedCatId(match.id);
+            setIsLeafSelected(match.isLeaf);
+            setValue('categoryId', match.id);
+            setValue('category', match.name);
+          }
+        } else if (initialValues?.category) {
+          const match = flat.find((o) => o.name.toLowerCase() === initialValues.category?.toLowerCase());
+          if (match) {
+            setSelectedCatId(match.id);
+            setIsLeafSelected(match.isLeaf);
+            setValue('categoryId', match.id);
+          }
+        }
+      }
+    }).catch((err) => {
+      console.warn('Không thể tải cây nhóm hàng, sử dụng fallback:', err);
+    });
+  }, [isEdit, initialValues]);
 
   const {
     register,
@@ -73,6 +135,7 @@ export const ProductForm: React.FC<ProductFormProps> = ({
       sku: initialValues?.sku || '',
       barcode: initialValues?.barcode || `893850${Math.floor(100000 + Math.random() * 900000)}`,
       category: initialValues?.category || productCategories[0].name,
+      categoryId: initialValues?.categoryId,
       supplierId: initialValues?.supplierId || initialSuppliers[0].id,
       costPrice: initialValues?.costPrice ?? 1000000,
       salePrice: initialValues?.salePrice ?? 1500000,
@@ -123,6 +186,7 @@ export const ProductForm: React.FC<ProductFormProps> = ({
       ...values,
       sku: cleanSku,
       costPrice: finalCostPrice,
+      categoryId: selectedCatId,
     });
   };
 
@@ -309,19 +373,59 @@ export const ProductForm: React.FC<ProductFormProps> = ({
             <h3 className="text-base font-bold text-slate-900 dark:text-white">Phân Loại & Đối Tác</h3>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                Ngành hàng / Danh mục *
-              </label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                  Cây Phân Cấp Ngành Hàng / Nhóm Hàng *
+                </label>
+                <span className="text-[11px] text-indigo-600 dark:text-indigo-400 font-medium">
+                  3 Cấp ERP (SCRUM-214)
+                </span>
+              </div>
               <select
-                {...register('category')}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                value={selectedCatId ?? ''}
+                onChange={(e) => {
+                  const val = e.target.value ? Number(e.target.value) : undefined;
+                  setSelectedCatId(val);
+                  setValue('categoryId', val);
+                  if (val) {
+                    const opt = categoryOptions.find((c) => c.id === val);
+                    if (opt) {
+                      setValue('category', opt.name);
+                      setIsLeafSelected(opt.isLeaf);
+                    }
+                  } else {
+                    setValue('category', '');
+                    setIsLeafSelected(true);
+                  }
+                }}
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-sans"
               >
-                {productCategories.map((c) => (
-                  <option key={c.id} value={c.name}>
-                    {c.name}
-                  </option>
-                ))}
+                <option value="">-- Chọn ngành hàng / nhóm hàng --</option>
+                {categoryOptions.length > 0 ? (
+                  categoryOptions.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.displayLabel}
+                    </option>
+                  ))
+                ) : (
+                  productCategories.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))
+                )}
               </select>
+              {errors.category && <p className="text-xs text-rose-500 mt-1">{errors.category.message}</p>}
+
+              {/* Hướng dẫn nghiệp vụ thực tế */}
+              {!isLeafSelected && selectedCatId && (
+                <div className="mt-2 p-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-xs text-amber-700 dark:text-amber-300 flex items-start gap-1.5 leading-relaxed">
+                  <span className="font-bold shrink-0">⚠️ Lưu ý nghiệp vụ:</span>
+                  <span>
+                    Bạn đang chọn nhóm hàng cấp cha. Theo chuẩn ERP bán lẻ & kho, bạn nên chọn <strong>Tiểu nhóm con (Cấp lá ★)</strong> để thống kê doanh số và tồn kho chính xác nhất.
+                  </span>
+                </div>
+              )}
             </div>
 
             <div>

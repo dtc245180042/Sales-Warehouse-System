@@ -158,17 +158,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 'Manager',
               ],
             },
-          ],
-        },
-        {
-          title: 'Nhóm hàng & Ngành hàng',
-          path: '/categories',
-          icon: <FolderTree className="w-5 h-5" />,
-          allowedRoles: [
-            'Admin',
-            'SalesManager',
-            'Manager',
-            'Staff',
+            {
+              title: 'Nhóm hàng & Ngành hàng',
+              path: '/categories',
+              icon: <FolderTree className="w-3.5 h-3.5" />,
+              allowedRoles: [
+                'Admin',
+                'SalesManager',
+                'SalesStaff',
+                'WarehouseManager',
+                'WarehouseStaff',
+                'Director',
+                'Manager',
+                'Staff',
+              ],
+            },
           ],
         },
         {

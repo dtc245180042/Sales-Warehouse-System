@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   TrendingUp,
   DollarSign,
@@ -24,12 +25,28 @@ import {
 import { PageContainer } from '../../components/layout/PageContainer';
 import { Button } from '../../components/common/Button';
 import { formatCurrency, formatNumber } from '../../utils/formatters';
+import { exportToCSV } from '../../utils/csvExporter';
 import { monthlyRevenueData } from '../../mock/dashboard';
 import { useToast } from '../../contexts/ToastContext';
 
 export const RevenueReport: React.FC = () => {
   const { showToast } = useToast();
-  const [period, setPeriod] = useState<'year' | 'quarter' | 'month'>('year');
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const urlPeriod = (searchParams.get('period') as 'year' | 'quarter' | 'month') || 'year';
+  const [period, setPeriod] = useState<'year' | 'quarter' | 'month'>(urlPeriod);
+
+  useEffect(() => {
+    setPeriod(urlPeriod);
+  }, [urlPeriod]);
+
+  const handlePeriodChange = (newPeriod: 'year' | 'quarter' | 'month') => {
+    setPeriod(newPeriod);
+    const params = new URLSearchParams(searchParams);
+    if (newPeriod !== 'year') params.set('period', newPeriod);
+    else params.delete('period');
+    setSearchParams(params, { replace: true });
+  };
 
   const totalYearRevenue = monthlyRevenueData.reduce((sum, item) => sum + item.revenue, 0);
   const totalYearProfit = monthlyRevenueData.reduce((sum, item) => sum + item.profit, 0);
@@ -37,22 +54,18 @@ export const RevenueReport: React.FC = () => {
   const avgProfitMargin = Math.round((totalYearProfit / totalYearRevenue) * 100);
 
   const handleExportCSV = () => {
-    const rows = [
-      ['Tháng', 'Doanh thu (VNĐ)', 'Lợi nhuận gộp (VNĐ)', 'Số lượng đơn hàng', 'Tỷ suất lợi nhuận (%)'],
-      ...monthlyRevenueData.map((d) => [
+    exportToCSV({
+      filename: `bao_cao_doanh_thu_${Date.now()}`,
+      headers: ['Tháng', 'Doanh thu (VNĐ)', 'Lợi nhuận gộp (VNĐ)', 'Số lượng đơn hàng', 'Tỷ suất lợi nhuận (%)'],
+      rows: monthlyRevenueData.map((d) => [
         d.month,
         d.revenue,
         d.profit,
         d.orders,
         `${Math.round((d.profit / d.revenue) * 100)}%`,
       ]),
-    ];
-    const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + rows.map((e) => e.join(',')).join('\n');
-    const link = document.createElement('a');
-    link.href = encodeURI(csvContent);
-    link.download = `bao_cao_doanh_thu_${Date.now()}.csv`;
-    link.click();
-    showToast('Đã xuất báo cáo doanh thu!', 'success');
+    });
+    showToast('Đã xuất báo cáo doanh thu thành công!', 'success');
   };
 
   return (

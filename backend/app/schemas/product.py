@@ -35,10 +35,11 @@ def validate_not_blank(value: Optional[str], field_name: str) -> Optional[str]:
 
 
 class ProductBase(BaseModel):
-    """Thông tin cơ bản của sản phẩm danh mục (SCRUM-220)."""
+    """Thông tin cơ bản của sản phẩm danh mục (SCRUM-220 & SCRUM-214)."""
     sku: str = Field(..., description="Mã SKU duy nhất của sản phẩm", examples=["SP-VINAMILK-01"])
     name: str = Field(..., max_length=255, description="Tên gọi sản phẩm chuẩn hóa", examples=["Sữa tươi Vinamilk 100% 1L"])
     category: str = Field(..., max_length=100, description="Nhóm hàng danh mục", examples=["Sữa & Đồ uống"])
+    category_id: Optional[int] = Field(None, description="ID nhóm hàng trong Cây phân cấp (SCRUM-214)")
     unit: str = Field(..., max_length=50, description="Đơn vị tính cơ sở", examples=["Hộp"])
     packaging_spec: Optional[str] = Field(None, max_length=255, description="Quy cách đóng gói", examples=["12 hộp/thùng"])
     image_url: Optional[str] = Field(None, max_length=500, description="Đường dẫn ảnh sản phẩm")
@@ -94,6 +95,7 @@ class ProductUpdateRequest(BaseModel):
     sku: Optional[str] = Field(None, description="Mã SKU mới nếu cập nhật")
     name: Optional[str] = Field(None, max_length=255, description="Tên sản phẩm")
     category: Optional[str] = Field(None, max_length=100, description="Nhóm hàng")
+    category_id: Optional[int] = Field(None, description="ID nhóm hàng trong Cây phân cấp (SCRUM-214)")
     unit: Optional[str] = Field(None, max_length=50, description="Đơn vị tính cơ sở")
     packaging_spec: Optional[str] = Field(None, max_length=255, description="Quy cách đóng gói")
     cost_price: Optional[float] = Field(None, ge=0, description="Giá vốn sản phẩm")
@@ -148,9 +150,15 @@ class ProductResponse(BaseModel):
     sku: str
     name: str
     category: str
+    category_id: Optional[int] = None
     unit: str
     packaging_spec: Optional[str] = None
     cost_price: Optional[float] = None
+    price: Optional[float] = 0.0
+    sale_price: Optional[float] = 0.0
+    salePrice: Optional[float] = 0.0
+    stock: Optional[int] = 100
+    min_stock: Optional[int] = 10
     image_url: Optional[str] = None
     status: str
     has_transactions: bool

@@ -29,6 +29,7 @@ import { Button } from '../common/Button';
 import { useExcelImport } from '../../hooks/useExcelImport';
 import { ImportRow, ImportStep, ImportReport, ImportReportRow } from '../../types/ExcelImport';
 import { formatCurrency } from '../../utils/formatters';
+import { exportToCSV } from '../../utils/csvExporter';
 
 // ─────────────────────────────────────────────
 // Sub-components (defined OUTSIDE the parent)
@@ -353,6 +354,14 @@ const PreviewTableRow: React.FC<{ row: ImportRow }> = ({ row }) => {
 };
 
 const PreviewTable: React.FC<PreviewTableProps> = ({ rows }) => {
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(50);
+
+  // Reset về trang 1 khi lọc thay đổi
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [rows.length]);
+
   if (rows.length === 0) {
     return (
       <div className="text-center py-8 text-slate-400 text-sm">
@@ -360,27 +369,156 @@ const PreviewTable: React.FC<PreviewTableProps> = ({ rows }) => {
       </div>
     );
   }
+
+  const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
+  const startIndex = (currentPage - 1) * pageSize;
+  const paginatedRows = rows.slice(startIndex, startIndex + pageSize);
+
   return (
-    <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700">
-      <table className="w-full text-left border-collapse">
-        <thead>
-          <tr className="bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700">
-            <th className="py-2 pl-3 pr-2 text-[10px] font-semibold text-slate-500 uppercase tracking-wide text-center w-8">#</th>
-            <th className="py-2 px-2 text-[10px] font-semibold text-slate-500 uppercase tracking-wide w-24">Trạng thái</th>
-            <th className="py-2 px-2 text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Mã SKU</th>
-            <th className="py-2 px-2 text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Tên / Danh mục</th>
-            <th className="py-2 px-2 text-[10px] font-semibold text-slate-500 uppercase tracking-wide text-right hidden md:table-cell">Giá nhập</th>
-            <th className="py-2 px-2 text-[10px] font-semibold text-slate-500 uppercase tracking-wide text-right">Giá bán</th>
-            <th className="py-2 px-2 text-[10px] font-semibold text-slate-500 uppercase tracking-wide text-right hidden sm:table-cell">Tồn kho</th>
-            <th className="py-2 pl-2 pr-3 text-[10px] font-semibold text-slate-500 uppercase tracking-wide text-right w-16">Lỗi</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-          {rows.map((row) => (
-            <PreviewTableRow key={row.rowIndex} row={row} />
-          ))}
-        </tbody>
-      </table>
+    <div className="space-y-2.5">
+      <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700">
+        <table className="w-full text-left border-collapse">
+          <thead>
+            <tr className="bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700">
+              <th className="py-2 pl-3 pr-2 text-[10px] font-semibold text-slate-500 uppercase tracking-wide text-center w-8">#</th>
+              <th className="py-2 px-2 text-[10px] font-semibold text-slate-500 uppercase tracking-wide w-24">Trạng thái</th>
+              <th className="py-2 px-2 text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Mã SKU</th>
+              <th className="py-2 px-2 text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Tên / Danh mục</th>
+              <th className="py-2 px-2 text-[10px] font-semibold text-slate-500 uppercase tracking-wide text-right hidden md:table-cell">Giá nhập</th>
+              <th className="py-2 px-2 text-[10px] font-semibold text-slate-500 uppercase tracking-wide text-right">Giá bán</th>
+              <th className="py-2 px-2 text-[10px] font-semibold text-slate-500 uppercase tracking-wide text-right hidden sm:table-cell">Tồn kho</th>
+              <th className="py-2 pl-2 pr-3 text-[10px] font-semibold text-slate-500 uppercase tracking-wide text-right w-16">Lỗi</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+            {paginatedRows.map((row) => (
+              <PreviewTableRow key={row.rowIndex} row={row} />
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Phân trang mượt mà khi tệp Excel có số lượng dòng lớn */}
+      {rows.length > 50 && (
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-2 px-3 py-2 text-xs text-slate-500 dark:text-slate-400 bg-slate-50/70 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700">
+          <div>
+            Hiển thị <strong>{(startIndex + 1).toLocaleString()}</strong> - <strong>{Math.min(startIndex + pageSize, rows.length).toLocaleString()}</strong> trên tổng số <strong>{rows.length.toLocaleString()}</strong> dòng
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-slate-400">Dòng/trang:</span>
+            <select
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(Number(e.target.value));
+                setCurrentPage(1);
+              }}
+              className="px-2 py-0.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs"
+            >
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+              <option value={200}>200</option>
+              <option value={500}>500</option>
+            </select>
+            <div className="flex items-center gap-1 ml-1">
+              <button
+                type="button"
+                disabled={currentPage <= 1}
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                className="px-2 py-1 text-xs rounded-lg border border-slate-200 dark:border-slate-700 disabled:opacity-40 hover:bg-slate-100 dark:hover:bg-slate-800 font-medium"
+              >
+                Trước
+              </button>
+              <span className="px-1.5 font-mono text-slate-700 dark:text-slate-200">
+                {currentPage} / {totalPages}
+              </span>
+              <button
+                type="button"
+                disabled={currentPage >= totalPages}
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                className="px-2 py-1 text-xs rounded-lg border border-slate-200 dark:border-slate-700 disabled:opacity-40 hover:bg-slate-100 dark:hover:bg-slate-800 font-medium"
+              >
+                Sau
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const PreviewList: React.FC<{ rows: ImportRow[] }> = ({ rows }) => {
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(50);
+
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [rows.length]);
+
+  if (rows.length === 0) {
+    return (
+      <div className="text-center py-8 text-slate-400 text-sm">
+        Không có dòng nào phù hợp bộ lọc
+      </div>
+    );
+  }
+
+  const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
+  const startIndex = (currentPage - 1) * pageSize;
+  const paginatedRows = rows.slice(startIndex, startIndex + pageSize);
+
+  return (
+    <div className="space-y-2.5">
+      <div>
+        {paginatedRows.map((row) => (
+          <PreviewRow key={row.rowIndex} row={row} />
+        ))}
+      </div>
+
+      {rows.length > 50 && (
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-2 px-3 py-2 text-xs text-slate-500 dark:text-slate-400 bg-slate-50/70 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700">
+          <div>
+            Hiển thị <strong>{(startIndex + 1).toLocaleString()}</strong> - <strong>{Math.min(startIndex + pageSize, rows.length).toLocaleString()}</strong> trên tổng số <strong>{rows.length.toLocaleString()}</strong> dòng
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-slate-400">Dòng/trang:</span>
+            <select
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(Number(e.target.value));
+                setCurrentPage(1);
+              }}
+              className="px-2 py-0.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs"
+            >
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+              <option value={200}>200</option>
+              <option value={500}>500</option>
+            </select>
+            <div className="flex items-center gap-1 ml-1">
+              <button
+                type="button"
+                disabled={currentPage <= 1}
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                className="px-2 py-1 text-xs rounded-lg border border-slate-200 dark:border-slate-700 disabled:opacity-40 hover:bg-slate-100 dark:hover:bg-slate-800 font-medium"
+              >
+                Trước
+              </button>
+              <span className="px-1.5 font-mono text-slate-700 dark:text-slate-200">
+                {currentPage} / {totalPages}
+              </span>
+              <button
+                type="button"
+                disabled={currentPage >= totalPages}
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                className="px-2 py-1 text-xs rounded-lg border border-slate-200 dark:border-slate-700 disabled:opacity-40 hover:bg-slate-100 dark:hover:bg-slate-800 font-medium"
+              >
+                Sau
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -570,20 +708,73 @@ const ReportRowItem: React.FC<ReportRowItemProps> = ({ row }) => {
   );
 };
 
+const PaginatedReportList: React.FC<{ rows: ImportReportRow[]; emptyMessage: string }> = ({ rows, emptyMessage }) => {
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(50);
+
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [rows.length]);
+
+  if (rows.length === 0) {
+    return <div className="text-center py-6 text-slate-400 text-sm">{emptyMessage}</div>;
+  }
+
+  const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
+  const startIndex = (currentPage - 1) * pageSize;
+  const paginatedRows = rows.slice(startIndex, startIndex + pageSize);
+
+  return (
+    <div className="space-y-2">
+      <div>
+        {paginatedRows.map((row) => (
+          <ReportRowItem key={row.rowIndex} row={row} />
+        ))}
+      </div>
+      {rows.length > 50 && (
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-2 px-3 py-1.5 text-xs text-slate-500 dark:text-slate-400 bg-slate-50/70 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700">
+          <div>
+            Hiển thị <strong>{(startIndex + 1).toLocaleString()}</strong> - <strong>{Math.min(startIndex + pageSize, rows.length).toLocaleString()}</strong> / <strong>{rows.length.toLocaleString()}</strong> dòng
+          </div>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              disabled={currentPage <= 1}
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              className="px-2 py-0.5 text-xs rounded border border-slate-200 dark:border-slate-700 disabled:opacity-40 hover:bg-slate-100 dark:hover:bg-slate-800 font-medium"
+            >
+              Trước
+            </button>
+            <span className="px-1 text-slate-700 dark:text-slate-200 font-mono">
+              {currentPage} / {totalPages}
+            </span>
+            <button
+              type="button"
+              disabled={currentPage >= totalPages}
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              className="px-2 py-0.5 text-xs rounded border border-slate-200 dark:border-slate-700 disabled:opacity-40 hover:bg-slate-100 dark:hover:bg-slate-800 font-medium"
+            >
+              Sau
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 // ─────────────────────────────────────────────
 // Download template helper
 // ─────────────────────────────────────────────
 
 function downloadTemplate() {
   const headers = ['Mã SKU', 'Tên sản phẩm', 'Danh mục', 'Mã vạch', 'Giá nhập', 'Giá bán', 'Tồn kho', 'Tồn kho tối thiểu', 'Đơn vị', 'Nhà cung cấp', 'Mô tả'];
-  const exampleRow = ['SP-NEW-001', 'Tên sản phẩm mẫu', 'Phụ Kiện Công Nghệ', '8938501XXXXX', '500000', '750000', '50', '10', 'Chiếc', 'Nhà Cung Cấp ABC', 'Mô tả ngắn sản phẩm'];
-  const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + [headers, exampleRow].map((r) => r.join(',')).join('\n');
-  const a = document.createElement('a');
-  a.href = encodeURI(csvContent);
-  a.download = 'template_nhap_san_pham.csv';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
+  const exampleRow = ['SP-NEW-001', 'Tên sản phẩm mẫu', 'Phụ Kiện Công Nghệ', '8938501XXXXX', 500000, 750000, 50, 10, 'Chiếc', 'Nhà Cung Cấp ABC', 'Mô tả ngắn sản phẩm'];
+  exportToCSV({
+    filename: 'template_nhap_san_pham.csv',
+    headers,
+    rows: [exampleRow],
+  });
 }
 
 function exportReportCSV(report: ImportReport) {
@@ -598,19 +789,17 @@ function exportReportCSV(report: ImportReport) {
     r.rowIndex,
     outcomeLabel[r.outcome] ?? r.outcome,
     r.sku,
-    `"${r.name.replace(/"/g, '""')}"`,
+    r.name,
     typeof r.salePrice === 'number' ? r.salePrice : r.salePrice,
     r.stock,
     r.unit,
-    `"${[...r.errors.map((e) => `[${e.field}] ${e.message}`), ...r.warnings.map((w) => `⚠ [${w.field}] ${w.message}`)].join('; ')}"`,
+    [...r.errors.map((e) => `[${e.field}] ${e.message}`), ...r.warnings.map((w) => `⚠ [${w.field}] ${w.message}`)].join('; '),
   ]);
-  const csv = 'data:text/csv;charset=utf-8,\uFEFF' + [headers, ...rows].map((r) => r.join(',')).join('\n');
-  const a = document.createElement('a');
-  a.href = encodeURI(csv);
-  a.download = `bao_cao_nhap_${Date.now()}.csv`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
+  exportToCSV({
+    filename: `bao_cao_nhap_${Date.now()}.csv`,
+    headers,
+    rows,
+  });
 }
 
 // ─────────────────────────────────────────────
@@ -904,11 +1093,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({ isOpen, onCl
             {viewMode === 'table' ? (
               <PreviewTable rows={filteredRows} />
             ) : (
-              filteredRows.length === 0 ? (
-                <div className="text-center py-8 text-slate-400 text-sm">Không có dòng nào phù hợp bộ lọc</div>
-              ) : (
-                filteredRows.map((row) => <PreviewRow key={row.rowIndex} row={row} />)
-              )
+              <PreviewList rows={filteredRows} />
             )}
           </div>
 
@@ -1096,15 +1281,16 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({ isOpen, onCl
 
             {/* Row list */}
             <div className="max-h-[260px] overflow-y-auto pr-0.5">
-              {reportRows.length === 0 ? (
-                <div className="text-center py-6 text-slate-400 text-sm">
-                  {reportTab === 'created' && 'Không có sản phẩm nào được tạo mới'}
-                  {reportTab === 'updated' && 'Không có sản phẩm nào được cập nhật'}
-                  {reportTab === 'skipped' && 'Không có dòng nào bị bỏ qua'}
-                </div>
-              ) : (
-                reportRows.map((row) => <ReportRowItem key={row.rowIndex} row={row} />)
-              )}
+              <PaginatedReportList
+                rows={reportRows}
+                emptyMessage={
+                  reportTab === 'created'
+                    ? 'Không có sản phẩm nào được tạo mới'
+                    : reportTab === 'updated'
+                    ? 'Không có sản phẩm nào được cập nhật'
+                    : 'Không có dòng nào bị bỏ qua'
+                }
+              />
             </div>
           </div>
         </div>

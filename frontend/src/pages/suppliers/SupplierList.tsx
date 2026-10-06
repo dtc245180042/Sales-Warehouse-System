@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   Plus,
   Search,
@@ -47,10 +47,37 @@ const getPaymentTermBadgeVariant = (terms?: string) => {
 
 export const SupplierList: React.FC = () => {
   const { showToast } = useToast();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const urlSearch = searchParams.get('q') || '';
+  const urlStatus = (searchParams.get('status') as 'all' | 'active' | 'inactive') || 'all';
+
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
-  const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
+  const [search, setSearch] = useState(urlSearch);
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>(urlStatus);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+
+  // Đồng bộ hai chiều từ URL -> State khi người dùng nhấn Back / Forward trên trình duyệt
+  useEffect(() => {
+    setSearch(urlSearch);
+    setStatusFilter(urlStatus);
+  }, [urlSearch, urlStatus]);
+
+  const handleSearchChange = (newSearch: string) => {
+    setSearch(newSearch);
+    const params = new URLSearchParams(searchParams);
+    if (newSearch.trim()) params.set('q', newSearch.trim());
+    else params.delete('q');
+    setSearchParams(params, { replace: true });
+  };
+
+  const handleStatusChange = (newStatus: 'all' | 'active' | 'inactive') => {
+    setStatusFilter(newStatus);
+    const params = new URLSearchParams(searchParams);
+    if (newStatus && newStatus !== 'all') params.set('status', newStatus);
+    else params.delete('status');
+    setSearchParams(params, { replace: true });
+  };
 
   // Tracks which supplier IDs already have import receipts
   const [hasReceiptsMap, setHasReceiptsMap] = useState<Record<string, boolean>>({});
@@ -445,7 +472,7 @@ export const SupplierList: React.FC = () => {
               <input
                 type="text"
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => handleSearchChange(e.target.value)}
                 placeholder="Tìm theo tên NCC, mã NCC, MST, người liên hệ, SĐT..."
                 className="w-full pl-9 pr-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs sm:text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
@@ -454,7 +481,7 @@ export const SupplierList: React.FC = () => {
               <Filter className="w-4 h-4 text-slate-400 hidden sm:block" />
               <select
                 value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value as 'all' | 'active' | 'inactive')}
+                onChange={(e) => handleStatusChange(e.target.value as 'all' | 'active' | 'inactive')}
                 className="px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs sm:text-sm text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
               >
                 <option value="all">Tất cả trạng thái</option>

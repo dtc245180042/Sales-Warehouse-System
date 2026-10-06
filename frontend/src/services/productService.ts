@@ -12,6 +12,7 @@ function mapApiProduct(p: any): Product {
     barcode: p.barcode || '',
     name: p.name || '',
     category: p.category || 'Khác',
+    categoryId: p.categoryId ?? p.category_id ?? undefined,
     supplierId: p.supplierId || p.supplier_id || '',
     supplierName: p.supplierName || p.supplier_name || '',
     costPrice: Number(p.costPrice ?? p.cost_price ?? 0),
@@ -33,8 +34,11 @@ export const productService = {
   getAll: async (): Promise<Product[]> => {
     try {
       const res = await apiClient.get('/products');
-      if (Array.isArray(res.data) && res.data.length > 0) {
-        const list = res.data.map(mapApiProduct);
+      const rawList = Array.isArray(res.data)
+        ? res.data
+        : (Array.isArray(res.data?.items) ? res.data.items : null);
+      if (rawList && rawList.length > 0) {
+        const list = rawList.map(mapApiProduct);
         setStorageItem(STORAGE_KEY, list);
         return list;
       }
@@ -71,6 +75,7 @@ export const productService = {
         barcode: data.barcode,
         name: data.name,
         category: data.category,
+        category_id: data.categoryId ?? (data as any).category_id,
         supplier_id: data.supplierId,
         supplier_name: data.supplierName,
         cost_price: data.costPrice,
@@ -121,6 +126,7 @@ export const productService = {
       if (data.barcode !== undefined) payload.barcode = data.barcode;
       if (data.name !== undefined) payload.name = data.name;
       if (data.category !== undefined) payload.category = data.category;
+      if (data.categoryId !== undefined) payload.category_id = data.categoryId;
       if (data.supplierId !== undefined) payload.supplier_id = data.supplierId;
       if (data.supplierName !== undefined) payload.supplier_name = data.supplierName;
       if (data.costPrice !== undefined) payload.cost_price = data.costPrice;

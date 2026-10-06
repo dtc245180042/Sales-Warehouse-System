@@ -33,6 +33,7 @@ def setup_test_db():
     app.dependency_overrides[lay_phien_db] = override_lay_phien_db
     yield
     Base.metadata.drop_all(bind=test_engine)
+    app.dependency_overrides.pop(lay_phien_db, None)
 
 
 client = TestClient(app)
@@ -205,3 +206,32 @@ def test_delete_empty_category_success():
     # Xác nhận sau khi xóa thì truy vấn trả về 404
     res_get = client.get(f"/api/v1/categories/{cat['id']}")
     assert res_get.status_code == 404
+
+
+def test_hierarchical_rollup_product_count():
+    """Kiểm tra tính năng cộng dồn đệ quy (Hierarchical Roll-up) số lượng sản phẩm từ các nhánh con lên nhóm cha."""
+    # 1. Tạo Cấp 1 (Ngành hàng lớn)
+    cat_root = client.post("/api/v1/categories", json={"code": "ROLLUP_L1", "name": "Ngành Lớn"}).json()
+    # 2. Tạo Cấp 2 (Nhóm hàng con)
+    cat_sub = client.post("/api/v1/categories", json={"code": "ROLLUP_L2", "name": "Nhóm Con", "parent_id": cat_root["id"]}).json()
+    # 3. Tạo Cấp 3 (Tiểu nhóm)
+    cat_leaf = client.post("/api/v1/categories", json={"code": "ROLLUP_L3", "name": "Tiểu Nhóm Lá", "parent_id": cat_sub["id"]}).json()
+
+    # 4. Gán 2 sản phẩm vào Cấp 3 và 1 sản phẩm vào Cấp 2, Cấp 1 không có sản phẩm trực tiếp nào
+    client.post("/api/v1/categories/products", json={"sku": "SKU-LEAF-1", "name": "SP Lá 1", "category_id": cat_leaf["id"], "price": 10000})
+    client.post("/api/v1/categories/products", json={"sku": "SKU-LEAF-2", "name": "SP Lá 2", "category_id": cat_leaf["id"], "price": 20000})
+    client.post("/api/v1/categories/products", json={"sku": "SKU-SUB-1", "name": "SP Nhóm Con", "category_id": cat_sub["id"], "price": 30000})
+
+    # 5. Kiểm tra thông qua API get_by_id và get_tree
+    res_root = client.get(f"/api/v1/categories/{cat_root['id']}").json()
+    assert res_root["product_count"] == 0         # Trực thuộc trực tiếp là 0
+    assert res_root["total_product_count"] == 3   # Dồn cấp toàn bộ ngành là 3 (2 + 1)
+
+    res_sub = client.get(f"/api/v1/categories/{cat_sub['id']}").json()
+    assert res_sub["product_count"] == 1          # Trực thuộc trực tiếp là 1
+    assert res_sub["total_product_count"] == 3    # Dồn cấp từ con cháu là 3 (1 + 2)
+
+    res_leaf = client.get(f"/api/v1/categories/{cat_leaf['id']}").json()
+    assert res_leaf["product_count"] == 2
+    assert res_leaf["total_product_count"] == 2
+

@@ -82,11 +82,10 @@ class ChangePasswordRequest(BaseModel):
 
 class ForgotPasswordRequest(BaseModel):
     """Schema cho request quên mật khẩu qua email (SCRUM-200)."""
-    email: str = Field(
+    email: EmailStr = Field(
         ...,
-        min_length=1,
-        description="Địa chỉ email hoặc tên đăng nhập của tài khoản cần đặt lại mật khẩu",
-        examples=["admin@warehouse.local", "admin"]
+        description="Địa chỉ email cần nhận liên kết đặt lại mật khẩu",
+        examples=["user@warehouse.local"]
     )
 
 

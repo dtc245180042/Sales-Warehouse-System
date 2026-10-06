@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.models.auth import User, UserRole
 from app.models.product import Product, ProductStatus
+from app.models.product_stock_profile import ProductStockProfile
 from app.schemas.product import (
     ProductCreateRequest,
     ProductUpdateRequest,
@@ -40,14 +41,35 @@ class ProductService:
         Nếu người dùng không phải Quản lý kinh doanh/Admin, ẩn trường giá vốn (`cost_price = None`).
         """
         can_view_cost = cls.is_sales_manager_or_admin(current_user)
+        price_val = float(getattr(product, "price", 0.0) or 0.0)
+        stock_val = 100
+        min_stock_val = 10
+
+        db_state = getattr(product, "_sa_instance_state", None)
+        sess = getattr(db_state, "session", None) if db_state else None
+        if sess is not None:
+            try:
+                sp = sess.query(ProductStockProfile).filter(ProductStockProfile.product_id == product.id).first()
+                if sp:
+                    stock_val = sp.stock
+                    min_stock_val = sp.min_stock
+            except Exception:
+                pass
+
         return ProductResponse(
             id=product.id,
             sku=product.sku,
             name=product.name,
             category=product.category,
+            category_id=getattr(product, "category_id", None),
             unit=product.unit,
             packaging_spec=product.packaging_spec,
             cost_price=product.cost_price if can_view_cost else None,
+            price=price_val,
+            sale_price=price_val,
+            salePrice=price_val,
+            stock=stock_val,
+            min_stock=min_stock_val,
             image_url=product.image_url,
             status=product.status,
             has_transactions=product.has_transactions,
@@ -59,8 +81,9 @@ class ProductService:
     def create_product(
         cls, db: Session, data: ProductCreateRequest, current_user: User
     ) -> Product:
-        """Tạo mới sản phẩm vào danh mục (SCRUM-376, SCRUM-377):
+        """Tạo mới sản phẩm vào danh mục (SCRUM-376, SCRUM-377, SCRUM-214):
         - Kiểm tra tính duy nhất của mã SKU (SCRUM-377).
+        - Đồng bộ liên kết nhóm hàng category_id (SCRUM-214).
         """
         normalized_sku = data.sku.strip().upper()
 
@@ -82,10 +105,19 @@ class ProductService:
                 detail="Chỉ Quản lý kinh doanh mới có quyền thiết lập giá vốn cho sản phẩm."
             )
 
+        cat_id = getattr(data, "category_id", None)
+        category_name = data.category.strip()
+        if cat_id:
+            from app.models.category import Category
+            cat_obj = db.query(Category).filter(Category.id == cat_id).first()
+            if cat_obj and (not category_name or category_name == ""):
+                category_name = cat_obj.name
+
         product = Product(
             sku=normalized_sku,
             name=data.name.strip(),
-            category=data.category.strip(),
+            category=category_name,
+            category_id=cat_id,
             unit=data.unit.strip(),
             packaging_spec=data.packaging_spec.strip() if data.packaging_spec else None,
             cost_price=cost_price if cls.is_sales_manager_or_admin(current_user) else 0.0,
@@ -140,6 +172,13 @@ class ProductService:
             product.name = data.name.strip()
         if data.category is not None:
             product.category = data.category.strip()
+        if hasattr(data, "category_id") and data.category_id is not None:
+            product.category_id = data.category_id
+            if data.category is None:
+                from app.models.category import Category
+                cat_obj = db.query(Category).filter(Category.id == data.category_id).first()
+                if cat_obj:
+                    product.category = cat_obj.name
         if data.unit is not None:
             product.unit = data.unit.strip()
         if data.packaging_spec is not None:

@@ -24,6 +24,7 @@ export interface Product {
   barcode: string;
   name: string;
   category: string;
+  categoryId?: number;
   supplierId: string;
   supplierName: string;
   costPrice: number;

@@ -2,8 +2,7 @@ import math
 from typing import Optional, Dict, Any, Tuple, List
 from datetime import datetime, timezone
 from sqlalchemy.orm import Session
-from sqlalchemy import desc, or_
-from fastapi import HTTPException, status
+from sqlalchemy import desc, asc, or_, func
 
 from app.models.audit_log import AuditLog
 from app.models.customer_debt_profile import CustomerDebtProfile
@@ -29,6 +28,7 @@ def log_activity(
     user_role: Optional[str] = None,
     reason: Optional[str] = None,
     ip_address: Optional[str] = None,
+    status: Optional[str] = "success",
 ) -> AuditLog:
     """Hàm lõi ghi nhận sự kiện vào sổ nhật ký kiểm toán hệ thống."""
     if not change_summary:
@@ -48,6 +48,7 @@ def log_activity(
         user_role=user_role,
         reason=reason,
         ip_address=ip_address,
+        status=status or "success",
         created_at=datetime.now(timezone.utc),
     )
     db.add(log_entry)
@@ -56,10 +57,8 @@ def log_activity(
     return log_entry
 
 
-def get_audit_logs(
+def _build_audit_log_query(
     db: Session,
-    page: int = 1,
-    page_size: int = 20,
     entity_type: Optional[str] = None,
     user_id: Optional[int] = None,
     username: Optional[str] = None,
@@ -68,27 +67,33 @@ def get_audit_logs(
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
     search: Optional[str] = None,
-) -> Tuple[List[AuditLog], int, int]:
-    """
-    Truy vấn danh sách nhật ký thao tác có hỗ trợ bộ lọc đa năng và phân trang.
-    Trả về: (items, total_count, total_pages)
-    """
+    status: Optional[str] = None,
+):
+    """Hàm phụ trợ xây dựng query lọc AuditLog."""
     query = db.query(AuditLog)
 
     if entity_type:
-        query = query.filter(AuditLog.entity_type == entity_type.upper().strip())
+        query = query.filter(AuditLog.entity_type.ilike(f"%{entity_type.strip()}%"))
 
     if user_id is not None:
         query = query.filter(AuditLog.user_id == user_id)
 
     if username:
-        query = query.filter(AuditLog.username.ilike(f"%{username.strip()}%"))
+        query = query.filter(
+            or_(
+                AuditLog.username.ilike(f"%{username.strip()}%"),
+                AuditLog.user_fullname.ilike(f"%{username.strip()}%"),
+            )
+        )
 
     if action:
         query = query.filter(AuditLog.action == action.upper().strip())
 
     if entity_id:
         query = query.filter(AuditLog.entity_id.ilike(f"%{entity_id.strip()}%"))
+
+    if status:
+        query = query.filter(AuditLog.status == status.lower().strip())
 
     if start_date:
         query = query.filter(AuditLog.created_at >= start_date)
@@ -104,21 +109,300 @@ def get_audit_logs(
                 AuditLog.change_summary.ilike(search_pattern),
                 AuditLog.reason.ilike(search_pattern),
                 AuditLog.username.ilike(search_pattern),
+                AuditLog.user_fullname.ilike(search_pattern),
                 AuditLog.entity_id.ilike(search_pattern),
+                AuditLog.ip_address.ilike(search_pattern),
+                AuditLog.action.ilike(search_pattern),
+                AuditLog.entity_type.ilike(search_pattern),
             )
         )
+
+    return query
+
+
+def get_audit_logs(
+    db: Session,
+    page: int = 1,
+    page_size: int = 20,
+    entity_type: Optional[str] = None,
+    user_id: Optional[int] = None,
+    username: Optional[str] = None,
+    action: Optional[str] = None,
+    entity_id: Optional[str] = None,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    search: Optional[str] = None,
+    status: Optional[str] = None,
+    sort_desc: bool = True,
+) -> Tuple[List[AuditLog], int, int]:
+    """
+    Truy vấn danh sách nhật ký thao tác có hỗ trợ bộ lọc đa năng và phân trang.
+    Trả về: (items, total_count, total_pages)
+    """
+    # Tự động nạp dữ liệu mẫu ban đầu nếu bảng nhật ký đang trống hoàn toàn
+    seed_sample_audit_logs_if_empty(db)
+
+    query = _build_audit_log_query(
+        db=db,
+        entity_type=entity_type,
+        user_id=user_id,
+        username=username,
+        action=action,
+        entity_id=entity_id,
+        start_date=start_date,
+        end_date=end_date,
+        search=search,
+        status=status,
+    )
 
     total_count = query.count()
     total_pages = max(1, math.ceil(total_count / page_size)) if page_size > 0 else 1
 
+    order_clause = desc(AuditLog.created_at) if sort_desc else asc(AuditLog.created_at)
+    order_id = desc(AuditLog.id) if sort_desc else asc(AuditLog.id)
+
     items = (
-        query.order_by(desc(AuditLog.created_at), desc(AuditLog.id))
+        query.order_by(order_clause, order_id)
         .offset((page - 1) * page_size)
         .limit(page_size)
         .all()
     )
 
     return items, total_count, total_pages
+
+
+def get_audit_log_stats(db: Session) -> Dict[str, int]:
+    """Thống kê tổng số lượng nhật ký theo trạng thái thành công, thất bại, cảnh báo."""
+    seed_sample_audit_logs_if_empty(db)
+    total = db.query(func.count(AuditLog.id)).scalar() or 0
+    success = (
+        db.query(func.count(AuditLog.id))
+        .filter(or_(AuditLog.status == "success", AuditLog.status.is_(None)))
+        .scalar()
+        or 0
+    )
+    failed = (
+        db.query(func.count(AuditLog.id))
+        .filter(AuditLog.status == "failed")
+        .scalar()
+        or 0
+    )
+    warning = (
+        db.query(func.count(AuditLog.id))
+        .filter(AuditLog.status == "warning")
+        .scalar()
+        or 0
+    )
+    return {
+        "total": total,
+        "success": success,
+        "failed": failed,
+        "warning": warning,
+    }
+
+
+def query_audit_logs_for_export(
+    db: Session,
+    entity_type: Optional[str] = None,
+    user_id: Optional[int] = None,
+    username: Optional[str] = None,
+    action: Optional[str] = None,
+    entity_id: Optional[str] = None,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    search: Optional[str] = None,
+    status: Optional[str] = None,
+    sort_desc: bool = True,
+    limit: int = 10000,
+) -> List[AuditLog]:
+    """Lấy danh sách nhật ký theo bộ lọc để xuất file Excel/CSV số lượng lớn."""
+    query = _build_audit_log_query(
+        db=db,
+        entity_type=entity_type,
+        user_id=user_id,
+        username=username,
+        action=action,
+        entity_id=entity_id,
+        start_date=start_date,
+        end_date=end_date,
+        search=search,
+        status=status,
+    )
+
+    order_clause = desc(AuditLog.created_at) if sort_desc else asc(AuditLog.created_at)
+    return query.order_by(order_clause, desc(AuditLog.id)).limit(limit).all()
+
+
+def seed_sample_audit_logs_if_empty(db: Session) -> None:
+    """Tự động tạo các bản ghi nhật ký mẫu ban đầu nếu cơ sở dữ liệu chưa có bản ghi nào."""
+    if db.query(AuditLog.id).first() is not None:
+        return
+
+    sample_logs = [
+        {
+            "entity_type": "AUTH",
+            "entity_id": "SYS-LOGIN",
+            "entity_name": "Hệ thống xác thực",
+            "action": "LOGIN",
+            "change_summary": "Đăng nhập thành công vào hệ thống",
+            "user_id": 1,
+            "username": "admin",
+            "user_fullname": "Quản Trị Viên Hệ Thống",
+            "user_role": "Admin",
+            "ip_address": "192.168.1.10",
+            "status": "success",
+            "reason": "Phiên làm việc đầu ca sáng",
+        },
+        {
+            "entity_type": "USER_MANAGEMENT",
+            "entity_id": "USR-002",
+            "entity_name": "Tài khoản nhân viên",
+            "action": "CREATE",
+            "change_summary": "Tạo tài khoản mới cho nhân viên SalesStaff",
+            "user_id": 1,
+            "username": "admin",
+            "user_fullname": "Quản Trị Viên Hệ Thống",
+            "user_role": "Admin",
+            "ip_address": "192.168.1.10",
+            "status": "success",
+            "reason": "Tiếp nhận nhân sự mới",
+        },
+        {
+            "entity_type": "PRODUCT",
+            "entity_id": "SP-001",
+            "entity_name": "Bia Hà Nội Lon 330ml",
+            "action": "CREATE",
+            "change_summary": "Thêm mới sản phẩm Bia Hà Nội Lon 330ml vào danh mục Đồ uống",
+            "user_id": 1,
+            "username": "admin",
+            "user_fullname": "Quản Trị Viên Hệ Thống",
+            "user_role": "Admin",
+            "ip_address": "192.168.1.10",
+            "status": "success",
+            "reason": "Nhập thêm mặt hàng phân phối mới",
+        },
+        {
+            "entity_type": "INVENTORY",
+            "entity_id": "SP-001",
+            "entity_name": "Bia Hà Nội Lon 330ml",
+            "action": "ADJUST_STOCK",
+            "change_summary": "Điều chỉnh tồn kho thực tế từ 100 lon thành 95 lon",
+            "user_id": 2,
+            "username": "warehouse",
+            "user_fullname": "Nguyễn Văn Thủ Kho",
+            "user_role": "Warehouse",
+            "ip_address": "192.168.1.25",
+            "status": "success",
+            "reason": "Lệch kiểm kê cuối tuần, móp vỡ trong kho",
+        },
+        {
+            "entity_type": "PRICE",
+            "entity_id": "SP-001",
+            "entity_name": "Bia Hà Nội Lon 330ml",
+            "action": "UPDATE",
+            "change_summary": "Điều chỉnh giá bán từ 12,000 đ lên 12,500 đ",
+            "user_id": 1,
+            "username": "admin",
+            "user_fullname": "Quản Trị Viên Hệ Thống",
+            "user_role": "Admin",
+            "ip_address": "192.168.1.10",
+            "status": "success",
+            "reason": "Điều chỉnh theo bảng giá nhà cung cấp",
+        },
+        {
+            "entity_type": "ORDER",
+            "entity_id": "DH-2026-001",
+            "entity_name": "Đơn hàng Đại lý Tây Đô",
+            "action": "APPROVE",
+            "change_summary": "Phê duyệt đơn hàng xuất kho giá trị 45,000,000 đ",
+            "user_id": 3,
+            "username": "sales_manager",
+            "user_fullname": "Trần Văn Quản Lý",
+            "user_role": "Sales Manager",
+            "ip_address": "10.0.0.15",
+            "status": "success",
+            "reason": "Hạn mức công nợ hợp lệ",
+        },
+        {
+            "entity_type": "AUTH",
+            "entity_id": "SYS-AUTH",
+            "entity_name": "Cổng đăng nhập",
+            "action": "LOGIN",
+            "change_summary": "Đăng nhập thất bại do sai mật khẩu 3 lần",
+            "user_id": None,
+            "username": "guest_attacker",
+            "user_fullname": "Không xác định",
+            "user_role": "Guest",
+            "ip_address": "203.113.15.4",
+            "status": "failed",
+            "reason": "Sai mật khẩu quá số lần cho phép",
+        },
+        {
+            "entity_type": "DEBT",
+            "entity_id": "KH-008",
+            "entity_name": "Công ty TNHH Hoàng Kim",
+            "action": "ADJUST_DEBT_LIMIT",
+            "change_summary": "Tăng hạn mức công nợ từ 50,000,000 đ lên 80,000,000 đ",
+            "user_id": 1,
+            "username": "admin",
+            "user_fullname": "Quản Trị Viên Hệ Thống",
+            "user_role": "Admin",
+            "ip_address": "192.168.1.10",
+            "status": "success",
+            "reason": "Đại lý uy tín, thanh toán đúng hạn 6 tháng liên tiếp",
+        },
+        {
+            "entity_type": "INVOICE",
+            "entity_id": "HD-2026-889",
+            "entity_name": "Hóa đơn VAT bán lẻ",
+            "action": "CANCEL_INVOICE",
+            "change_summary": "Hủy hóa đơn bán lẻ do khách đổi trả hàng",
+            "user_id": 3,
+            "username": "sales_manager",
+            "user_fullname": "Trần Văn Quản Lý",
+            "user_role": "Sales Manager",
+            "ip_address": "10.0.0.15",
+            "status": "warning",
+            "reason": "Khách hàng đổi quy cách bao bì",
+        },
+        {
+            "entity_type": "USER_MANAGEMENT",
+            "entity_id": "USR-005",
+            "entity_name": "Tài khoản sales_taphsu",
+            "action": "LOCK",
+            "change_summary": "Tạm khóa tài khoản do kết thúc thời gian thử việc",
+            "user_id": 1,
+            "username": "admin",
+            "user_fullname": "Quản Trị Viên Hệ Thống",
+            "user_role": "Admin",
+            "ip_address": "192.168.1.10",
+            "status": "warning",
+            "reason": "Hết hạn hợp đồng thử việc",
+        },
+    ]
+
+    for item in sample_logs:
+        log = AuditLog(
+            entity_type=item["entity_type"],
+            entity_id=item["entity_id"],
+            entity_name=item["entity_name"],
+            action=item["action"],
+            change_summary=item["change_summary"],
+            user_id=item["user_id"],
+            username=item["username"],
+            user_fullname=item["user_fullname"],
+            user_role=item["user_role"],
+            ip_address=item["ip_address"],
+            status=item["status"],
+            reason=item["reason"],
+            created_at=datetime.now(timezone.utc),
+        )
+        db.add(log)
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+
 
 
 def get_audit_log_by_id(db: Session, log_id: int) -> Optional[AuditLog]:

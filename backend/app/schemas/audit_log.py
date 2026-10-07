@@ -20,6 +20,7 @@ class AuditLogCreate(AuditLogBase):
     user_fullname: Optional[str] = None
     user_role: Optional[str] = None
     ip_address: Optional[str] = None
+    status: Optional[str] = "success"
 
 
 class AuditLogResponse(AuditLogBase):
@@ -29,9 +30,17 @@ class AuditLogResponse(AuditLogBase):
     user_fullname: Optional[str] = None
     user_role: Optional[str] = None
     ip_address: Optional[str] = None
+    status: Optional[str] = "success"
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class AuditLogStats(BaseModel):
+    total: int = 0
+    success: int = 0
+    failed: int = 0
+    warning: int = 0
 
 
 class AuditLogPaginationResponse(BaseModel):
@@ -40,6 +49,8 @@ class AuditLogPaginationResponse(BaseModel):
     page: int
     page_size: int
     total_pages: int
+    stats: Optional[AuditLogStats] = None
+
 
 
 class StockAdjustmentRequest(BaseModel):

@@ -143,12 +143,61 @@ def process_square_crop_and_thumbnail(file_bytes: bytes, is_png: bool) -> Tuple[
         return avatar_buffer.getvalue(), thumb_buffer.getvalue(), AVATAR_SIZE[0], AVATAR_SIZE[1]
 
 
-def build_avatar_urls(user_id: int, updated_at: Optional[datetime] = None) -> Tuple[str, str]:
+def build_avatar_urls(
+    user_id: int,
+    updated_at: Optional[datetime] = None,
+    user_avatar: Optional[UserAvatar] = None
+) -> Tuple[str, str]:
     """Tạo URL truy cập ảnh đại diện và thumbnail."""
+    if user_avatar:
+        if getattr(user_avatar, "external_url", None):
+            return user_avatar.external_url, user_avatar.external_url
+        if user_avatar.avatar_path and (
+            user_avatar.avatar_path.startswith("http://") or user_avatar.avatar_path.startswith("https://")
+        ):
+            return user_avatar.avatar_path, user_avatar.avatar_path
+
     ts = int(updated_at.timestamp()) if updated_at else int(datetime.now(timezone.utc).timestamp())
     avatar_url = f"/api/v1/user-avatars/{user_id}/avatar?t={ts}"
     thumbnail_url = f"/api/v1/user-avatars/{user_id}/thumbnail?t={ts}"
     return avatar_url, thumbnail_url
+
+
+def save_user_avatar_url(
+    db: Session,
+    user_id: int,
+    avatar_url: str
+) -> UserAvatar:
+    """Lưu trữ đường dẫn ảnh đại diện bên ngoài (ImgBB Cloud URL)."""
+    user_avatar = db.query(UserAvatar).filter(UserAvatar.user_id == user_id).first()
+    now_utc = datetime.now(timezone.utc)
+
+    if not user_avatar:
+        user_avatar = UserAvatar(
+            user_id=user_id,
+            original_filename="cloud_avatar.jpg",
+            avatar_path=avatar_url,
+            thumbnail_path=avatar_url,
+            content_type="image/jpeg",
+            file_size=0,
+            width=500,
+            height=500,
+            created_at=now_utc,
+            updated_at=now_utc
+        )
+        if hasattr(user_avatar, "external_url"):
+            user_avatar.external_url = avatar_url
+        db.add(user_avatar)
+    else:
+        user_avatar.avatar_path = avatar_url
+        user_avatar.thumbnail_path = avatar_url
+        if hasattr(user_avatar, "external_url"):
+            user_avatar.external_url = avatar_url
+        user_avatar.updated_at = now_utc
+
+    db.commit()
+    db.refresh(user_avatar)
+    return user_avatar
 
 
 def save_user_avatar(

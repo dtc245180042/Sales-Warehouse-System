@@ -13,6 +13,9 @@ import {
   Scale,
   LayoutList,
   Tag,
+  BarChart3,
+  TrendingUp,
+  Package,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { UserRole } from '../../types/User';
@@ -187,6 +190,49 @@ export const Sidebar: React.FC<SidebarProps> = ({
             'Accountant',
             'Manager',
             'Staff',
+          ],
+        },
+      ],
+    },
+    {
+      heading: 'BÁO CÁO & THỐNG KÊ',
+      items: [
+        {
+          title: 'Báo cáo Bán hàng',
+          path: '/reports/sales',
+          icon: <BarChart3 className="w-5 h-5" />,
+          allowedRoles: [
+            'Admin',
+            'SalesManager',
+            'SalesStaff',
+            'Director',
+            'Accountant',
+            'Manager',
+            'Staff',
+          ],
+        },
+        {
+          title: 'Báo cáo Doanh thu',
+          path: '/reports/revenue',
+          icon: <TrendingUp className="w-5 h-5" />,
+          allowedRoles: [
+            'Admin',
+            'SalesManager',
+            'Director',
+            'Accountant',
+            'Manager',
+          ],
+        },
+        {
+          title: 'Báo cáo Tồn kho',
+          path: '/reports/inventory',
+          icon: <Package className="w-5 h-5" />,
+          allowedRoles: [
+            'Admin',
+            'WarehouseManager',
+            'WarehouseStaff',
+            'Director',
+            'Manager',
           ],
         },
       ],

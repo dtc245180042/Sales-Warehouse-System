@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   User,
   Phone,
@@ -15,6 +15,12 @@ import {
   Sparkles,
   Info,
   Camera,
+  UploadCloud,
+  Loader2,
+  Key,
+  ExternalLink,
+  X,
+  Crop,
 } from 'lucide-react';
 import { PageContainer } from '../../components/layout/PageContainer';
 import { Button } from '../../components/common/Button';
@@ -23,6 +29,12 @@ import { useToast } from '../../contexts/ToastContext';
 import { getRoleDisplayName } from '../../utils/roleUtils';
 import { validateVNPhoneNumber, normalizeVNPhoneNumber } from '../../utils/phoneUtils';
 import { AvatarUploadModal } from '../../components/common/AvatarUploadModal';
+import {
+  uploadImageToImgBB,
+  getImgBBApiKey,
+  setImgBBApiKey,
+} from '../../services/imageUploadService';
+import { avatarService } from '../../services/avatarService';
 
 export const Profile: React.FC = () => {
   const { user, role, updateProfile, updateUserAvatar } = useAuth();
@@ -33,6 +45,16 @@ export const Profile: React.FC = () => {
   const [phone, setPhone] = useState(user?.phone || '');
   const [avatarUrl, setAvatarUrl] = useState(user?.avatar || '');
   const [isAvatarModalOpen, setIsAvatarModalOpen] = useState(false);
+
+  // ImgBB Upload state (tương tự như ảnh sản phẩm)
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isUploadingImgBB, setIsUploadingImgBB] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [uploadSuccessMsg, setUploadSuccessMsg] = useState('');
+  const [uploadError, setUploadError] = useState('');
+  const [showApiKeyModal, setShowApiKeyModal] = useState(false);
+  const [apiKeyInput, setApiKeyInput] = useState<string>(getImgBBApiKey());
+  const [hasApiKey, setHasApiKey] = useState<boolean>(!!getImgBBApiKey());
 
   // Validation & status
   const [nameError, setNameError] = useState<string | null>(null);
@@ -105,8 +127,64 @@ export const Profile: React.FC = () => {
       setAvatarUrl(user.avatar || '');
       setNameError(null);
       setPhoneError(null);
+      setUploadSuccessMsg('');
+      setUploadError('');
       showToast('Đã khôi phục thông tin ban đầu.', 'info');
     }
+  };
+
+  const handleUploadFileToImgBB = async (file: File) => {
+    setIsUploadingImgBB(true);
+    setUploadError('');
+    setUploadSuccessMsg('');
+
+    try {
+      const res = await uploadImageToImgBB(file, apiKeyInput);
+      if (res?.url) {
+        setAvatarUrl(res.url);
+        updateUserAvatar(res.url);
+        setUploadSuccessMsg('Đã tải ảnh lên ImgBB Cloud và tự động liên kết thành công!');
+        showToast('Đã tải ảnh lên ImgBB Cloud thành công!', 'success');
+        try {
+          await avatarService.setAvatarUrl(res.url);
+        } catch (apiErr) {
+          console.warn('Lỗi lưu URL lên backend:', apiErr);
+        }
+      } else {
+        throw new Error('Không nhận được đường dẫn ảnh từ ImgBB.');
+      }
+    } catch (err: any) {
+      setUploadError(err.message || 'Lỗi khi tải ảnh lên ImgBB');
+      showToast(err.message || 'Không thể tải ảnh lên ImgBB', 'error');
+    } finally {
+      setIsUploadingImgBB(false);
+    }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files && files.length > 0) {
+      handleUploadFileToImgBB(files[0]);
+    }
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const files = e.dataTransfer.files;
+    if (files && files.length > 0) {
+      handleUploadFileToImgBB(files[0]);
+    }
+  };
+
+  const handleSaveApiKey = () => {
+    setImgBBApiKey(apiKeyInput.trim());
+    setHasApiKey(!!apiKeyInput.trim());
+    setShowApiKeyModal(false);
+    showToast('Đã lưu cấu hình ImgBB API Key!', 'success');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -312,7 +390,7 @@ export const Profile: React.FC = () => {
               </div>
             )}
 
-            <form onSubmit={handleSubmit} className="space-y-5">
+            <form onSubmit={handleSubmit} noValidate className="space-y-5">
               {/* Field 1: Họ và tên */}
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5">
@@ -375,37 +453,153 @@ export const Profile: React.FC = () => {
                 )}
               </div>
 
-              {/* Field 3: Avatar URL (Tùy chọn) */}
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5">
-                  Đường dẫn ảnh đại diện (Avatar URL)
-                </label>
-                <input
-                  type="url"
-                  value={avatarUrl}
-                  onChange={(e) => setAvatarUrl(e.target.value)}
-                  placeholder="https://images.unsplash.com/..."
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                />
-                <div className="mt-2 flex items-center gap-2">
-                  <span className="text-[11px] text-slate-400">Chọn nhanh ảnh mẫu:</span>
-                  {[
-                    'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
-                    'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150',
-                    'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150',
-                    'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150',
-                  ].map((preset, idx) => (
+              {/* Field 3: Ảnh đại diện & ImgBB Cloud Uploader (tương tự hình ảnh sản phẩm) */}
+              <div className="p-4 sm:p-5 rounded-2xl bg-slate-50/80 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                      Ảnh Đại Diện (Lưu trên Cloud ImgBB)
+                    </label>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                      Lưu trữ trực tiếp trên Cloud qua <a href="https://imgbb.com" target="_blank" rel="noreferrer" className="text-indigo-600 dark:text-indigo-400 font-semibold hover:underline">ImgBB.com</a> giống như hình ảnh sản phẩm.
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2">
                     <button
-                      key={idx}
                       type="button"
-                      onClick={() => setAvatarUrl(preset)}
-                      className={`w-7 h-7 rounded-full overflow-hidden border-2 transition-all cursor-pointer ${
-                        avatarUrl === preset ? 'border-indigo-600 scale-110' : 'border-slate-200 hover:border-indigo-400'
-                      }`}
+                      onClick={() => {
+                        setApiKeyInput(getImgBBApiKey());
+                        setShowApiKeyModal(true);
+                      }}
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 bg-white dark:bg-slate-900 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 transition-colors shadow-2xs"
+                      title="Cấu hình ImgBB API Key"
                     >
-                      <img src={preset} alt="preset" className="w-full h-full object-cover" />
+                      <Key className="w-3.5 h-3.5" />
+                      <span>{hasApiKey ? 'Đổi ImgBB Key' : 'Cấu hình ImgBB Key'}</span>
                     </button>
-                  ))}
+
+                    <button
+                      type="button"
+                      onClick={() => setIsAvatarModalOpen(true)}
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-[11px] font-semibold text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors shadow-2xs"
+                      title="Mở trình cắt ảnh vuông 1:1"
+                    >
+                      <Crop className="w-3.5 h-3.5 text-indigo-500" />
+                      <span>Cắt vuông 1:1</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Input file ẩn */}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif,image/bmp"
+                  className="hidden"
+                  onChange={handleFileChange}
+                />
+
+                {/* Khung tải ảnh từ máy tính lên ImgBB (Dropzone) */}
+                <div
+                  onClick={() => {
+                    if (!isUploadingImgBB) fileInputRef.current?.click();
+                  }}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setIsDragging(true);
+                  }}
+                  onDragLeave={() => setIsDragging(false)}
+                  onDrop={handleDrop}
+                  className={`border-2 border-dashed rounded-2xl p-4 text-center cursor-pointer transition-all ${
+                    isDragging
+                      ? 'border-indigo-500 bg-indigo-50/60 dark:bg-indigo-950/40 scale-[0.99]'
+                      : 'border-indigo-200 dark:border-indigo-800/80 hover:border-indigo-400 bg-white dark:bg-slate-900/80'
+                  } ${isUploadingImgBB ? 'pointer-events-none opacity-80' : ''}`}
+                >
+                  {isUploadingImgBB ? (
+                    <div className="flex flex-col items-center justify-center py-3 space-y-2">
+                      <Loader2 className="w-7 h-7 animate-spin text-indigo-600 dark:text-indigo-400" />
+                      <p className="text-xs font-bold text-indigo-600 dark:text-indigo-400">
+                        Đang tải ảnh lên Cloud ImgBB...
+                      </p>
+                      <p className="text-[11px] text-slate-400">Vui lòng chờ trong giây lát</p>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col sm:flex-row items-center justify-center gap-3 py-1.5">
+                      <div className="p-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 ring-4 ring-indigo-500/10">
+                        <UploadCloud className="w-5 h-5" />
+                      </div>
+                      <div className="text-center sm:text-left">
+                        <p className="text-xs font-bold text-slate-800 dark:text-slate-100">
+                          Tải ảnh từ máy tính lên Cloud ImgBB
+                        </p>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                          Bấm để chọn file hoặc kéo thả ảnh vào đây (JPG, PNG, WEBP tối đa 32MB)
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Thông báo kết quả upload */}
+                {uploadSuccessMsg && (
+                  <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-700 dark:text-emerald-300 flex items-center gap-2 animate-fade-in">
+                    <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                    <span>{uploadSuccessMsg}</span>
+                  </div>
+                )}
+
+                {uploadError && (
+                  <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-xs text-rose-700 dark:text-rose-300 flex items-start gap-2 animate-fade-in">
+                    <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-600 dark:text-rose-400" />
+                    <div>
+                      <p>{uploadError}</p>
+                      {!hasApiKey && (
+                        <button
+                          type="button"
+                          onClick={() => setShowApiKeyModal(true)}
+                          className="mt-1 font-bold underline text-rose-800 dark:text-rose-200"
+                        >
+                          Nhập ImgBB API Key ngay
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Input URL hình ảnh trực tiếp (type="text" - không bị lỗi HTML5 validation) */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Hoặc nhập / dán đường dẫn ảnh đại diện (Avatar URL)
+                  </label>
+                  <input
+                    type="text"
+                    value={avatarUrl}
+                    onChange={(e) => setAvatarUrl(e.target.value)}
+                    placeholder="https://i.ibb.co/... hoặc link ảnh bất kỳ"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                  <div className="mt-2 flex items-center gap-2 flex-wrap">
+                    <span className="text-[11px] text-slate-400">Chọn nhanh ảnh mẫu:</span>
+                    {[
+                      'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
+                      'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150',
+                      'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150',
+                      'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150',
+                    ].map((preset, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => setAvatarUrl(preset)}
+                        className={`w-7 h-7 rounded-full overflow-hidden border-2 transition-all cursor-pointer ${
+                          avatarUrl === preset ? 'border-indigo-600 scale-110 shadow-sm' : 'border-slate-200 hover:border-indigo-400'
+                        }`}
+                      >
+                        <img src={preset} alt="preset" className="w-full h-full object-cover" />
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
 
@@ -512,6 +706,77 @@ export const Profile: React.FC = () => {
           showToast('Ảnh đại diện đã được cập nhật thành công!', 'success');
         }}
       />
+
+      {/* Modal Cấu hình ImgBB API Key */}
+      {showApiKeyModal && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full p-6 border border-slate-200 dark:border-slate-800 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5 text-indigo-600 dark:text-indigo-400">
+                <div className="p-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/60">
+                  <Key className="w-4 h-4" />
+                </div>
+                <span className="font-bold text-base text-slate-900 dark:text-white">Cấu Hình ImgBB API Key</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowApiKeyModal(false)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+              ImgBB cho phép tải ảnh đại diện từ máy tính lên Cloud hoàn toàn miễn phí và tự động nhận Direct URL nhúng vào hồ sơ (giống hình ảnh sản phẩm).
+            </p>
+
+            <div className="p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl text-xs text-amber-800 dark:text-amber-200">
+              Chưa có mã API Key? Đăng ký hoàn toàn miễn phí tại:{' '}
+              <a
+                href="https://api.imgbb.com/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-bold underline text-indigo-600 dark:text-indigo-400 inline-flex items-center gap-1"
+              >
+                api.imgbb.com <ExternalLink className="w-3 h-3" />
+              </a>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                Mã API Key ImgBB *
+              </label>
+              <input
+                type="text"
+                value={apiKeyInput}
+                onChange={(e) => setApiKeyInput(e.target.value)}
+                placeholder="Nhập mã 32 ký tự (ví dụ: 72616b04aea059...)"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowApiKeyModal(false)}
+                className="text-xs"
+              >
+                Đóng
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={handleSaveApiKey}
+                className="text-xs"
+              >
+                Lưu cấu hình
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </PageContainer>
   );
 };

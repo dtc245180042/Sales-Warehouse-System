@@ -18,6 +18,7 @@ class UserAvatar(Base):
     file_size = Column(Integer, nullable=False)
     width = Column(Integer, nullable=True)
     height = Column(Integer, nullable=True)
+    external_url = Column(String(500), nullable=True)
 
     created_at = Column(
         DateTime(timezone=True),
@@ -30,3 +31,17 @@ class UserAvatar(Base):
         onupdate=lambda: datetime.now(timezone.utc),
         nullable=False
     )
+
+
+# Đảm bảo cột external_url tự động tồn tại trong CSDL SQLite đang dùng
+try:
+    from app.core.database import engine
+    from sqlalchemy import text
+    with engine.connect() as _conn:
+        _res = _conn.execute(text("PRAGMA table_info(user_avatars)")).fetchall()
+        _cols = [r[1] for r in _res]
+        if _cols and "external_url" not in _cols:
+            _conn.execute(text("ALTER TABLE user_avatars ADD COLUMN external_url VARCHAR(500)"))
+            _conn.commit()
+except Exception:
+    pass

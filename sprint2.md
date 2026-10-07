@@ -1,5 +1,15 @@
-Là Quản trị hệ thống, tôi muốn xem nhật ký thao tác trên tồn kho và công nợ, để truy được ai đã điều chỉnh tồn khi cuối tháng kiểm kê bị lệch.
-(Backend) Xây dựng API tra cứu nhật ký thao tác có phân trang và bộ lọc
-(Backend) Thiết kế mô hình và lưu vết nhật ký thao tác cho tồn kho, công nợ, giá và hoá đơn
-(Backend) Chuẩn hóa nội dung nhật ký hiển thị giá trị trước/sau và thông tin đối tượng liên quan
-(Backend) Ghi nhận tự động nhật ký khi phát sinh thay đổi tồn kho, giá, hạn mức công nợ và hoá đơn
+Là Quản lý kinh doanh, tôi muốn quản lý nhóm hàng nhiều cấp, để xem được doanh số theo ngành hàng chứ không chỉ theo từng mã.
+Nhóm hàng có cấu trúc cây, tối thiểu ba cấp
+
+Chuyển sản phẩm giữa các nhóm được
+
+Nhóm còn sản phẩm thì không xoá được
+
+subtask:
+(Backend) Xây dựng chức năng chuyển sản phẩm giữa các nhóm hàng
+(Backend) Bổ sung ràng buộc nghiệp vụ cho cấu trúc nhóm hàng nhiều cấp
+(Frontend) Xây dựng màn hình quản lý nhóm hàng dạng cây
+(Backend) Thiết kế API quản lý nhóm hàng dạng cây nhiều cấp
+(Backend) Ngăn xoá nhóm hàng còn chứa sản phẩm hoặc nhóm con
+(Frontend) Tích hợp thao tác chuyển sản phẩm giữa các nhóm hàng
+(Frontend) Hiển thị cảnh báo và vô hiệu hoá thao tác xoá nhóm hàng không hợp lệ

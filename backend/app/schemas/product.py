@@ -1,7 +1,7 @@
 import re
 from datetime import datetime
-from typing import List, Optional
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from typing import List, Optional, Any
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from app.models.product import ProductStatus
 
 
@@ -43,6 +43,22 @@ class ProductBase(BaseModel):
     unit: str = Field(..., max_length=50, description="Đơn vị tính cơ sở", examples=["Hộp"])
     packaging_spec: Optional[str] = Field(None, max_length=255, description="Quy cách đóng gói", examples=["12 hộp/thùng"])
     image_url: Optional[str] = Field(None, max_length=500, description="Đường dẫn ảnh sản phẩm")
+    barcode: Optional[str] = Field(None, max_length=50, description="Mã vạch sản phẩm")
+    supplier_id: Optional[str] = Field(None, max_length=50, description="Mã nhà cung cấp")
+    supplier_name: Optional[str] = Field(None, max_length=255, description="Tên nhà cung cấp")
+    description: Optional[str] = Field(None, max_length=1000, description="Mô tả sản phẩm")
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_aliases(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            if "packaging_specification" in data and not data.get("packaging_spec"):
+                data["packaging_spec"] = data["packaging_specification"]
+            if "image" in data and not data.get("image_url"):
+                data["image_url"] = data["image"]
+            if "sale_price" in data and not data.get("price"):
+                data["price"] = data["sale_price"]
+        return data
 
     @field_validator("sku")
     @classmethod
@@ -80,14 +96,23 @@ class ProductBase(BaseModel):
 class ProductCreateRequest(ProductBase):
     """Schema tạo mới sản phẩm (SCRUM-376)."""
     cost_price: Optional[float] = Field(0.0, ge=0, description="Giá vốn (Chỉ Quản lý kinh doanh xem và sửa)")
+    price: Optional[float] = Field(0.0, ge=0, description="Giá bán niêm yết")
+    sale_price: Optional[float] = Field(None, ge=0, description="Giá bán niêm yết (alias)")
+    stock: Optional[int] = Field(0, ge=0, description="Số lượng tồn kho ban đầu")
+    min_stock: Optional[int] = Field(0, ge=0, description="Hạn mức cảnh báo tồn tối thiểu")
     status: Optional[str] = Field(ProductStatus.ACTIVE, description="Trạng thái kinh doanh")
 
-    @field_validator("status")
+    @field_validator("status", mode="before")
     @classmethod
     def check_status(cls, v: Optional[str]) -> str:
-        if v not in (ProductStatus.ACTIVE, ProductStatus.INACTIVE):
-            raise ValueError("Trạng thái chỉ có thể là ACTIVE hoặc INACTIVE.")
-        return v
+        if not v:
+            return ProductStatus.ACTIVE
+        v_upper = str(v).strip().upper()
+        if v_upper in (ProductStatus.ACTIVE, ProductStatus.INACTIVE):
+            return v_upper
+        if v_upper in ("LOW_STOCK", "OUT_OF_STOCK"):
+            return ProductStatus.ACTIVE
+        return ProductStatus.ACTIVE
 
 
 class ProductUpdateRequest(BaseModel):
@@ -99,8 +124,26 @@ class ProductUpdateRequest(BaseModel):
     unit: Optional[str] = Field(None, max_length=50, description="Đơn vị tính cơ sở")
     packaging_spec: Optional[str] = Field(None, max_length=255, description="Quy cách đóng gói")
     cost_price: Optional[float] = Field(None, ge=0, description="Giá vốn sản phẩm")
+    price: Optional[float] = Field(None, ge=0, description="Giá bán niêm yết")
+    sale_price: Optional[float] = Field(None, ge=0, description="Giá bán niêm yết (alias)")
+    description: Optional[str] = Field(None, max_length=1000, description="Mô tả sản phẩm")
+    stock: Optional[int] = Field(None, ge=0, description="Số lượng tồn kho")
+    min_stock: Optional[int] = Field(None, ge=0, description="Định mức tồn tối thiểu")
+    barcode: Optional[str] = Field(None, max_length=50, description="Mã vạch")
     image_url: Optional[str] = Field(None, max_length=500, description="Đường dẫn ảnh sản phẩm")
     status: Optional[str] = Field(None, description="Trạng thái: ACTIVE hoặc INACTIVE")
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_aliases(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            if "packaging_specification" in data and not data.get("packaging_spec"):
+                data["packaging_spec"] = data["packaging_specification"]
+            if "image" in data and not data.get("image_url"):
+                data["image_url"] = data["image"]
+            if "sale_price" in data and not data.get("price"):
+                data["price"] = data["sale_price"]
+        return data
 
     @field_validator("sku")
     @classmethod
@@ -159,6 +202,7 @@ class ProductResponse(BaseModel):
     salePrice: Optional[float] = 0.0
     stock: Optional[int] = 100
     min_stock: Optional[int] = 10
+    image: Optional[str] = None
     image_url: Optional[str] = None
     status: str
     has_transactions: bool

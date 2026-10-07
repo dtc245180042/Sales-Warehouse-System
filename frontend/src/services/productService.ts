@@ -21,7 +21,7 @@ function mapApiProduct(p: any): Product {
     minStock: Number(p.minStock ?? p.min_stock ?? 5),
     unit: p.unit || 'Chiếc',
     packagingSpecification: p.packagingSpecification || p.packaging_specification || '1 chiếc/hộp',
-    image: p.image || '/images/products/placeholder.jpg',
+    image: p.image || p.image_url || p.imageUrl || '/images/products/placeholder.jpg',
     description: p.description || '',
     status: p.status || 'active',
     hasTransactions: Boolean(p.hasTransactions ?? p.has_transactions ?? false),
@@ -49,8 +49,9 @@ export const productService = {
   },
 
   getById: async (id: string): Promise<Product | undefined> => {
+    const strId = String(id).trim();
     try {
-      const res = await apiClient.get(`/products/${encodeURIComponent(id)}`);
+      const res = await apiClient.get(`/products/${encodeURIComponent(strId)}`);
       if (res.data) {
         return mapApiProduct(res.data);
       }
@@ -58,7 +59,9 @@ export const productService = {
       // Dự phòng từ cache nếu lỗi mạng
     }
     const products = getStorageItem<Product[]>(STORAGE_KEY, initialProducts);
-    return products.find((p) => p.id === id || p.sku === id);
+    return products.find(
+      (p) => String(p.id).trim() === strId || p.sku.trim().toUpperCase() === strId.toUpperCase()
+    );
   },
 
   create: async (data: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>): Promise<Product> => {
@@ -78,23 +81,36 @@ export const productService = {
         category_id: data.categoryId ?? (data as any).category_id,
         supplier_id: data.supplierId,
         supplier_name: data.supplierName,
-        cost_price: data.costPrice,
-        sale_price: data.salePrice,
-        stock: data.stock,
-        min_stock: data.minStock,
+        cost_price: Number(data.costPrice || 0),
+        sale_price: Number(data.salePrice || 0),
+        price: Number(data.salePrice || 0),
+        stock: Number(data.stock || 0),
+        min_stock: Number(data.minStock || 0),
         unit: data.unit,
+        packaging_spec: data.packagingSpecification || '1 chiếc/hộp',
         packaging_specification: data.packagingSpecification || '1 chiếc/hộp',
         image: data.image,
-        description: data.description,
-        status: data.status,
+        image_url: data.image,
+        description: data.description || '',
+        status: (data.status || 'ACTIVE').toUpperCase() === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE',
       };
       const res = await apiClient.post('/products', payload);
       const created = mapApiProduct(res.data);
       const cached = getStorageItem<Product[]>(STORAGE_KEY, initialProducts);
       setStorageItem(STORAGE_KEY, [created, ...cached]);
       return created;
-    } catch (err) {
-      console.warn('[productService] Backend error, fallback to local creation:', err);
+    } catch (err: any) {
+      if (err.response) {
+        const detail = err.response.data?.detail;
+        let errorMsg = 'Máy chủ từ chối yêu cầu tạo sản phẩm';
+        if (typeof detail === 'string') {
+          errorMsg = detail;
+        } else if (Array.isArray(detail)) {
+          errorMsg = detail.map((d: any) => d.msg || JSON.stringify(d)).join(', ');
+        }
+        throw new Error(errorMsg);
+      }
+      console.warn('[productService] Backend offline, fallback to local creation:', err);
       const newProduct: Product = {
         ...data,
         sku: cleanSku,
@@ -110,10 +126,14 @@ export const productService = {
   },
 
   update: async (id: string, data: Partial<Product>): Promise<Product> => {
+    const strId = String(id).trim();
     if (data.sku) {
       const cleanSku = data.sku.trim().toUpperCase();
       const products = getStorageItem<Product[]>(STORAGE_KEY, initialProducts);
-      const existingSku = products.find((p) => p.id !== id && p.sku.trim().toUpperCase() === cleanSku);
+      // Chỉ báo trùng SKU nếu có sản phẩm KHÁC sở hữu SKU này
+      const existingSku = products.find(
+        (p) => String(p.id).trim() !== strId && p.sku.trim().toUpperCase() === cleanSku
+      );
       if (existingSku) {
         throw new Error(`Mã SKU "${cleanSku}" đã được sử dụng bởi sản phẩm khác.`);
       }
@@ -129,30 +149,51 @@ export const productService = {
       if (data.categoryId !== undefined) payload.category_id = data.categoryId;
       if (data.supplierId !== undefined) payload.supplier_id = data.supplierId;
       if (data.supplierName !== undefined) payload.supplier_name = data.supplierName;
-      if (data.costPrice !== undefined) payload.cost_price = data.costPrice;
-      if (data.salePrice !== undefined) payload.sale_price = data.salePrice;
-      if (data.stock !== undefined) payload.stock = data.stock;
-      if (data.minStock !== undefined) payload.min_stock = data.minStock;
+      if (data.costPrice !== undefined) payload.cost_price = Number(data.costPrice);
+      if (data.salePrice !== undefined) {
+        payload.sale_price = Number(data.salePrice);
+        payload.price = Number(data.salePrice);
+      }
+      if (data.stock !== undefined) payload.stock = Number(data.stock);
+      if (data.minStock !== undefined) payload.min_stock = Number(data.minStock);
       if (data.unit !== undefined) payload.unit = data.unit;
-      if (data.packagingSpecification !== undefined) payload.packaging_specification = data.packagingSpecification;
-      if (data.image !== undefined) payload.image = data.image;
+      if (data.packagingSpecification !== undefined) {
+        payload.packaging_spec = data.packagingSpecification;
+        payload.packaging_specification = data.packagingSpecification;
+      }
+      if (data.image !== undefined) {
+        payload.image = data.image;
+        payload.image_url = data.image;
+      }
       if (data.description !== undefined) payload.description = data.description;
-      if (data.status !== undefined) payload.status = data.status;
+      if (data.status !== undefined) {
+        payload.status = String(data.status).toUpperCase() === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE';
+      }
 
-      const res = await apiClient.put(`/products/${encodeURIComponent(id)}`, payload);
+      const res = await apiClient.put(`/products/${encodeURIComponent(strId)}`, payload);
       const updated = mapApiProduct(res.data);
 
       const products = getStorageItem<Product[]>(STORAGE_KEY, initialProducts);
-      const idx = products.findIndex((p) => p.id === id);
+      const idx = products.findIndex((p) => String(p.id).trim() === strId);
       if (idx !== -1) {
         products[idx] = updated;
         setStorageItem(STORAGE_KEY, [...products]);
       }
       return updated;
-    } catch (err) {
+    } catch (err: any) {
+      if (err.response) {
+        const detail = err.response.data?.detail;
+        let errorMsg = 'Máy chủ từ chối yêu cầu cập nhật sản phẩm';
+        if (typeof detail === 'string') {
+          errorMsg = detail;
+        } else if (Array.isArray(detail)) {
+          errorMsg = detail.map((d: any) => d.msg || JSON.stringify(d)).join(', ');
+        }
+        throw new Error(errorMsg);
+      }
       console.warn('[productService] Backend error, fallback to local update:', err);
       const products = getStorageItem<Product[]>(STORAGE_KEY, initialProducts);
-      const index = products.findIndex((p) => p.id === id);
+      const index = products.findIndex((p) => String(p.id).trim() === strId);
       if (index === -1) throw new Error('Không tìm thấy sản phẩm');
 
       const updatedProduct = {
@@ -167,8 +208,9 @@ export const productService = {
   },
 
   delete: async (id: string): Promise<boolean> => {
+    const strId = String(id).trim();
     const products = await productService.getAll();
-    const target = products.find((p) => p.id === id);
+    const target = products.find((p) => String(p.id).trim() === strId);
     if (target?.hasTransactions) {
       throw new Error(
         `Sản phẩm "${target.name}" (${target.sku}) đã phát sinh giao dịch, không thể xóa. Vui lòng chuyển sang ngừng kinh doanh.`
@@ -176,25 +218,26 @@ export const productService = {
     }
 
     try {
-      await apiClient.delete(`/products/${encodeURIComponent(id)}`);
+      await apiClient.delete(`/products/${encodeURIComponent(strId)}`);
     } catch (err) {
       console.warn('[productService] Backend error, deleting locally:', err);
     }
     const cached = getStorageItem<Product[]>(STORAGE_KEY, initialProducts);
-    setStorageItem(STORAGE_KEY, cached.filter((p) => p.id !== id));
+    setStorageItem(STORAGE_KEY, cached.filter((p) => String(p.id).trim() !== strId));
     return true;
   },
 
   bulkDelete: async (ids: string[]): Promise<boolean> => {
+    const strIds = ids.map((i) => String(i).trim());
     const products = await productService.getAll();
-    const hasTx = products.filter((p) => ids.includes(p.id) && p.hasTransactions);
+    const hasTx = products.filter((p) => strIds.includes(String(p.id).trim()) && p.hasTransactions);
     if (hasTx.length > 0) {
       throw new Error(
         `Có ${hasTx.length} sản phẩm đã phát sinh giao dịch, không thể xóa. Vui lòng chuyển sang ngừng kinh doanh.`
       );
     }
 
-    for (const id of ids) {
+    for (const id of strIds) {
       try {
         await apiClient.delete(`/products/${encodeURIComponent(id)}`);
       } catch (e) {
@@ -202,7 +245,7 @@ export const productService = {
       }
     }
     const cached = getStorageItem<Product[]>(STORAGE_KEY, initialProducts);
-    setStorageItem(STORAGE_KEY, cached.filter((p) => !ids.includes(p.id)));
+    setStorageItem(STORAGE_KEY, cached.filter((p) => !strIds.includes(String(p.id).trim())));
     return true;
   },
 
@@ -211,11 +254,12 @@ export const productService = {
   },
 
   updateStock: async (id: string, delta: number): Promise<Product> => {
+    const strId = String(id).trim();
     try {
-      const res = await apiClient.patch(`/products/${encodeURIComponent(id)}/stock`, { delta });
+      const res = await apiClient.patch(`/products/${encodeURIComponent(strId)}/stock`, { delta });
       const updated = mapApiProduct(res.data);
       const products = getStorageItem<Product[]>(STORAGE_KEY, initialProducts);
-      const idx = products.findIndex((p) => p.id === id);
+      const idx = products.findIndex((p) => String(p.id).trim() === strId);
       if (idx !== -1) {
         products[idx] = updated;
         setStorageItem(STORAGE_KEY, [...products]);
@@ -224,7 +268,7 @@ export const productService = {
     } catch (err) {
       console.warn('[productService] Backend error, fallback to local stock calculation:', err);
       const products = getStorageItem<Product[]>(STORAGE_KEY, initialProducts);
-      const index = products.findIndex((p) => p.id === id);
+      const index = products.findIndex((p) => String(p.id).trim() === strId);
       if (index === -1) throw new Error('Không tìm thấy sản phẩm');
 
       const newStock = Math.max(0, products[index].stock + delta);

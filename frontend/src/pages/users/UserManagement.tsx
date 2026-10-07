@@ -19,6 +19,7 @@ import {
   CheckCircle2,
   Camera,
   RefreshCw,
+  ShieldAlert,
 } from 'lucide-react';
 import { PageContainer } from '../../components/layout/PageContainer';
 import { DataTable, Column } from '../../components/common/DataTable';
@@ -29,7 +30,7 @@ import { ConfirmDialog } from '../../components/common/ConfirmDialog';
 import { userService } from '../../services/userService';
 import { authService } from '../../services/authService';
 import { TerritorySelector } from '../../components/common/TerritorySelector';
-import { User, UserRole, UserStatus } from '../../types/User';
+import { User, UserRole, UserStatus, UserCanDeleteResponse } from '../../types/User';
 import { useToast } from '../../contexts/ToastContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { validateVNPhoneNumber } from '../../utils/phoneUtils';
@@ -59,7 +60,12 @@ export const UserManagement: React.FC = () => {
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [deleteId, setDeleteId] = useState<string | null>(null);
+
+  // Trạng thái kiểm tra phụ thuộc & xóa người dùng
+  const [deletingUser, setDeletingUser] = useState<User | null>(null);
+  const [canDeleteInfo, setCanDeleteInfo] = useState<UserCanDeleteResponse | null>(null);
+  const [isCheckingCanDelete, setIsCheckingCanDelete] = useState(false);
+  const [isDeletingUser, setIsDeletingUser] = useState(false);
 
   // Add / Edit Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -371,15 +377,42 @@ export const UserManagement: React.FC = () => {
     }
   };
 
-  const handleDelete = async () => {
-    if (!deleteId) return;
+  const handleOpenDelete = async (u: User) => {
+    setDeletingUser(u);
+    setIsCheckingCanDelete(true);
+    setCanDeleteInfo(null);
     try {
-      await userService.delete(deleteId);
-      showToast('Đã xóa người dùng khỏi hệ thống', 'success');
-      setDeleteId(null);
+      const info = await userService.canDelete(u.id);
+      setCanDeleteInfo(info);
+    } catch (err: any) {
+      showToast(err.message || 'Lỗi kiểm tra ràng buộc dữ liệu người dùng', 'warning');
+    } finally {
+      setIsCheckingCanDelete(false);
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deletingUser) return;
+    setIsDeletingUser(true);
+    try {
+      const res = await userService.delete(deletingUser.id);
+      showToast(res.message || 'Đã xóa vĩnh viễn tài khoản khỏi hệ thống', 'success', 'Xóa thành công');
+      setDeletingUser(null);
+      setCanDeleteInfo(null);
       loadUsers();
-    } catch {
-      showToast('Lỗi khi xóa người dùng', 'error');
+    } catch (err: any) {
+      showToast(err.message || 'Không thể xóa tài khoản người dùng', 'error', 'Thao tác bị từ chối');
+    } finally {
+      setIsDeletingUser(false);
+    }
+  };
+
+  const handleSwitchFromDeleteToLock = () => {
+    const target = deletingUser;
+    setDeletingUser(null);
+    setCanDeleteInfo(null);
+    if (target) {
+      handleOpenLock(target);
     }
   };
 
@@ -552,7 +585,7 @@ export const UserManagement: React.FC = () => {
             <Edit className="w-4 h-4" />
           </button>
           <button
-            onClick={() => setDeleteId(u.id)}
+            onClick={() => handleOpenDelete(u)}
             disabled={currentUser?.id === u.id}
             className={`p-1.5 rounded-lg transition-colors ${
               currentUser?.id === u.id
@@ -970,16 +1003,138 @@ export const UserManagement: React.FC = () => {
         variant="info"
       />
 
-      {/* Delete User Confirmation */}
-      <ConfirmDialog
-        isOpen={!!deleteId}
-        onClose={() => setDeleteId(null)}
-        onConfirm={handleDelete}
-        title="Xác nhận xóa tài khoản người dùng"
-        message="Hành động này sẽ thu hồi quyền truy cập của nhân viên này vĩnh viễn khỏi hệ thống."
-        confirmText="Xóa tài khoản"
-        variant="danger"
-      />
+      {/* Modal Kiểm Tra Phụ Thuộc Dữ Liệu & Xác Nhận Xóa Tài Khoản */}
+      <Modal
+        isOpen={!!deletingUser}
+        onClose={() => {
+          if (!isDeletingUser) {
+            setDeletingUser(null);
+            setCanDeleteInfo(null);
+          }
+        }}
+        title="Xác Nhận Xử Lý Tài Khoản Người Dùng"
+        maxWidth="md"
+      >
+        {isCheckingCanDelete ? (
+          <div className="py-8 flex flex-col items-center justify-center space-y-3">
+            <RefreshCw className="w-8 h-8 text-indigo-600 animate-spin" />
+            <p className="text-sm font-medium text-slate-600 dark:text-slate-300">
+              Đang phân tích ràng buộc dữ liệu (đơn hàng, phiếu kho, bảng giá)...
+            </p>
+          </div>
+        ) : canDeleteInfo?.can_delete ? (
+          <div className="space-y-4">
+            <div className="flex items-start gap-3 p-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60">
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+              <div>
+                <h4 className="text-sm font-semibold text-emerald-900 dark:text-emerald-200">
+                  Tài khoản độc lập - Đủ điều kiện xóa vĩnh viễn
+                </h4>
+                <p className="text-xs text-emerald-700 dark:text-emerald-300 mt-1 leading-relaxed">
+                  Tài khoản <strong>{deletingUser?.name}</strong> ({deletingUser?.email}) chưa phát sinh bất kỳ đơn hàng, phiếu nhập/xuất kho hay bảng giá nào (tài khoản tạo nhầm hoặc mới khởi tạo). Có thể xóa vĩnh viễn an toàn khỏi cơ sở dữ liệu.
+                </p>
+              </div>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-xs text-slate-600 dark:text-slate-400">
+              <p className="font-semibold text-slate-800 dark:text-slate-200 mb-1">Cảnh báo:</p>
+              <p>Hành động này sẽ xóa hoàn toàn thông tin người dùng khỏi CSDL. Thao tác này không thể hoàn tác.</p>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setDeletingUser(null);
+                  setCanDeleteInfo(null);
+                }}
+                disabled={isDeletingUser}
+              >
+                Hủy bỏ
+              </Button>
+              <Button
+                variant="danger"
+                onClick={handleConfirmDelete}
+                isLoading={isDeletingUser}
+                leftIcon={<Trash2 className="w-4 h-4" />}
+              >
+                Xóa vĩnh viễn khỏi CSDL
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="flex items-start gap-3 p-4 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60">
+              <ShieldAlert className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+              <div>
+                <h4 className="text-sm font-semibold text-amber-900 dark:text-amber-200">
+                  Không thể xóa vĩnh viễn (Phát hiện dữ liệu phụ thuộc)
+                </h4>
+                <p className="text-xs text-amber-800 dark:text-amber-300 mt-1 leading-relaxed">
+                  Tài khoản <strong>{deletingUser?.name}</strong> đã phát sinh dữ liệu nghiệp vụ trong hệ thống. Để bảo đảm toàn vẹn dữ liệu kế toán và lịch sử giao dịch, hệ thống chặn xóa cứng tài khoản này.
+                </p>
+              </div>
+            </div>
+
+            {/* Chi tiết các ràng buộc phát hiện */}
+            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2">
+              <div className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                Dữ liệu ràng buộc ghi nhận:
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="flex items-center justify-between p-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800">
+                  <span className="text-slate-500">Đơn hàng bán:</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-200">
+                    {canDeleteInfo?.dependencies?.orders_count || 0} đơn
+                  </span>
+                </div>
+                <div className="flex items-center justify-between p-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800">
+                  <span className="text-slate-500">Phiếu nhập/xuất kho:</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-200">
+                    {canDeleteInfo?.dependencies?.stock_receipts_count || 0} phiếu
+                  </span>
+                </div>
+                <div className="flex items-center justify-between p-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800">
+                  <span className="text-slate-500">Bảng giá phân phối:</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-200">
+                    {canDeleteInfo?.dependencies?.price_lists_count || 0} bảng giá
+                  </span>
+                </div>
+                <div className="flex items-center justify-between p-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800">
+                  <span className="text-slate-500">Nhật ký thao tác:</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-200">
+                    {canDeleteInfo?.dependencies?.audit_logs_count || 0} bản ghi
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-3 rounded-xl bg-indigo-50/70 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900/50 text-xs text-indigo-800 dark:text-indigo-300">
+              <span className="font-semibold">Giải pháp khuyến nghị: </span>
+              Chuyển sang <strong>Khóa tài khoản</strong> để lập tức thu hồi quyền đăng nhập mà không làm ảnh hưởng tính toàn vẹn dữ liệu lịch sử.
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setDeletingUser(null);
+                  setCanDeleteInfo(null);
+                }}
+              >
+                Đóng
+              </Button>
+              <Button
+                variant="warning"
+                onClick={handleSwitchFromDeleteToLock}
+                leftIcon={<Lock className="w-4 h-4" />}
+              >
+                Chuyển sang Khóa tài khoản
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
     </PageContainer>
   );
 };

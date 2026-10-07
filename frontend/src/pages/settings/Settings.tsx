@@ -10,6 +10,8 @@ import {
   MapPin,
   Lock,
   Camera,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import { PageContainer } from '../../components/layout/PageContainer';
 import { Button } from '../../components/common/Button';
@@ -40,6 +42,11 @@ export const Settings: React.FC = () => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [revokeOthers, setRevokeOthers] = useState(true);
   const [isChangingPass, setIsChangingPass] = useState(false);
+
+  // Bật/tắt hiển thị mật khẩu
+  const [showOldPassword, setShowOldPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -317,26 +324,48 @@ export const Settings: React.FC = () => {
                   <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
                     Mật khẩu hiện tại <span className="text-rose-500">*</span>
                   </label>
-                  <input
-                    type="password"
-                    value={oldPassword}
-                    onChange={(e) => setOldPassword(e.target.value)}
-                    placeholder="Nhập mật khẩu hiện tại đang dùng"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm focus:ring-2 focus:ring-indigo-500"
-                  />
+                  <div className="relative">
+                    <input
+                      type={showOldPassword ? 'text' : 'password'}
+                      value={oldPassword}
+                      onChange={(e) => setOldPassword(e.target.value)}
+                      placeholder="Nhập mật khẩu hiện tại đang dùng"
+                      className="w-full pl-3.5 pr-11 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm focus:ring-2 focus:ring-indigo-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowOldPassword(!showOldPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg focus:outline-none transition-colors"
+                      title={showOldPassword ? 'Ẩn mật khẩu' : 'Hiển thị mật khẩu'}
+                      aria-label={showOldPassword ? 'Ẩn mật khẩu' : 'Hiển thị mật khẩu'}
+                    >
+                      {showOldPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
                 </div>
 
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
                     Mật khẩu mới <span className="text-rose-500">*</span>
                   </label>
-                  <input
-                    type="password"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    placeholder="Tối thiểu 8 ký tự, bao gồm cả chữ và số"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm focus:ring-2 focus:ring-indigo-500"
-                  />
+                  <div className="relative">
+                    <input
+                      type={showNewPassword ? 'text' : 'password'}
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder="Tối thiểu 8 ký tự, bao gồm cả chữ và số"
+                      className="w-full pl-3.5 pr-11 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm focus:ring-2 focus:ring-indigo-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewPassword(!showNewPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg focus:outline-none transition-colors"
+                      title={showNewPassword ? 'Ẩn mật khẩu' : 'Hiển thị mật khẩu'}
+                      aria-label={showNewPassword ? 'Ẩn mật khẩu' : 'Hiển thị mật khẩu'}
+                    >
+                      {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
                   <p className="text-[11px] text-slate-400 mt-1">Yêu cầu tối thiểu 8 ký tự, có cả chữ cái và chữ số</p>
                 </div>
 
@@ -344,13 +373,24 @@ export const Settings: React.FC = () => {
                   <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
                     Xác nhận mật khẩu mới <span className="text-rose-500">*</span>
                   </label>
-                  <input
-                    type="password"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    placeholder="Nhập lại chính xác mật khẩu mới"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm focus:ring-2 focus:ring-indigo-500"
-                  />
+                  <div className="relative">
+                    <input
+                      type={showConfirmPassword ? 'text' : 'password'}
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="Nhập lại chính xác mật khẩu mới"
+                      className="w-full pl-3.5 pr-11 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm focus:ring-2 focus:ring-indigo-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg focus:outline-none transition-colors"
+                      title={showConfirmPassword ? 'Ẩn mật khẩu' : 'Hiển thị mật khẩu'}
+                      aria-label={showConfirmPassword ? 'Ẩn mật khẩu' : 'Hiển thị mật khẩu'}
+                    >
+                      {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
                 </div>
 
                 <div className="pt-2">

@@ -412,3 +412,91 @@ def test_scrum_375_cannot_delete_product_with_transactions():
     act_res = client.post(f"/api/v1/products/{prod_id}/activate", headers={"Authorization": f"Bearer {sm_token}"})
     assert act_res.status_code == 200
     assert act_res.json()["status"] == "ACTIVE"
+
+
+def test_create_product_with_frontend_payload():
+    """Kiểm tra tạo mới sản phẩm với đầy đủ các trường từ Frontend gửi lên:
+    - status chữ thường ('active')
+    - sale_price, packaging_specification, barcode
+    - stock, min_stock, description
+    """
+    token = get_token("admin_test")
+    payload = {
+        "sku": "SP-FE-NEW-01",
+        "barcode": "893850999999",
+        "name": "Nước tương Nam Dương đậm đặc 500ml",
+        "category": "Gia vị & Chế biến",
+        "supplier_id": "ncc-01",
+        "supplier_name": "Công ty CP Nam Dương",
+        "cost_price": 18000,
+        "sale_price": 25000,
+        "stock": 150,
+        "min_stock": 20,
+        "unit": "Chai",
+        "packaging_specification": "24 chai/thùng",
+        "image": "https://example.com/namduong.png",
+        "description": "Nước tương thơm ngon",
+        "status": "active",
+    }
+    res = client.post("/api/v1/products", json=payload, headers={"Authorization": f"Bearer {token}"})
+    assert res.status_code == 201
+    data = res.json()
+    assert data["sku"] == "SP-FE-NEW-01"
+    assert data["name"] == "Nước tương Nam Dương đậm đặc 500ml"
+    assert data["price"] == 25000
+    assert data["sale_price"] == 25000
+    assert data["cost_price"] == 18000
+    assert data["stock"] == 150
+    assert data["min_stock"] == 20
+    assert data["packaging_spec"] == "24 chai/thùng"
+    assert data["status"] == "ACTIVE"
+
+
+def test_create_product_by_sales_rep_auto_sets_zero_cost_price():
+    """Nhân viên bán hàng (sales_rep) tạo sản phẩm không bị lỗi 403, giá vốn được set về 0."""
+    token = get_token("sales_rep_test")
+    payload = {
+        "sku": "SP-SALESREP-01",
+        "name": "Bánh quy kem dâu",
+        "category": "Bánh kẹo",
+        "cost_price": 50000,
+        "sale_price": 60000,
+        "unit": "Hộp",
+        "status": "active",
+    }
+    res = client.post("/api/v1/products", json=payload, headers={"Authorization": f"Bearer {token}"})
+    assert res.status_code == 201
+    data = res.json()
+    # Nhân viên sales_rep không xem được cost_price (trả về None)
+    assert data["cost_price"] is None
+    assert data["price"] == 60000
+    assert data["status"] == "ACTIVE"
+
+
+def test_product_image_url_persisted_and_updated():
+    """Kiểm tra URL hình ảnh được lưu và cập nhật chính xác, trả về cả image và image_url."""
+    token = get_token("admin_test")
+    test_img = "https://images.unsplash.com/photo-1546868871-7041f2a55e12?w=500"
+    res = client.post("/api/v1/products", json={
+        "sku": "SP-IMG-TEST",
+        "name": "Bánh mì hoa cúc Pháp",
+        "category": "Bánh tươi",
+        "unit": "Ổ",
+        "image": test_img,
+    }, headers={"Authorization": f"Bearer {token}"})
+    assert res.status_code == 201
+    prod = res.json()
+    assert prod["image_url"] == test_img
+    assert prod["image"] == test_img
+
+    # Cập nhật ảnh mới
+    new_img = "https://images.unsplash.com/photo-custom-999.png"
+    upd_res = client.put(f"/api/v1/products/{prod['id']}", json={
+        "image": new_img,
+    }, headers={"Authorization": f"Bearer {token}"})
+    assert upd_res.status_code == 200
+    upd_prod = upd_res.json()
+    assert upd_prod["image_url"] == new_img
+    assert upd_prod["image"] == new_img
+
+

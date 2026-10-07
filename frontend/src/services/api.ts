@@ -88,7 +88,7 @@ export const api = {
             originalPrice: Number(p.salePrice ?? p.sale_price ?? 0) * 1.1,
             stock: Number(p.stock ?? 0),
             unit: p.unit || 'Chiếc',
-            image: p.image || '/images/products/placeholder.jpg',
+            image: p.image || p.image_url || p.imageUrl || '/images/products/placeholder.jpg',
             description: p.description || '',
             rating: 4.8,
             reviewsCount: 15,

@@ -20,7 +20,7 @@ const productSchema = z.object({
   category: z.string().min(1, 'Vui lòng chọn danh mục'),
   categoryId: z.number().optional(),
   supplierId: z.string().min(1, 'Vui lòng chọn nhà cung cấp'),
-  costPrice: z.number().min(0, 'Giá nhập phải >= 0'),
+  costPrice: z.number().min(0, 'Giá nhập phải >= 0').optional().default(0),
   salePrice: z.number().min(0, 'Giá bán phải >= 0'),
   stock: z.number().min(0, 'Số lượng tồn kho phải >= 0'),
   minStock: z.number().min(0, 'Mức cảnh báo tồn phải >= 0'),
@@ -66,8 +66,15 @@ export const ProductForm: React.FC<ProductFormProps> = ({
 
   React.useEffect(() => {
     productService.getAll().then((products) => {
+      const currentId = initialValues?.id !== undefined ? String(initialValues.id).trim() : undefined;
+      const currentSku = initialValues?.sku ? initialValues.sku.trim().toUpperCase() : undefined;
       const skus = products
-        .filter((p) => !isEdit || p.id !== initialValues?.id)
+        .filter((p) => {
+          if (!isEdit) return true;
+          if (currentId && String(p.id).trim() === currentId) return false;
+          if (currentSku && p.sku.trim().toUpperCase() === currentSku) return false;
+          return true;
+        })
         .map((p) => p.sku.trim().toUpperCase());
       setExistingSkus(skus);
     });
@@ -113,12 +120,20 @@ export const ProductForm: React.FC<ProductFormProps> = ({
             setIsLeafSelected(match.isLeaf);
             setValue('categoryId', match.id);
           }
+        } else if (flat.length > 0 && !isEdit) {
+          const firstOption = flat.find((o) => o.isLeaf) || flat[0];
+          if (firstOption) {
+            setSelectedCatId(firstOption.id);
+            setIsLeafSelected(firstOption.isLeaf);
+            setValue('categoryId', firstOption.id);
+            setValue('category', firstOption.name);
+          }
         }
       }
     }).catch((err) => {
       console.warn('Không thể tải cây nhóm hàng, sử dụng fallback:', err);
     });
-  }, [isEdit, initialValues]);
+  }, [isEdit, initialValues?.id, initialValues?.sku]);
 
   const {
     register,
@@ -127,6 +142,7 @@ export const ProductForm: React.FC<ProductFormProps> = ({
     setValue,
     setError,
     clearErrors,
+    reset,
     formState: { errors, isSubmitting },
   } = useForm<ProductFormValues>({
     resolver: zodResolver(productSchema),
@@ -143,11 +159,37 @@ export const ProductForm: React.FC<ProductFormProps> = ({
       minStock: initialValues?.minStock ?? 5,
       unit: initialValues?.unit || 'Chiếc',
       packagingSpecification: initialValues?.packagingSpecification || '1 chiếc/hộp',
-      image: initialValues?.image || 'https://images.unsplash.com/photo-1546868871-7041f2a55e12?w=300',
+      image: (initialValues?.image && initialValues.image !== '/images/products/placeholder.jpg' ? initialValues.image : (initialValues as any)?.image_url) || initialValues?.image || 'https://images.unsplash.com/photo-1546868871-7041f2a55e12?w=300',
       description: initialValues?.description || '',
       status: initialValues?.status || 'active',
     },
   });
+
+  // Tự động đồng bộ lại form khi initialValues được nạp sau
+  React.useEffect(() => {
+    if (initialValues && isEdit) {
+      reset({
+        name: initialValues.name || '',
+        sku: initialValues.sku || '',
+        barcode: initialValues.barcode || '',
+        category: initialValues.category || productCategories[0].name,
+        categoryId: initialValues.categoryId,
+        supplierId: initialValues.supplierId || initialSuppliers[0].id,
+        costPrice: initialValues.costPrice ?? 0,
+        salePrice: initialValues.salePrice ?? 0,
+        stock: initialValues.stock ?? 0,
+        minStock: initialValues.minStock ?? 5,
+        unit: initialValues.unit || 'Chiếc',
+        packagingSpecification: initialValues.packagingSpecification || '1 chiếc/hộp',
+        image: (initialValues.image && initialValues.image !== '/images/products/placeholder.jpg' ? initialValues.image : (initialValues as any)?.image_url) || initialValues.image || 'https://images.unsplash.com/photo-1546868871-7041f2a55e12?w=300',
+        description: initialValues.description || '',
+        status: (initialValues.status as any) || 'active',
+      });
+      if (initialValues.categoryId) {
+        setSelectedCatId(initialValues.categoryId);
+      }
+    }
+  }, [initialValues, isEdit, reset]);
 
   const previewImage = watch('image');
   const watchedSku = watch('sku');
@@ -159,7 +201,10 @@ export const ProductForm: React.FC<ProductFormProps> = ({
       return;
     }
     const cleanSku = watchedSku.trim().toUpperCase();
-    if (existingSkus.includes(cleanSku)) {
+    const currentSku = initialValues?.sku ? initialValues.sku.trim().toUpperCase() : undefined;
+    const isSkuUnchanged = isEdit && currentSku && cleanSku === currentSku;
+
+    if (!isSkuUnchanged && existingSkus.includes(cleanSku)) {
       setSkuError(`Mã SKU "${cleanSku}" đã tồn tại trong danh mục sản phẩm (Mã SKU phải là duy nhất).`);
       setError('sku', {
         type: 'manual',
@@ -169,18 +214,21 @@ export const ProductForm: React.FC<ProductFormProps> = ({
       setSkuError('');
       clearErrors('sku');
     }
-  }, [watchedSku, existingSkus, setError, clearErrors]);
+  }, [watchedSku, existingSkus, isEdit, initialValues?.sku, setError, clearErrors]);
 
   const handleFormSubmit = async (values: ProductFormValues) => {
     const cleanSku = values.sku.trim().toUpperCase();
-    if (existingSkus.includes(cleanSku)) {
+    const currentSku = initialValues?.sku ? initialValues.sku.trim().toUpperCase() : undefined;
+    const isSkuUnchanged = isEdit && currentSku && cleanSku === currentSku;
+
+    if (!isSkuUnchanged && existingSkus.includes(cleanSku)) {
       setSkuError(`Mã SKU "${cleanSku}" đã tồn tại trong hệ thống.`);
       return;
     }
     // SCRUM-381: Nếu người dùng không có quyền quản lý giá vốn, giữ nguyên giá vốn ban đầu
-    const finalCostPrice = canManageCostPrice
-      ? values.costPrice
-      : (initialValues?.costPrice ?? 0);
+    const finalCostPrice = Number(canManageCostPrice
+      ? (values.costPrice ?? 0)
+      : (initialValues?.costPrice ?? 0)) || 0;
 
     await onSubmit({
       ...values,
@@ -283,14 +331,21 @@ export const ProductForm: React.FC<ProductFormProps> = ({
                     className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   />
                 ) : (
-                  <input
-                    type="password"
-                    disabled
-                    value="******"
-                    readOnly
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800/80 text-slate-400 text-sm cursor-not-allowed select-none font-mono"
-                    title="Bạn không có quyền xem hoặc chỉnh sửa giá vốn sản phẩm"
-                  />
+                  <>
+                    <input
+                      type="hidden"
+                      {...register('costPrice', { valueAsNumber: true })}
+                      value={initialValues?.costPrice ?? 0}
+                    />
+                    <input
+                      type="password"
+                      disabled
+                      value="******"
+                      readOnly
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800/80 text-slate-400 text-sm cursor-not-allowed select-none font-mono"
+                      title="Bạn không có quyền xem hoặc chỉnh sửa giá vốn sản phẩm"
+                    />
+                  </>
                 )}
                 {errors.costPrice && <p className="text-xs text-rose-500 mt-1">{errors.costPrice.message}</p>}
               </div>

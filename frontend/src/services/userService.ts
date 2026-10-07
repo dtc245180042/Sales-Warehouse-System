@@ -1,4 +1,4 @@
-import { User } from '../types/User';
+import { User, UserCanDeleteResponse, UserDeleteResponse } from '../types/User';
 import { apiClient } from '../api/client';
 import { mapBackendUserToFrontend } from './authService';
 import { initialUsers } from '../mock/users';
@@ -186,12 +186,67 @@ export const userService = {
     return updated;
   },
 
-  // 6. Xóa / Khóa tài khoản
-  delete: async (id: string): Promise<boolean> => {
-    // Để đảm bảo tính toàn vẹn dữ liệu hệ thống kho, ta chuyển thành khóa tài khoản
-    await apiClient.post(`/users/${id}/lock`, {
-      reason: 'Đã xóa / ngừng hoạt động bởi Quản trị viên',
-    });
-    return true;
+  // 6. Kiểm tra xem tài khoản có thể xóa cứng hay không (không phụ thuộc dữ liệu)
+  canDelete: async (id: string): Promise<UserCanDeleteResponse> => {
+    try {
+      const res = await apiClient.get<UserCanDeleteResponse>(`/users/${id}/can-delete`);
+      return res.data;
+    } catch (err: any) {
+      console.warn('[userService] canDelete API error, using fallback:', err);
+      // Fallback khi offline
+      const users = getStorageItem<User[]>(STORAGE_KEY, initialUsers);
+      const target = users.find((u) => u.id === id);
+      const isDefaultUser = id === '1' || target?.name?.toLowerCase().includes('admin') || target?.email?.includes('admin');
+
+      if (isDefaultUser) {
+        return {
+          user_id: id,
+          username: target?.email || id,
+          can_delete: false,
+          has_dependencies: true,
+          dependencies: { orders_count: 0, stock_receipts_count: 0, price_lists_count: 0, audit_logs_count: 0 },
+          reason: 'Tài khoản Quản trị viên gốc không được phép xóa.',
+          suggested_action: 'none',
+        };
+      }
+
+      const hasMockHistory = ['1', '2', '3'].includes(id) || Boolean(target?.assignedDealersCount && target.assignedDealersCount > 0);
+      if (hasMockHistory) {
+        return {
+          user_id: id,
+          username: target?.email || id,
+          can_delete: false,
+          has_dependencies: true,
+          dependencies: { orders_count: 3, stock_receipts_count: 1, price_lists_count: 0, audit_logs_count: 5 },
+          reason: `Tài khoản '${target?.name || id}' đã phát sinh giao dịch trong hệ thống (3 đơn hàng, 1 phiếu kho). Không thể xóa vĩnh viễn để bảo vệ toàn vẹn dữ liệu.`,
+          suggested_action: 'lock',
+        };
+      }
+
+      return {
+        user_id: id,
+        username: target?.email || id,
+        can_delete: true,
+        has_dependencies: false,
+        dependencies: { orders_count: 0, stock_receipts_count: 0, price_lists_count: 0, audit_logs_count: 0 },
+        reason: `Tài khoản '${target?.name || id}' chưa phát sinh dữ liệu giao dịch phụ thuộc. Có thể xóa vĩnh viễn an toàn.`,
+        suggested_action: 'delete',
+      };
+    }
+  },
+
+  // 7. Xóa vĩnh viễn tài khoản (Hard delete nếu không phụ thuộc dữ liệu)
+  delete: async (id: string): Promise<UserDeleteResponse> => {
+    try {
+      const res = await apiClient.delete<UserDeleteResponse>(`/users/${id}`);
+      // Dọn dẹp local storage nếu có
+      const users = getStorageItem<User[]>(STORAGE_KEY, initialUsers);
+      const remaining = users.filter((u) => u.id !== id);
+      setStorageItem(STORAGE_KEY, remaining);
+      return res.data;
+    } catch (err: any) {
+      const errMsg = err.response?.data?.detail || err.message || 'Lỗi khi xóa người dùng';
+      throw new Error(errMsg);
+    }
   },
 };

@@ -70,6 +70,7 @@ class ProductService:
             salePrice=price_val,
             stock=stock_val,
             min_stock=min_stock_val,
+            image=product.image_url,
             image_url=product.image_url,
             status=product.status,
             has_transactions=product.has_transactions,
@@ -99,11 +100,9 @@ class ProductService:
 
         # Kiểm tra quyền sửa giá vốn (SCRUM-378)
         cost_price = data.cost_price or 0.0
-        if not cls.is_sales_manager_or_admin(current_user) and data.cost_price not in (None, 0.0):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Chỉ Quản lý kinh doanh mới có quyền thiết lập giá vốn cho sản phẩm."
-            )
+        if not cls.is_sales_manager_or_admin(current_user):
+            # Nếu người dùng không có quyền quản lý giá vốn, tự động đặt về 0.0 thay vì ném lỗi
+            cost_price = 0.0
 
         cat_id = getattr(data, "category_id", None)
         category_name = data.category.strip()
@@ -113,6 +112,12 @@ class ProductService:
             if cat_obj and (not category_name or category_name == ""):
                 category_name = cat_obj.name
 
+        price_val = float(data.price if data.price is not None else (data.sale_price or 0.0))
+        desc_val = data.description.strip() if data.description else None
+
+        img_val = getattr(data, "image_url", None) or getattr(data, "image", None)
+        image_url = img_val.strip() if isinstance(img_val, str) and img_val.strip() else None
+
         product = Product(
             sku=normalized_sku,
             name=data.name.strip(),
@@ -120,14 +125,33 @@ class ProductService:
             category_id=cat_id,
             unit=data.unit.strip(),
             packaging_spec=data.packaging_spec.strip() if data.packaging_spec else None,
-            cost_price=cost_price if cls.is_sales_manager_or_admin(current_user) else 0.0,
-            image_url=data.image_url,
+            cost_price=cost_price,
+            price=price_val,
+            description=desc_val,
+            image_url=image_url,
             status=data.status or ProductStatus.ACTIVE,
             has_transactions=False,
         )
         db.add(product)
         db.commit()
         db.refresh(product)
+
+        # Tạo hồ sơ tồn kho 1-1 ProductStockProfile (SCRUM-220 & Additive-Only)
+        stock_val = int(data.stock or 0)
+        min_stock_val = int(data.min_stock or 0)
+        existing_profile = db.query(ProductStockProfile).filter(ProductStockProfile.product_id == product.id).first()
+        if not existing_profile:
+            stock_profile = ProductStockProfile(
+                product_id=product.id,
+                sku=product.sku,
+                stock=stock_val,
+                min_stock=min_stock_val,
+                warehouse="Kho Tổng Hà Nội",
+            )
+            db.add(stock_profile)
+            db.commit()
+            db.refresh(product)
+
         return product
 
     @classmethod
@@ -185,10 +209,33 @@ class ProductService:
             product.packaging_spec = data.packaging_spec.strip() if data.packaging_spec else None
         if data.cost_price is not None:
             product.cost_price = data.cost_price
-        if data.image_url is not None:
-            product.image_url = data.image_url
         if data.status is not None:
             product.status = data.status
+        img_update = getattr(data, "image_url", None) or getattr(data, "image", None)
+        if img_update is not None:
+            product.image_url = img_update.strip() if isinstance(img_update, str) and img_update.strip() else None
+        if getattr(data, "price", None) is not None or getattr(data, "sale_price", None) is not None:
+            product.price = float(data.price if data.price is not None else data.sale_price)
+        if getattr(data, "description", None) is not None:
+            product.description = data.description.strip() if data.description else None
+
+        # Cập nhật thông tin tồn kho ProductStockProfile nếu có
+        if getattr(data, "stock", None) is not None or getattr(data, "min_stock", None) is not None:
+            sp = db.query(ProductStockProfile).filter(ProductStockProfile.product_id == product.id).first()
+            if not sp:
+                sp = ProductStockProfile(
+                    product_id=product.id,
+                    sku=product.sku,
+                    stock=int(getattr(data, "stock", 0) or 0),
+                    min_stock=int(getattr(data, "min_stock", 0) or 0),
+                    warehouse="Kho Tổng Hà Nội",
+                )
+                db.add(sp)
+            else:
+                if getattr(data, "stock", None) is not None:
+                    sp.stock = int(data.stock)
+                if getattr(data, "min_stock", None) is not None:
+                    sp.min_stock = int(data.min_stock)
 
         db.commit()
         db.refresh(product)

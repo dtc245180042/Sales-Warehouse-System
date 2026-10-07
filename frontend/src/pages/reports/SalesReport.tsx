@@ -20,6 +20,7 @@ import {
 import { PageContainer } from '../../components/layout/PageContainer';
 import { Button } from '../../components/common/Button';
 import { formatCurrency, formatNumber } from '../../utils/formatters';
+import { exportToCSV } from '../../utils/csvExporter';
 import { orderService } from '../../services/orderService';
 import { productService } from '../../services/productService';
 import { Order } from '../../types/Order';
@@ -40,25 +41,63 @@ export const SalesReport: React.FC = () => {
   const totalCompleted = orders.filter((o) => o.status === 'completed').length;
   const totalCancelled = orders.filter((o) => o.status === 'cancelled').length;
 
-  const topCategories = [
-    { name: 'Điện Thoại & Tablet', sales: 480000000, quantity: 18 },
-    { name: 'Laptop & Máy Tính', sales: 390000000, quantity: 12 },
-    { name: 'Phụ Kiện Công Nghệ', sales: 125000000, quantity: 56 },
-    { name: 'Thiết Bị Âm Thanh', sales: 86000000, quantity: 22 },
-    { name: 'Gia Dụng Thông Minh', sales: 74000000, quantity: 10 },
-  ];
+  const topCategories = React.useMemo(() => {
+    // Bản đồ tra cứu ngành hàng / nhóm hàng từ danh mục sản phẩm
+    const productCategoryMap = new Map<string, string>();
+    products.forEach((p) => {
+      const cat = p.category || 'Khác';
+      productCategoryMap.set(p.id, cat);
+      if (p.sku) productCategoryMap.set(p.sku.toUpperCase(), cat);
+    });
+
+    const categoryStats: Record<string, { sales: number; quantity: number }> = {};
+
+    orders
+      .filter((o) => o.status !== 'cancelled')
+      .forEach((order) => {
+        (order.items || []).forEach((item) => {
+          const catName =
+            productCategoryMap.get(item.productId) ||
+            productCategoryMap.get((item.sku || '').toUpperCase()) ||
+            'Hàng hóa chung';
+          if (!categoryStats[catName]) {
+            categoryStats[catName] = { sales: 0, quantity: 0 };
+          }
+          categoryStats[catName].sales += item.subtotal || item.price * item.quantity;
+          categoryStats[catName].quantity += item.quantity || 1;
+        });
+      });
+
+    const list = Object.entries(categoryStats).map(([name, data]) => ({
+      name,
+      sales: data.sales,
+      quantity: data.quantity,
+    }));
+
+    list.sort((a, b) => b.sales - a.sales);
+
+    // Nếu đã có giao dịch phát sinh thì phản ánh số liệu thực tế
+    if (list.length > 0) {
+      return list;
+    }
+
+    // Dữ liệu mẫu khởi tạo khi hệ thống mới tinh chưa có giao dịch
+    return [
+      { name: 'Điện Thoại & Tablet', sales: 480000000, quantity: 18 },
+      { name: 'Laptop & Máy Tính', sales: 390000000, quantity: 12 },
+      { name: 'Phụ Kiện Công Nghệ', sales: 125000000, quantity: 56 },
+      { name: 'Thiết Bị Âm Thanh', sales: 86000000, quantity: 22 },
+      { name: 'Gia Dụng Thông Minh', sales: 74000000, quantity: 10 },
+    ];
+  }, [orders, products]);
 
   const handleExportCSV = () => {
-    const rows = [
-      ['Ngành hàng', 'Doanh số (VNĐ)', 'Số lượng đã bán (sp)'],
-      ...topCategories.map((c) => [c.name, c.sales, c.quantity]),
-    ];
-    const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + rows.map((e) => e.join(',')).join('\n');
-    const link = document.createElement('a');
-    link.href = encodeURI(csvContent);
-    link.download = `bao_cao_ban_hang_${Date.now()}.csv`;
-    link.click();
-    showToast('Đã xuất báo cáo bán hàng!', 'success');
+    exportToCSV({
+      filename: `bao_cao_ban_hang_${Date.now()}`,
+      headers: ['Ngành hàng / Nhóm hàng', 'Doanh số (VNĐ)', 'Số lượng đã bán (sp)'],
+      rows: topCategories.map((c) => [c.name, c.sales, c.quantity]),
+    });
+    showToast('Đã xuất báo cáo bán hàng ra file Excel/CSV thành công!', 'success');
   };
 
   return (

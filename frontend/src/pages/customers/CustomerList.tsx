@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   Plus,
   Search,
@@ -25,9 +25,25 @@ import { useToast } from '../../contexts/ToastContext';
 
 export const CustomerList: React.FC = () => {
   const { showToast } = useToast();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const urlSearch = searchParams.get('q') || '';
   const [customers, setCustomers] = useState<Customer[]>([]);
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(urlSearch);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+
+  // Đồng bộ hai chiều từ URL -> State khi người dùng nhấn Back / Forward trên trình duyệt
+  useEffect(() => {
+    setSearch(urlSearch);
+  }, [urlSearch]);
+
+  const handleSearchChange = (newSearch: string) => {
+    setSearch(newSearch);
+    const params = new URLSearchParams(searchParams);
+    if (newSearch.trim()) params.set('q', newSearch.trim());
+    else params.delete('q');
+    setSearchParams(params, { replace: true });
+  };
 
   // Add/Edit modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -230,7 +246,7 @@ export const CustomerList: React.FC = () => {
             <input
               type="text"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => handleSearchChange(e.target.value)}
               placeholder="Tìm theo tên, số điện thoại, email, mã KH..."
               className="w-full pl-9 pr-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs sm:text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />

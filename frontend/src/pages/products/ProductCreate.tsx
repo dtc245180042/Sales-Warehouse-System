@@ -23,8 +23,8 @@ export const ProductCreate: React.FC = () => {
 
       showToast('Thêm mới sản phẩm thành công!', 'success');
       navigate('/products');
-    } catch {
-      showToast('Có lỗi xảy ra khi lưu sản phẩm', 'error');
+    } catch (err: any) {
+      showToast(err?.message || 'Có lỗi xảy ra khi lưu sản phẩm', 'error');
     }
   };
 

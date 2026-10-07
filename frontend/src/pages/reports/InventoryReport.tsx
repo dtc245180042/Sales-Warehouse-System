@@ -20,6 +20,7 @@ import {
 import { PageContainer } from '../../components/layout/PageContainer';
 import { Button } from '../../components/common/Button';
 import { formatCurrency, formatNumber } from '../../utils/formatters';
+import { exportToCSV } from '../../utils/csvExporter';
 import { productService } from '../../services/productService';
 import { Product } from '../../types/Product';
 import { useToast } from '../../contexts/ToastContext';
@@ -42,16 +43,12 @@ export const InventoryReport: React.FC = () => {
   ];
 
   const handleExportCSV = () => {
-    const rows = [
-      ['Tên kho hàng', 'Số lượng tồn (đơn vị)', 'Tổng giá trị lưu kho (VNĐ)'],
-      ...warehouseBreakdown.map((w) => [w.name, w.stock, w.value]),
-    ];
-    const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + rows.map((e) => e.join(',')).join('\n');
-    const link = document.createElement('a');
-    link.href = encodeURI(csvContent);
-    link.download = `bao_cao_kho_${Date.now()}.csv`;
-    link.click();
-    showToast('Đã xuất báo cáo kho!', 'success');
+    exportToCSV({
+      filename: `bao_cao_kho_${Date.now()}`,
+      headers: ['Tên kho hàng', 'Số lượng tồn (đơn vị)', 'Tổng giá trị lưu kho (VNĐ)'],
+      rows: warehouseBreakdown.map((w) => [w.name, w.stock, w.value]),
+    });
+    showToast('Đã xuất báo cáo kho thành công!', 'success');
   };
 
   return (

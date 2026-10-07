@@ -201,3 +201,42 @@ async def tai_len_anh_san_pham(
     image_url = f"/static/products/{unique_filename}"
     product = ProductService.update_image(db=db, product_id=product_id, image_url=image_url)
     return ProductService.serialize_product(product, current_user)
+
+
+@router.post(
+    "/upload-image",
+    status_code=status.HTTP_200_OK,
+    summary="Tải lên ảnh sản phẩm độc lập (SCRUM-379)"
+)
+async def tai_len_anh_san_pham_doc_lap(
+    file: UploadFile = File(..., description="File ảnh sản phẩm (jpg, png, webp, max 5MB)"),
+    current_user: User = Depends(lay_nguoi_dung_hien_tai),
+):
+    """Tải lên ảnh sản phẩm độc lập và trả về URL ảnh (SCRUM-379)."""
+    filename = file.filename or ""
+    _, ext = os.path.splitext(filename.lower())
+    if ext not in ALLOWED_IMAGE_EXTENSIONS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Định dạng file không hợp lệ. Chỉ chấp nhận các định dạng: {', '.join(sorted(ALLOWED_IMAGE_EXTENSIONS))}."
+        )
+
+    content = await file.read()
+    if len(content) > MAX_IMAGE_SIZE:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Dung lượng file ảnh vượt quá giới hạn cho phép (tối đa 5MB)."
+        )
+
+    os.makedirs(UPLOAD_DIR, exist_ok=True)
+    unique_filename = f"{uuid.uuid4().hex}{ext}"
+    file_path = os.path.join(UPLOAD_DIR, unique_filename)
+
+    with open(file_path, "wb") as f:
+        f.write(content)
+
+    return {
+        "url": f"/static/products/{unique_filename}",
+        "image_url": f"/static/products/{unique_filename}",
+    }
+

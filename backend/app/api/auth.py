@@ -219,21 +219,17 @@ def quen_mat_khau(
         (User.email == dinh_danh) | (User.username == dinh_danh)
     ).first()
 
-    if not nguoi_dung:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Tài khoản hoặc email '{dinh_danh}' không tồn tại trong hệ thống. Vui lòng kiểm tra lại."
-        )
-
-    # Sinh mã OTP 5 chữ số ngẫu nhiên
-    otp_5_so = f"{secrets.randbelow(90000) + 10000}"
-    nguoi_dung.reset_password_token = otp_5_so
-    nguoi_dung.reset_password_expires_at = datetime.now(timezone.utc) + timedelta(minutes=5)
-    phien_db.commit()
+    if nguoi_dung:
+        # Sinh mã OTP 5 chữ số ngẫu nhiên
+        otp_5_so = f"{secrets.randbelow(90000) + 10000}"
+        nguoi_dung.reset_password_token = otp_5_so
+        nguoi_dung.reset_password_expires_at = datetime.now(timezone.utc) + timedelta(minutes=30)
+        phien_db.commit()
 
     return MessageResponse(
-        message=f"Nếu email tồn tại trong hệ thống, hướng dẫn đặt lại mật khẩu đã được gửi đến email '{nguoi_dung.email}' của bạn."
+        message="Nếu email tồn tại trong hệ thống, hướng dẫn đặt lại mật khẩu đã được gửi đến email của bạn."
     )
+
 
 
 @router.post(

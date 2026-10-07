@@ -442,11 +442,24 @@ export const CategoryManagement: React.FC = () => {
 
             {/* Thống kê sản phẩm & nhóm con */}
             <span
-              className="text-xs px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 flex items-center gap-1"
-              title="Số sản phẩm trực thuộc"
+              className="text-xs px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 flex items-center gap-1.5"
+              title={
+                node.total_product_count !== undefined && node.total_product_count > node.product_count
+                  ? `Trực tiếp: ${node.product_count} sp | Tổng cộng dồn toàn ngành: ${node.total_product_count} sp`
+                  : `Số sản phẩm trực thuộc: ${node.product_count} sp`
+              }
             >
-              <Package className="w-3 h-3 text-slate-400" />
-              {node.product_count}
+              <Package className="w-3.5 h-3.5 text-slate-400" />
+              {node.total_product_count !== undefined && node.total_product_count > node.product_count ? (
+                <span>
+                  <strong className="text-slate-800 dark:text-slate-200">{node.product_count}</strong>
+                  <span className="ml-1 text-[11px] font-semibold text-indigo-600 dark:text-indigo-400">
+                    (Toàn ngành: {node.total_product_count})
+                  </span>
+                </span>
+              ) : (
+                <span>{node.product_count}</span>
+              )}
             </span>
 
             {/* Nút hành động nhanh */}

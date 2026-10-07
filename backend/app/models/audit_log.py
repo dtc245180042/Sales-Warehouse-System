@@ -51,6 +51,9 @@ class AuditLog(Base):
     # Địa chỉ IP hoặc nguồn gọi
     ip_address = Column(String(100), nullable=True)
     
+    # Trạng thái kết quả thao tác: "success", "failed", "warning"
+    status = Column(String(50), nullable=True, default="success")
+
     # Thời điểm phát sinh
     created_at = Column(
         DateTime(timezone=True),
@@ -58,3 +61,4 @@ class AuditLog(Base):
         nullable=False,
         index=True
     )
+

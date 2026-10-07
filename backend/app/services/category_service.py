@@ -58,6 +58,9 @@ class CategoryService:
         for cat in categories:
             prod_count = db.query(Product).filter(Product.category_id == cat.id).count()
             child_count = db.query(Category).filter(Category.parent_id == cat.id).count()
+            desc_ids = get_all_descendant_ids(db, cat.id)
+            sub_count = db.query(Product).filter(Product.category_id.in_(desc_ids)).count() if desc_ids else 0
+            total_prod_count = prod_count + sub_count
             results.append(
                 CategoryResponse(
                     id=cat.id,
@@ -69,6 +72,7 @@ class CategoryService:
                     is_active=cat.is_active,
                     product_count=prod_count,
                     children_count=child_count,
+                    total_product_count=total_prod_count,
                     created_at=cat.created_at,
                     updated_at=cat.updated_at,
                 )
@@ -100,6 +104,7 @@ class CategoryService:
                 is_active=cat.is_active,
                 product_count=stats[cat.id]["prod_count"],
                 children_count=stats[cat.id]["child_count"],
+                total_product_count=stats[cat.id]["prod_count"],
                 created_at=cat.created_at,
                 updated_at=cat.updated_at,
                 children=[]
@@ -114,6 +119,17 @@ class CategoryService:
             else:
                 root_nodes.append(current_node)
 
+        # Tính toán cộng dồn số lượng sản phẩm đệ quy từ các nhánh con lên gốc (Roll-up Aggregation)
+        def _rollup_counts(node: CategoryTreeResponse) -> int:
+            total = node.product_count
+            for child in node.children:
+                total += _rollup_counts(child)
+            node.total_product_count = total
+            return total
+
+        for root in root_nodes:
+            _rollup_counts(root)
+
         return root_nodes
 
     @staticmethod
@@ -127,6 +143,9 @@ class CategoryService:
             )
         prod_count = db.query(Product).filter(Product.category_id == cat.id).count()
         child_count = db.query(Category).filter(Category.parent_id == cat.id).count()
+        desc_ids = get_all_descendant_ids(db, cat.id)
+        sub_count = db.query(Product).filter(Product.category_id.in_(desc_ids)).count() if desc_ids else 0
+        total_prod_count = prod_count + sub_count
 
         return CategoryResponse(
             id=cat.id,
@@ -138,6 +157,7 @@ class CategoryService:
             is_active=cat.is_active,
             product_count=prod_count,
             children_count=child_count,
+            total_product_count=total_prod_count,
             created_at=cat.created_at,
             updated_at=cat.updated_at,
         )

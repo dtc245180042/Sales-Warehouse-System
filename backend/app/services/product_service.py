@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.models.auth import User, UserRole
 from app.models.product import Product, ProductStatus
+from app.models.product_stock_profile import ProductStockProfile
 from app.schemas.product import (
     ProductCreateRequest,
     ProductUpdateRequest,
@@ -40,14 +41,36 @@ class ProductService:
         Nếu người dùng không phải Quản lý kinh doanh/Admin, ẩn trường giá vốn (`cost_price = None`).
         """
         can_view_cost = cls.is_sales_manager_or_admin(current_user)
+        price_val = float(getattr(product, "price", 0.0) or 0.0)
+        stock_val = 100
+        min_stock_val = 10
+
+        db_state = getattr(product, "_sa_instance_state", None)
+        sess = getattr(db_state, "session", None) if db_state else None
+        if sess is not None:
+            try:
+                sp = sess.query(ProductStockProfile).filter(ProductStockProfile.product_id == product.id).first()
+                if sp:
+                    stock_val = sp.stock
+                    min_stock_val = sp.min_stock
+            except Exception:
+                pass
+
         return ProductResponse(
             id=product.id,
             sku=product.sku,
             name=product.name,
             category=product.category,
+            category_id=getattr(product, "category_id", None),
             unit=product.unit,
             packaging_spec=product.packaging_spec,
             cost_price=product.cost_price if can_view_cost else None,
+            price=price_val,
+            sale_price=price_val,
+            salePrice=price_val,
+            stock=stock_val,
+            min_stock=min_stock_val,
+            image=product.image_url,
             image_url=product.image_url,
             status=product.status,
             has_transactions=product.has_transactions,
@@ -59,8 +82,9 @@ class ProductService:
     def create_product(
         cls, db: Session, data: ProductCreateRequest, current_user: User
     ) -> Product:
-        """Tạo mới sản phẩm vào danh mục (SCRUM-376, SCRUM-377):
+        """Tạo mới sản phẩm vào danh mục (SCRUM-376, SCRUM-377, SCRUM-214):
         - Kiểm tra tính duy nhất của mã SKU (SCRUM-377).
+        - Đồng bộ liên kết nhóm hàng category_id (SCRUM-214).
         """
         normalized_sku = data.sku.strip().upper()
 
@@ -76,26 +100,58 @@ class ProductService:
 
         # Kiểm tra quyền sửa giá vốn (SCRUM-378)
         cost_price = data.cost_price or 0.0
-        if not cls.is_sales_manager_or_admin(current_user) and data.cost_price not in (None, 0.0):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Chỉ Quản lý kinh doanh mới có quyền thiết lập giá vốn cho sản phẩm."
-            )
+        if not cls.is_sales_manager_or_admin(current_user):
+            # Nếu người dùng không có quyền quản lý giá vốn, tự động đặt về 0.0 thay vì ném lỗi
+            cost_price = 0.0
+
+        cat_id = getattr(data, "category_id", None)
+        category_name = data.category.strip()
+        if cat_id:
+            from app.models.category import Category
+            cat_obj = db.query(Category).filter(Category.id == cat_id).first()
+            if cat_obj and (not category_name or category_name == ""):
+                category_name = cat_obj.name
+
+        price_val = float(data.price if data.price is not None else (data.sale_price or 0.0))
+        desc_val = data.description.strip() if data.description else None
+
+        img_val = getattr(data, "image_url", None) or getattr(data, "image", None)
+        image_url = img_val.strip() if isinstance(img_val, str) and img_val.strip() else None
 
         product = Product(
             sku=normalized_sku,
             name=data.name.strip(),
-            category=data.category.strip(),
+            category=category_name,
+            category_id=cat_id,
             unit=data.unit.strip(),
             packaging_spec=data.packaging_spec.strip() if data.packaging_spec else None,
-            cost_price=cost_price if cls.is_sales_manager_or_admin(current_user) else 0.0,
-            image_url=data.image_url,
+            cost_price=cost_price,
+            price=price_val,
+            description=desc_val,
+            image_url=image_url,
             status=data.status or ProductStatus.ACTIVE,
             has_transactions=False,
         )
         db.add(product)
         db.commit()
         db.refresh(product)
+
+        # Tạo hồ sơ tồn kho 1-1 ProductStockProfile (SCRUM-220 & Additive-Only)
+        stock_val = int(data.stock or 0)
+        min_stock_val = int(data.min_stock or 0)
+        existing_profile = db.query(ProductStockProfile).filter(ProductStockProfile.product_id == product.id).first()
+        if not existing_profile:
+            stock_profile = ProductStockProfile(
+                product_id=product.id,
+                sku=product.sku,
+                stock=stock_val,
+                min_stock=min_stock_val,
+                warehouse="Kho Tổng Hà Nội",
+            )
+            db.add(stock_profile)
+            db.commit()
+            db.refresh(product)
+
         return product
 
     @classmethod
@@ -140,16 +196,46 @@ class ProductService:
             product.name = data.name.strip()
         if data.category is not None:
             product.category = data.category.strip()
+        if hasattr(data, "category_id") and data.category_id is not None:
+            product.category_id = data.category_id
+            if data.category is None:
+                from app.models.category import Category
+                cat_obj = db.query(Category).filter(Category.id == data.category_id).first()
+                if cat_obj:
+                    product.category = cat_obj.name
         if data.unit is not None:
             product.unit = data.unit.strip()
         if data.packaging_spec is not None:
             product.packaging_spec = data.packaging_spec.strip() if data.packaging_spec else None
         if data.cost_price is not None:
             product.cost_price = data.cost_price
-        if data.image_url is not None:
-            product.image_url = data.image_url
         if data.status is not None:
             product.status = data.status
+        img_update = getattr(data, "image_url", None) or getattr(data, "image", None)
+        if img_update is not None:
+            product.image_url = img_update.strip() if isinstance(img_update, str) and img_update.strip() else None
+        if getattr(data, "price", None) is not None or getattr(data, "sale_price", None) is not None:
+            product.price = float(data.price if data.price is not None else data.sale_price)
+        if getattr(data, "description", None) is not None:
+            product.description = data.description.strip() if data.description else None
+
+        # Cập nhật thông tin tồn kho ProductStockProfile nếu có
+        if getattr(data, "stock", None) is not None or getattr(data, "min_stock", None) is not None:
+            sp = db.query(ProductStockProfile).filter(ProductStockProfile.product_id == product.id).first()
+            if not sp:
+                sp = ProductStockProfile(
+                    product_id=product.id,
+                    sku=product.sku,
+                    stock=int(getattr(data, "stock", 0) or 0),
+                    min_stock=int(getattr(data, "min_stock", 0) or 0),
+                    warehouse="Kho Tổng Hà Nội",
+                )
+                db.add(sp)
+            else:
+                if getattr(data, "stock", None) is not None:
+                    sp.stock = int(data.stock)
+                if getattr(data, "min_stock", None) is not None:
+                    sp.min_stock = int(data.min_stock)
 
         db.commit()
         db.refresh(product)
@@ -258,3 +344,62 @@ class ProductService:
         db.commit()
         db.refresh(product)
         return product
+
+
+def ensure_seed_products(db: Session):
+    """Tự động chèn danh mục sản phẩm mẫu nếu bảng products chưa có dữ liệu."""
+    if db.query(Product).count() == 0:
+        seed_products_data = [
+            {
+                "sku": "IP15P-128-TI",
+                "name": "iPhone 15 Pro 128GB Titanium",
+                "category": "Điện Thoại & Phụ Kiện",
+                "unit": "Chiếc",
+                "packaging_spec": "1 máy/hộp",
+                "cost_price": 24000000.0,
+                "price": 28990000.0,
+                "status": ProductStatus.ACTIVE,
+                "is_active": True,
+                "has_transactions": True,
+            },
+            {
+                "sku": "SS-S24U-256",
+                "name": "Samsung Galaxy S24 Ultra 256GB",
+                "category": "Điện Thoại & Phụ Kiện",
+                "unit": "Chiếc",
+                "packaging_spec": "1 máy/hộp",
+                "cost_price": 25000000.0,
+                "price": 29990000.0,
+                "status": ProductStatus.ACTIVE,
+                "is_active": True,
+                "has_transactions": True,
+            },
+            {
+                "sku": "MBP-14-M3",
+                "name": "MacBook Pro 14 M3 8GB 512GB",
+                "category": "Laptop & Máy Tính",
+                "unit": "Chiếc",
+                "packaging_spec": "1 máy/thùng",
+                "cost_price": 35000000.0,
+                "price": 39990000.0,
+                "status": ProductStatus.ACTIVE,
+                "is_active": True,
+                "has_transactions": False,
+            },
+            {
+                "sku": "SN-WH1000XM5-BK",
+                "name": "Tai nghe Sony WH-1000XM5 Black",
+                "category": "Thiết Bị Âm Thanh",
+                "unit": "Chiếc",
+                "packaging_spec": "1 tai nghe/hộp",
+                "cost_price": 6200000.0,
+                "price": 7990000.0,
+                "status": ProductStatus.ACTIVE,
+                "is_active": True,
+                "has_transactions": False,
+            },
+        ]
+        for p_data in seed_products_data:
+            db.add(Product(**p_data))
+        db.commit()
+

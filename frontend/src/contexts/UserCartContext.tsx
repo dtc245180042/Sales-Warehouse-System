@@ -4,15 +4,19 @@ import { api } from '../services/api';
 
 interface UserCartContextType {
   cart: CartItem[];
+  items: CartItem[];
   cartCount: number;
+  itemCount: number;
   subtotal: number;
   discount: number;
+  setDiscount: (discount: number) => void;
   tax: number;
   total: number;
   isLoading: boolean;
   addToCart: (product: ProductItem, quantity?: number) => Promise<void>;
   updateQuantity: (productId: string, quantity: number) => Promise<void>;
   removeFromCart: (productId: string) => Promise<void>;
+  removeItem: (productId: string) => Promise<void>;
   clearCart: () => Promise<void>;
   refreshCart: () => Promise<void>;
 }
@@ -76,9 +80,10 @@ export const UserCartProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   };
 
+  const [customDiscount, setCustomDiscount] = useState<number | null>(null);
   const cartCount = cart.reduce((sum, it) => sum + it.quantity, 0);
   const subtotal = cart.reduce((sum, it) => sum + it.product.price * it.quantity, 0);
-  const discount = subtotal > 5000000 ? 200000 : subtotal > 2000000 ? 100000 : 0;
+  const discount = customDiscount !== null ? customDiscount : (subtotal > 5000000 ? 200000 : subtotal > 2000000 ? 100000 : 0);
   const tax = Math.round(subtotal * 0.08); // 8% VAT
   const total = Math.max(0, subtotal - discount + tax);
 
@@ -86,15 +91,19 @@ export const UserCartProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     <UserCartContext.Provider
       value={{
         cart,
+        items: cart,
         cartCount,
+        itemCount: cartCount,
         subtotal,
         discount,
+        setDiscount: (d: number) => setCustomDiscount(d),
         tax,
         total,
         isLoading,
         addToCart,
         updateQuantity,
         removeFromCart,
+        removeItem: removeFromCart,
         clearCart,
         refreshCart,
       }}

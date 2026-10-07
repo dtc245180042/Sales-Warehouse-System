@@ -20,10 +20,10 @@ BASE = "/api/v1/suppliers"
 
 # ─── Helper ────────────────────────────────────────────────────────────────────
 
-def _unique_tax() -> str:
-    """Sinh mã số thuế 10 chữ số ngẫu nhiên hợp lệ."""
+def _unique_tax(length: int = 10) -> str:
+    """Sinh mã số thuế ngẫu nhiên hợp lệ (10 hoặc 13 chữ số)."""
     import random
-    return "".join([str(random.randint(0, 9)) for _ in range(10)])
+    return "".join([str(random.randint(0, 9)) for _ in range(length)])
 
 
 def _create_supplier(**kwargs) -> dict:
@@ -133,13 +133,15 @@ class TestSupplierValidation:
 
     def test_valid_tax_code_10_digits(self):
         """Mã số thuế 10 chữ số → hợp lệ."""
-        sup = _create_supplier(tax_code="0123456789")
-        assert sup["tax_code"] == "0123456789"
+        tax10 = _unique_tax(10)
+        sup = _create_supplier(tax_code=tax10)
+        assert sup["tax_code"] == tax10
 
     def test_valid_tax_code_13_digits(self):
         """Mã số thuế 13 chữ số → hợp lệ."""
-        sup = _create_supplier(tax_code="0123456789012")
-        assert sup["tax_code"] == "0123456789012"
+        tax13 = _unique_tax(13)
+        sup = _create_supplier(tax_code=tax13)
+        assert sup["tax_code"] == tax13
 
     def test_duplicate_tax_code_rejected(self):
         """Trùng mã số thuế → 409."""

@@ -7,17 +7,59 @@ import {
   CheckCircle2,
   AlertTriangle,
   ArrowUpRight,
+  Scale,
+  FileText,
+  Calendar,
 } from 'lucide-react';
 import { PageContainer } from '../../components/layout/PageContainer';
 import { Button } from '../../components/common/Button';
 import { ConfirmDialog } from '../../components/common/ConfirmDialog';
+import { UnitQtySelector, UnitQtySelectorValue } from '../../components/common/UnitQtySelector';
 import { formatCurrency } from '../../utils/formatters';
+import { unitConfigService } from '../../mock/unitConversions';
 import { productService } from '../../services/productService';
 import { inventoryService } from '../../services/inventoryService';
 import { Product } from '../../types/Product';
+import { UnitConversion } from '../../types/Product';
 import { StockOutItem, StockOutReason } from '../../types/Inventory';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
+
+// ── Extended item state ──
+interface StockOutItemState extends StockOutItem {
+  availableUnits: UnitConversion[];
+  baseUnit: string;
+}
+
+const buildDefaultUnits = (product: Product): UnitConversion[] => [
+  {
+    id: `${product.id}-base`,
+    unitName: product.unit,
+    ratio: 1,
+    isBase: true,
+  },
+];
+
+const buildItemState = (product: Product): StockOutItemState => {
+  const config = unitConfigService.getByProductId(product.id);
+  const availableUnits = config ? config.units : buildDefaultUnits(product);
+  const baseUnit = config ? config.baseUnit : product.unit;
+  const defaultUnit = availableUnits[0];
+  return {
+    productId: product.id,
+    sku: product.sku,
+    name: product.name,
+    currentStock: product.stock,
+    quantity: 1,
+    unitName: defaultUnit.unitName,
+    unitRatio: defaultUnit.ratio,
+    baseQty: 1 * defaultUnit.ratio,
+    costPrice: product.costPrice,
+    subtotal: 1 * defaultUnit.ratio * product.costPrice,
+    availableUnits,
+    baseUnit,
+  };
+};
 
 export const StockOut: React.FC = () => {
   const navigate = useNavigate();
@@ -30,7 +72,7 @@ export const StockOut: React.FC = () => {
   const [destinationWarehouse, setDestinationWarehouse] = useState('Kho Showroom Quận 1');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [note, setNote] = useState('');
-  const [items, setItems] = useState<StockOutItem[]>([]);
+  const [items, setItems] = useState<StockOutItemState[]>([]);
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -39,17 +81,7 @@ export const StockOut: React.FC = () => {
       setProducts(data);
       const inStock = data.filter((p) => p.stock > 0);
       if (inStock.length > 0) {
-        setItems([
-          {
-            productId: inStock[0].id,
-            sku: inStock[0].sku,
-            name: inStock[0].name,
-            currentStock: inStock[0].stock,
-            quantity: 1,
-            costPrice: inStock[0].costPrice,
-            subtotal: inStock[0].costPrice,
-          },
-        ]);
+        setItems([buildItemState(inStock[0])]);
       }
     });
   }, []);
@@ -60,19 +92,7 @@ export const StockOut: React.FC = () => {
       showToast('Không có sản phẩm nào còn tồn kho để xuất', 'warning');
       return;
     }
-    const prod = inStock[0];
-    setItems((prev) => [
-      ...prev,
-      {
-        productId: prod.id,
-        sku: prod.sku,
-        name: prod.name,
-        currentStock: prod.stock,
-        quantity: 1,
-        costPrice: prod.costPrice,
-        subtotal: prod.costPrice,
-      },
-    ]);
+    setItems((prev) => [...prev, buildItemState(inStock[0])]);
   };
 
   const handleRemoveItem = (index: number) => {
@@ -82,45 +102,40 @@ export const StockOut: React.FC = () => {
   const handleProductChange = (index: number, newProdId: string) => {
     const selected = products.find((p) => p.id === newProdId);
     if (!selected) return;
-
     setItems((prev) => {
       const updated = [...prev];
-      updated[index] = {
-        ...updated[index],
-        productId: selected.id,
-        sku: selected.sku,
-        name: selected.name,
-        currentStock: selected.stock,
-        costPrice: selected.costPrice,
-        subtotal: Math.min(updated[index].quantity, selected.stock) * selected.costPrice,
-      };
+      updated[index] = buildItemState(selected);
       return updated;
     });
   };
 
-  const handleQuantityChange = (index: number, qty: number) => {
+  const handleUnitQtyChange = (index: number, val: UnitQtySelectorValue) => {
     setItems((prev) => {
       const updated = [...prev];
-      const maxAvailable = updated[index].currentStock;
-      const validQty = Math.max(1, Math.min(qty || 1, maxAvailable));
-      
-      if (qty > maxAvailable) {
+      const maxBase = updated[index].currentStock;
+      const clampedBase = Math.min(val.baseQty, maxBase);
+      const clampedQty = val.unitRatio > 0 ? Math.floor(clampedBase / val.unitRatio) : val.quantity;
+
+      if (val.baseQty > maxBase) {
         showToast(
-          `Không thể xuất quá ${maxAvailable} (tồn kho hiện tại của ${updated[index].name})`,
+          `Không thể xuất quá ${maxBase} ${updated[index].baseUnit} (tồn kho hiện tại)`,
           'warning'
         );
       }
 
       updated[index] = {
         ...updated[index],
-        quantity: validQty,
-        subtotal: validQty * updated[index].costPrice,
+        quantity: clampedQty,
+        unitName: val.unitName,
+        unitRatio: val.unitRatio,
+        baseQty: clampedBase,
+        subtotal: clampedBase * updated[index].costPrice,
       };
       return updated;
     });
   };
 
-  const totalQuantity = items.reduce((sum, item) => sum + item.quantity, 0);
+  const totalBaseQty = items.reduce((sum, item) => sum + item.baseQty, 0);
   const totalAmount = items.reduce((sum, item) => sum + item.subtotal, 0);
 
   const handleSubmit = async () => {
@@ -129,10 +144,9 @@ export const StockOut: React.FC = () => {
       return;
     }
 
-    // Check if any item exceeds current stock
     for (const it of items) {
       const p = products.find((x) => x.id === it.productId);
-      if (p && it.quantity > p.stock) {
+      if (p && it.baseQty > p.stock) {
         showToast(`Sản phẩm ${it.name} không đủ tồn kho để xuất!`, 'error');
         return;
       }
@@ -140,13 +154,26 @@ export const StockOut: React.FC = () => {
 
     setIsSubmitting(true);
     try {
+      const stockOutItems: StockOutItem[] = items.map((it) => ({
+        productId: it.productId,
+        sku: it.sku,
+        name: it.name,
+        currentStock: it.currentStock,
+        quantity: it.baseQty,     // luôn lưu theo đơn vị cơ sở
+        unitName: it.unitName,
+        unitRatio: it.unitRatio,
+        baseQty: it.baseQty,
+        costPrice: it.costPrice,
+        subtotal: it.subtotal,
+      }));
+
       await inventoryService.createStockOutReceipt({
         reason,
         warehouse,
         destinationWarehouse: reason === 'transfer' ? destinationWarehouse : undefined,
         date,
-        items,
-        totalQuantity,
+        items: stockOutItems,
+        totalQuantity: totalBaseQty,
         totalAmount,
         note,
         status: 'completed',
@@ -178,7 +205,7 @@ export const StockOut: React.FC = () => {
                   Danh Sách Mặt Hàng Xuất
                 </h3>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  Hệ thống tự động kiểm tra số lượng không vượt quá tồn kho khả dụng
+                  Hệ thống tự kiểm tra tồn kho và quy đổi về đơn vị cơ sở khi trừ kho
                 </p>
               </div>
               <Button
@@ -192,66 +219,109 @@ export const StockOut: React.FC = () => {
             </div>
 
             <div className="space-y-4">
-              {items.map((item, index) => (
-                <div
-                  key={index}
-                  className="p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/60 dark:bg-slate-800/40 space-y-3"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-400 uppercase">
-                      Mục #{index + 1}
-                    </span>
-                    {items.length > 1 && (
-                      <button
-                        onClick={() => handleRemoveItem(index)}
-                        className="text-slate-400 hover:text-rose-500 p-1 rounded transition-colors"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+              {items.map((item, index) => {
+                const overLimit = item.baseQty > item.currentStock;
+                return (
+                  <div
+                    key={index}
+                    className={`p-4 rounded-xl border space-y-3 transition-colors ${
+                      overLimit
+                        ? 'border-rose-300 dark:border-rose-700 bg-rose-50/40 dark:bg-rose-950/20'
+                        : 'border-slate-200 dark:border-slate-700 bg-slate-50/60 dark:bg-slate-800/40'
+                    }`}
+                  >
+                    {/* Row header */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-slate-400 uppercase">
+                          Mục #{index + 1}
+                        </span>
+                        {overLimit && (
+                          <span className="flex items-center gap-1 text-[10px] font-bold text-rose-600 bg-rose-100 dark:bg-rose-900/40 px-1.5 py-0.5 rounded-full">
+                            <AlertTriangle className="w-2.5 h-2.5" /> Vượt tồn kho
+                          </span>
+                        )}
+                      </div>
+                      {items.length > 1 && (
+                        <button
+                          onClick={() => handleRemoveItem(index)}
+                          className="text-slate-400 hover:text-rose-500 p-1 rounded transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
+                      {/* Product selector */}
+                      <div className="sm:col-span-5">
+                        <label className="block text-[11px] font-semibold text-slate-500 dark:text-slate-400 mb-1">
+                          Sản phẩm xuất *
+                        </label>
+                        <select
+                          value={item.productId}
+                          onChange={(e) => handleProductChange(index, e.target.value)}
+                          className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs sm:text-sm text-slate-800 dark:text-slate-200 focus:ring-1 focus:ring-indigo-500"
+                          id={`stockout-product-${index}`}
+                        >
+                          {products.map((p) => (
+                            <option key={p.id} value={p.id} disabled={p.stock === 0}>
+                              {p.sku} - {p.name} (Tồn: {p.stock})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Unit + Quantity */}
+                      <div className="sm:col-span-5">
+                        <UnitQtySelector
+                          units={item.availableUnits}
+                          baseUnit={item.baseUnit}
+                          value={{
+                            quantity: item.quantity,
+                            unitName: item.unitName,
+                            unitRatio: item.unitRatio,
+                            baseQty: item.baseQty,
+                          }}
+                          onChange={(val) => handleUnitQtyChange(index, val)}
+                          maxBaseQty={item.currentStock}
+                          label="Số lượng xuất"
+                          idPrefix={`stockout-uqs-${index}`}
+                        />
+                      </div>
+
+                      {/* Subtotal */}
+                      <div className="sm:col-span-2 text-right">
+                        <span className="block text-[11px] text-slate-400 mb-1">Giá trị vốn</span>
+                        <span className={`font-bold text-sm block py-1.5 ${overLimit ? 'text-rose-600' : 'text-slate-900 dark:text-white'}`}>
+                          {formatCurrency(item.subtotal)}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Conversion summary */}
+                    {!item.availableUnits.find((u) => u.unitName === item.unitName)?.isBase && (
+                      <div className="flex items-center gap-2 pt-2 border-t border-slate-200/60 dark:border-slate-700/60">
+                        <Scale className="w-3 h-3 text-amber-500 shrink-0" />
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                          Xuất{' '}
+                          <strong className="text-amber-600 dark:text-amber-400">
+                            {item.quantity} {item.unitName}
+                          </strong>
+                          {' = '}
+                          <strong className="text-slate-700 dark:text-slate-300">
+                            {item.baseQty} {item.baseUnit}
+                          </strong>
+                          {' — Tồn còn lại sau xuất: '}
+                          <strong className={item.currentStock - item.baseQty < 0 ? 'text-rose-600' : 'text-emerald-600 dark:text-emerald-400'}>
+                            {item.currentStock - item.baseQty} {item.baseUnit}
+                          </strong>
+                        </p>
+                      </div>
                     )}
                   </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
-                    <div className="sm:col-span-6">
-                      <label className="block text-[11px] font-semibold text-slate-500 dark:text-slate-400 mb-1">
-                        Sản phẩm xuất *
-                      </label>
-                      <select
-                        value={item.productId}
-                        onChange={(e) => handleProductChange(index, e.target.value)}
-                        className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs sm:text-sm text-slate-800 dark:text-slate-200 focus:ring-1 focus:ring-indigo-500"
-                      >
-                        {products.map((p) => (
-                          <option key={p.id} value={p.id} disabled={p.stock === 0}>
-                            {p.sku} - {p.name} (Tồn: {p.stock})
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div className="sm:col-span-3">
-                      <label className="block text-[11px] font-semibold text-slate-500 dark:text-slate-400 mb-1">
-                        Số lượng xuất (Max: {item.currentStock}) *
-                      </label>
-                      <input
-                        type="number"
-                        min={1}
-                        max={item.currentStock}
-                        value={item.quantity}
-                        onChange={(e) => handleQuantityChange(index, Number(e.target.value))}
-                        className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs sm:text-sm text-slate-800 dark:text-slate-200 focus:ring-1 focus:ring-indigo-500 font-bold"
-                      />
-                    </div>
-
-                    <div className="sm:col-span-3 text-right">
-                      <span className="block text-[11px] text-slate-400 mb-1">Giá trị xuất (giá vốn)</span>
-                      <span className="font-bold text-sm text-slate-900 dark:text-white block py-1.5">
-                        {formatCurrency(item.subtotal)}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>
@@ -271,6 +341,7 @@ export const StockOut: React.FC = () => {
                 value={reason}
                 onChange={(e) => setReason(e.target.value as StockOutReason)}
                 className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                id="stockout-reason"
               >
                 <option value="sale">Xuất bán hàng thương mại</option>
                 <option value="transfer">Xuất điều chuyển giữa các kho</option>
@@ -281,13 +352,14 @@ export const StockOut: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                Kho xuất *
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center gap-1.5">
+                <Warehouse className="w-3.5 h-3.5 text-slate-400" /> Kho xuất *
               </label>
               <select
                 value={warehouse}
                 onChange={(e) => setWarehouse(e.target.value)}
                 className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                id="stockout-warehouse"
               >
                 <option value="Kho Tổng TP. HCM">Kho Tổng TP. HCM</option>
                 <option value="Kho Tổng Hà Nội">Kho Tổng Hà Nội</option>
@@ -303,6 +375,7 @@ export const StockOut: React.FC = () => {
                   value={destinationWarehouse}
                   onChange={(e) => setDestinationWarehouse(e.target.value)}
                   className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  id="stockout-dest"
                 >
                   <option value="Kho Showroom Quận 1">Kho Showroom Quận 1</option>
                   <option value="Kho Showroom Hà Nội">Kho Showroom Hà Nội</option>
@@ -311,20 +384,21 @@ export const StockOut: React.FC = () => {
             )}
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                Ngày xuất *
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center gap-1.5">
+                <Calendar className="w-3.5 h-3.5 text-slate-400" /> Ngày xuất *
               </label>
               <input
                 type="date"
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
                 className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                id="stockout-date"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                Ghi chú phiếu xuất
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center gap-1.5">
+                <FileText className="w-3.5 h-3.5 text-slate-400" /> Ghi chú phiếu xuất
               </label>
               <textarea
                 rows={3}
@@ -332,15 +406,22 @@ export const StockOut: React.FC = () => {
                 onChange={(e) => setNote(e.target.value)}
                 placeholder="Số đơn hàng liên quan, lý do chi tiết..."
                 className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                id="stockout-note"
               />
             </div>
           </div>
 
           {/* Totals Summary */}
-          <div className="p-6 rounded-2xl bg-amber-50/50 dark:bg-amber-950/30 border border-amber-200/60 dark:border-amber-900/50 space-y-3">
+          <div className="p-5 rounded-2xl bg-amber-50/50 dark:bg-amber-950/30 border border-amber-200/60 dark:border-amber-900/50 space-y-3">
             <div className="flex items-center justify-between text-xs text-slate-600 dark:text-slate-400">
-              <span>Tổng số lượng xuất:</span>
-              <span className="font-bold text-slate-900 dark:text-white">{totalQuantity} đơn vị</span>
+              <span className="flex items-center gap-1.5">
+                <Scale className="w-3 h-3 text-amber-500" /> Tổng SL xuất (cơ sở):
+              </span>
+              <span className="font-bold text-slate-900 dark:text-white">{totalBaseQty}</span>
+            </div>
+            <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+              <span>Số dòng hàng:</span>
+              <span className="font-medium">{items.length} mục</span>
             </div>
             <div className="flex items-center justify-between text-sm pt-2 border-t border-amber-200/60 dark:border-amber-900/60">
               <span className="font-bold text-slate-800 dark:text-slate-200">Tổng giá trị vốn:</span>
@@ -363,6 +444,7 @@ export const StockOut: React.FC = () => {
               className="flex-1 font-bold"
               onClick={() => setIsConfirmOpen(true)}
               leftIcon={<ArrowUpRight className="w-4 h-4" />}
+              id="stockout-submit"
             >
               Xác nhận xuất kho
             </Button>
@@ -376,7 +458,7 @@ export const StockOut: React.FC = () => {
         onConfirm={handleSubmit}
         isLoading={isSubmitting}
         title="Xác nhận xuất kho"
-        message={`Bạn có chắc chắn muốn xuất ${totalQuantity} sản phẩm khỏi ${warehouse}? Số lượng tồn của sản phẩm sẽ bị giảm trừ tương ứng.`}
+        message={`Bạn có chắc chắn muốn xuất ${totalBaseQty} đơn vị (cơ sở) khỏi ${warehouse}? Số lượng tồn của sản phẩm sẽ bị giảm trừ tương ứng.`}
         confirmText="Hoàn tất xuất kho"
         variant="warning"
       />

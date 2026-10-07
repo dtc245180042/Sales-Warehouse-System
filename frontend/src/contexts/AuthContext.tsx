@@ -13,6 +13,7 @@ interface AuthContextType {
   changePassword: (currentPass: string, newPass: string, revokeOthers?: boolean) => Promise<void>;
   updateUserAvatar: (newAvatarUrl: string) => void;
   updateUserProfile: (data: { name: string; phone: string }) => void;
+  updateProfile: (data: { name: string; phone: string; avatar?: string }) => Promise<User>;
   switchRole: (role: UserRole) => void;
   canAccess: (allowedRoles: UserRole[]) => boolean;
 }
@@ -115,6 +116,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setStorageItem('kv_current_user', updated);
   };
 
+  const updateProfile = async (data: { name: string; phone: string; avatar?: string }): Promise<User> => {
+    setIsLoading(true);
+    try {
+      const updated = await authService.updateProfile(data);
+      setUser(updated);
+      return updated;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const switchRole = (newRole: UserRole) => {
     const switchedUser = authService.switchRole(newRole);
     setUser(switchedUser);
@@ -140,6 +152,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         changePassword,
         updateUserAvatar,
         updateUserProfile,
+        updateProfile,
         switchRole,
         canAccess,
       }}

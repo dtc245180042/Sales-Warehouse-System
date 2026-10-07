@@ -43,8 +43,8 @@ export const ProductEdit: React.FC = () => {
 
       showToast('Cập nhật sản phẩm thành công!', 'success');
       navigate('/products');
-    } catch {
-      showToast('Có lỗi xảy ra khi cập nhật', 'error');
+    } catch (err: any) {
+      showToast(err?.message || 'Có lỗi xảy ra khi cập nhật', 'error');
     }
   };
 

@@ -11,6 +11,7 @@ import {
   CartItem,
   OrderItemRecord,
 } from '../data/mockData';
+import { validateVNPhoneNumber } from '../utils/phoneUtils';
 
 // Create base Axios instance (ready for real backend URL)
 export const apiClient = axios.create({
@@ -87,7 +88,7 @@ export const api = {
             originalPrice: Number(p.salePrice ?? p.sale_price ?? 0) * 1.1,
             stock: Number(p.stock ?? 0),
             unit: p.unit || 'Chiếc',
-            image: p.image || '/images/products/placeholder.jpg',
+            image: p.image || p.image_url || p.imageUrl || '/images/products/placeholder.jpg',
             description: p.description || '',
             rating: 4.8,
             reviewsCount: 15,
@@ -439,12 +440,20 @@ export const api = {
 
     updateProfile: async (data: { name: string; email: string; phone: string; avatar?: string }): Promise<UserProfileData> => {
       await delay(300);
+      const trimmedName = data.name ? data.name.trim() : '';
+      if (!trimmedName || trimmedName.length < 2) {
+        throw new Error('Họ và tên không được để trống (tối thiểu 2 ký tự).');
+      }
+      const phoneVal = validateVNPhoneNumber(data.phone);
+      if (!phoneVal.valid) {
+        throw new Error(phoneVal.message || 'Số điện thoại không hợp lệ.');
+      }
+
       const current = getStored<UserProfileData>(STORAGE_KEYS.PROFILE, initialUserProfile);
       const updated: UserProfileData = {
         ...current,
-        name: data.name.trim() || current.name,
-        email: data.email.trim() || current.email,
-        phone: data.phone.trim() || current.phone,
+        name: trimmedName,
+        phone: phoneVal.normalized || data.phone.trim(),
         avatar: data.avatar || current.avatar,
       };
       setStored(STORAGE_KEYS.PROFILE, updated);

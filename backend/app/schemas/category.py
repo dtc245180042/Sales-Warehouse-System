@@ -32,6 +32,7 @@ class CategoryResponse(CategoryBase):
     level: int = Field(1, description="Cấp độ phân tầng (1: Ngành hàng, 2: Nhóm hàng, 3: Tiểu nhóm...)")
     product_count: int = Field(0, description="Số lượng sản phẩm trực thuộc nhóm")
     children_count: int = Field(0, description="Số lượng nhóm con trực thuộc")
+    total_product_count: int = Field(0, description="Tổng số lượng sản phẩm bao gồm cả các nhánh con dồn cấp (Roll-up)")
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 

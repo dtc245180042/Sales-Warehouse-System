@@ -355,3 +355,37 @@ def test_sc212_role_permissions():
         headers=sales_headers,
     )
     assert res_debt.status_code == 403
+
+
+def test_sc212_export_audit_logs_csv_and_stats():
+    """Kiểm tra API xuất CSV chuẩn Excel và API thống kê số lượng nhật ký."""
+    admin_token = lay_token("admin_audit", "Admin")
+    headers = {"Authorization": f"Bearer {admin_token}"}
+
+    # 1. Tạo 1 bản ghi điều chỉnh
+    client.post(
+        "/api/v1/audit-logs/stock-adjustment",
+        json={"product_id": "SKU-BIA-HN", "actual_stock": 85, "reason": "Kiểm kê xuất file Excel"},
+        headers=headers,
+    )
+
+    # 2. Test API Thống kê
+    res_stats = client.get("/api/v1/audit-logs/stats", headers=headers)
+    assert res_stats.status_code == 200
+    stats = res_stats.json()
+    assert "total" in stats
+    assert "success" in stats
+    assert stats["total"] >= 1
+
+    # 3. Test API Xuất Excel/CSV
+    res_export = client.get("/api/v1/audit-logs/export?search=Excel", headers=headers)
+    assert res_export.status_code == 200
+    assert "text/csv" in res_export.headers.get("content-type", "")
+    assert "nhat_ky_thao_tac" in res_export.headers.get("content-disposition", "")
+    
+    # Kiểm tra nội dung có UTF-8 BOM và chứa dòng tiêu đề
+    text_content = res_export.content.decode("utf-8-sig")
+    assert "Mã nhật ký" in text_content
+    assert "Thời gian" in text_content
+    assert "Kiểm kê xuất file Excel" in text_content
+

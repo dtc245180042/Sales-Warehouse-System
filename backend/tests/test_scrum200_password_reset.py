@@ -84,23 +84,23 @@ def test_scrum295_forgot_password_sends_email_and_generates_30min_token():
     assert user.reset_password_token == token
     assert user.reset_password_expires_at is not None
 
-    # Thời hạn hiệu lực xấp xỉ 5 phút
+    # Thời hạn hiệu lực xấp xỉ 30 phút
     now_utc = datetime.now(timezone.utc)
     expiry = user.reset_password_expires_at
     if expiry.tzinfo is None:
         expiry = expiry.replace(tzinfo=timezone.utc)
     chenh_lech_phut = (expiry - now_utc).total_seconds() / 60
-    assert 3 <= chenh_lech_phut <= 6
+    assert 25 <= chenh_lech_phut <= 35
     db.close()
 
 
 def test_scrum200_forgot_password_nonexistent_email_safe():
-    """SCRUM-200: Email không tồn tại bị từ chối 404 và không gửi email."""
+    """SCRUM-200: Email không tồn tại vẫn trả về cùng thông báo và không gửi email."""
     clear_mock_outbox()
 
     res = client.post("/api/v1/auth/forgot-password", json={"email": "nonexistent@warehouse.local"})
-    assert res.status_code == 404
-    assert "không tồn tại" in res.json()["detail"].lower()
+    assert res.status_code == 200
+    assert "hướng dẫn đặt lại mật khẩu" in res.json()["message"]
 
     # Không được gửi email nào
     outbox = get_mock_outbox()
@@ -108,7 +108,7 @@ def test_scrum200_forgot_password_nonexistent_email_safe():
 
 
 def test_scrum200_verify_token_valid_and_expired():
-    """SCRUM-200 / SCRUM-297: Xác thực token hợp lệ và phát hiện token quá 5 phút."""
+    """SCRUM-200 / SCRUM-297: Xác thực token hợp lệ và phát hiện token quá 30 phút."""
     # 1. Yêu cầu token mới
     client.post("/api/v1/auth/forgot-password", json={"email": "scrum200_user@warehouse.local"})
     outbox = get_mock_outbox()
@@ -119,7 +119,7 @@ def test_scrum200_verify_token_valid_and_expired():
     assert res_valid.status_code == 200
     data_valid = res_valid.json()
     assert data_valid["valid"] is True
-    assert data_valid["expires_in_minutes"] >= 3
+    assert data_valid["expires_in_minutes"] >= 25
     assert "s***r@warehouse.local" in data_valid["email"]
 
     # 3. Làm cho token hết hạn quá 30 phút

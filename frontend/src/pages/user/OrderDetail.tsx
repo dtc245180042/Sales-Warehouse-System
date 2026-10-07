@@ -306,7 +306,7 @@ export const OrderDetailPage: React.FC = () => {
                       {it.price.toLocaleString('vi-VN')}đ
                     </td>
                     <td className="p-3.5 text-right font-bold text-slate-900 dark:text-white">
-                      {it.total.toLocaleString('vi-VN')}đ
+                      {(it.total ?? (it.price * it.quantity)).toLocaleString('vi-VN')}đ
                     </td>
                   </tr>
                 ))}

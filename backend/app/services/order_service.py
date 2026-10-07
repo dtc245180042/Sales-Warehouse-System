@@ -6,9 +6,24 @@ from app.models.order import Order, OrderItem
 from app.models.product import Product
 from app.models.customer import Customer
 from app.models.price_list import PriceList
+from app.models.product_stock_profile import ProductStockProfile
 from app.schemas.order import OrderCreate, OrderStatusUpdate
 from app.services.product_service import ensure_seed_products
 from app.services.customer_service import ensure_seed_customers
+
+def _get_or_create_stock_profile(db: Session, product: Product, default_stock: int = 100) -> ProductStockProfile:
+    profile = db.query(ProductStockProfile).filter(ProductStockProfile.product_id == product.id).first()
+    if not profile:
+        profile = ProductStockProfile(
+            product_id=product.id,
+            sku=product.sku,
+            stock=default_stock,
+            min_stock=10,
+            warehouse="Kho Tổng Hà Nội"
+        )
+        db.add(profile)
+        db.flush()
+    return profile
 
 SEED_ORDERS = [
     {
@@ -150,17 +165,24 @@ def create_order(db: Session, order_in: OrderCreate) -> Order:
 
     # 1. Trừ tồn kho và kiểm tra tính hợp lệ
     for item in order_in.items:
-        prod = db.query(Product).filter(Product.id == item.product_id).first()
+        prod = None
+        str_pid = str(item.product_id).strip()
+        if str_pid.isdigit():
+            prod = db.query(Product).filter(Product.id == int(str_pid)).first()
+        if not prod and item.sku:
+            prod = db.query(Product).filter(Product.sku == item.sku).first()
+
         if prod:
-            if prod.stock < item.quantity:
+            stock_profile = _get_or_create_stock_profile(db, prod, default_stock=100)
+            if stock_profile.stock < item.quantity:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Sản phẩm '{prod.name}' không đủ tồn kho (Còn {prod.stock}, yêu cầu {item.quantity})."
+                    detail=f"Sản phẩm '{prod.name}' không đủ tồn kho (Còn {stock_profile.stock}, yêu cầu {item.quantity})."
                 )
-            prod.stock = max(0, prod.stock - item.quantity)
-            if prod.stock == 0:
+            stock_profile.stock = max(0, stock_profile.stock - item.quantity)
+            if stock_profile.stock == 0:
                 prod.status = "out_of_stock"
-            elif prod.stock <= prod.min_stock:
+            elif stock_profile.stock <= stock_profile.min_stock:
                 prod.status = "low_stock"
 
     # 2. Tạo đơn hàng
@@ -170,7 +192,9 @@ def create_order(db: Session, order_in: OrderCreate) -> Order:
 
     new_order = Order(**order_data)
     for itm in order_in.items:
-        new_order.items.append(OrderItem(**itm.model_dump()))
+        itm_dict = itm.model_dump()
+        itm_dict["product_id"] = str(itm_dict["product_id"])
+        new_order.items.append(OrderItem(**itm_dict))
 
     db.add(new_order)
 
@@ -200,12 +224,19 @@ def update_order_status(db: Session, order_id: str, new_status: str) -> Order:
     # Nếu chuyển sang hủy từ trạng thái chưa hủy, hoàn lại tồn kho
     if new_status == "cancelled" and old_status != "cancelled":
         for itm in order.items:
-            prod = db.query(Product).filter(Product.id == itm.product_id).first()
+            prod = None
+            str_pid = str(itm.product_id).strip()
+            if str_pid.isdigit():
+                prod = db.query(Product).filter(Product.id == int(str_pid)).first()
+            if not prod and itm.sku:
+                prod = db.query(Product).filter(Product.sku == itm.sku).first()
+
             if prod:
-                prod.stock += itm.quantity
-                if prod.stock > prod.min_stock:
+                stock_profile = _get_or_create_stock_profile(db, prod, default_stock=100)
+                stock_profile.stock += itm.quantity
+                if stock_profile.stock > stock_profile.min_stock:
                     prod.status = "active"
-                elif prod.stock > 0:
+                elif stock_profile.stock > 0:
                     prod.status = "low_stock"
 
     order.status = new_status

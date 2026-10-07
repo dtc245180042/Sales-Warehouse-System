@@ -38,3 +38,29 @@ export interface AuthState {
   token: string | null;
   isAuthenticated: boolean;
 }
+
+export interface UserDependencyDetails {
+  orders_count: number;
+  stock_receipts_count: number;
+  price_lists_count: number;
+  audit_logs_count: number;
+}
+
+export interface UserCanDeleteResponse {
+  user_id: number | string;
+  username: string;
+  full_name?: string;
+  can_delete: boolean;
+  has_dependencies: boolean;
+  dependencies: UserDependencyDetails;
+  reason: string;
+  suggested_action: 'delete' | 'lock' | 'none';
+}
+
+export interface UserDeleteResponse {
+  success: boolean;
+  message: string;
+  deleted_user_id: number | string;
+  action_taken: string;
+}
+

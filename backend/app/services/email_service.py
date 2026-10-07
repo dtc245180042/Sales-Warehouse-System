@@ -47,15 +47,15 @@ def send_password_reset_email(
     to_email: str,
     reset_token: str,
     expires_at: Optional[datetime] = None,
-    expire_minutes: int = 5
+    expire_minutes: int = 30
 ) -> bool:
-    """Gửi email chứa mã xác minh 5 chữ số với thời hạn 5 phút (SCRUM-200 / SCRUM-295)."""
+    """Gửi email chứa mã xác minh với thời hạn 30 phút (SCRUM-200 / SCRUM-295)."""
     if not expires_at:
         expires_at = datetime.now(timezone.utc) + timedelta(minutes=expire_minutes)
 
     cfg = _get_smtp_config()
     reset_url = f"{cfg['frontend_url']}/reset-password?token={reset_token}"
-    subject = f"[KhoVận Pro] Mã xác minh đặt lại mật khẩu của bạn ({reset_token}) - Hiệu lực {expire_minutes} phút"
+    subject = f"[KhoVận Pro] Yêu cầu đặt lại mật khẩu - Hiệu lực {expire_minutes} phút"
 
     # Lưu vào hộp thư giả lập
     email_record = {
@@ -68,7 +68,7 @@ def send_password_reset_email(
     }
     MOCK_OUTBOX.append(email_record)
 
-    # HTML Email Template tập trung nổi bật vào Mã Xác Minh 5 số
+    # HTML Email Template chuẩn liên kết bảo mật (SCRUM-200)
     html_content = f"""
     <!DOCTYPE html>
     <html lang="vi">
@@ -77,16 +77,13 @@ def send_password_reset_email(
         <style>
             body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #0f172a; margin: 0; padding: 20px; }}
             .container {{ max-width: 540px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 10px 25px rgba(0,0,0,0.2); }}
-            .header {{ background: #1e293b; color: #ffffff; padding: 24px; text-align: center; border-bottom: 3px solid #2563eb; }}
+            .header {{ background: #1e293b; color: #ffffff; padding: 24px; text-align: center; border-bottom: 3px solid #4f46e5; }}
             .header h1 {{ margin: 0; font-size: 19px; font-weight: 700; letter-spacing: -0.5px; }}
-            .content {{ padding: 32px 28px; color: #334155; line-height: 1.6; font-size: 14px; text-align: center; }}
-            .code-container {{ margin: 24px auto; background: #f8fafc; border: 2px dashed #2563eb; border-radius: 10px; padding: 20px 16px; max-width: 360px; }}
-            .code-label {{ font-size: 13px; color: #475569; font-weight: 600; text-transform: uppercase; margin-bottom: 12px; letter-spacing: 0.5px; }}
-            .code-box {{ font-family: 'Consolas', 'Courier New', monospace; font-size: 32px; font-weight: 800; color: #1e293b; background: #ffffff; padding: 10px 24px; border: 1.5px solid #94a3b8; border-radius: 8px; letter-spacing: 8px; display: inline-block; user-select: all; }}
-            .code-hint {{ font-size: 12px; color: #64748b; margin-top: 12px; }}
-            .btn-container {{ text-align: center; margin: 20px 0; }}
-            .btn {{ background-color: #2563eb; color: #ffffff !important; padding: 10px 24px; text-decoration: none; border-radius: 6px; font-weight: 600; display: inline-block; font-size: 13px; }}
-            .badge-warn {{ background: #fef2f2; color: #dc2626; border: 1px solid #fee2e2; padding: 10px 14px; border-radius: 6px; font-size: 13px; margin: 20px auto 0 auto; max-width: 400px; text-align: left; }}
+            .content {{ padding: 32px 28px; color: #334155; line-height: 1.6; font-size: 14px; text-align: left; }}
+            .btn-container {{ text-align: center; margin: 28px 0; }}
+            .btn {{ background-color: #4f46e5; color: #ffffff !important; padding: 12px 28px; text-decoration: none; border-radius: 8px; font-weight: 600; display: inline-block; font-size: 14px; box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3); }}
+            .link-alt {{ font-size: 12px; color: #64748b; word-break: break-all; background: #f8fafc; padding: 12px; border-radius: 6px; border: 1px solid #e2e8f0; margin: 16px 0; }}
+            .badge-warn {{ background: #fef2f2; color: #dc2626; border: 1px solid #fee2e2; padding: 10px 14px; border-radius: 6px; font-size: 13px; margin: 20px 0; }}
             .footer {{ background: #f8fafc; padding: 18px 24px; text-align: center; font-size: 12px; color: #94a3b8; border-top: 1px solid #f1f5f9; }}
         </style>
     </head>
@@ -96,25 +93,27 @@ def send_password_reset_email(
                 <h1>KhoVận Pro - Quản Lý Bán Hàng & Kho</h1>
             </div>
             <div class="content">
-                <p style="text-align: left;">Xin chào,</p>
-                <p style="text-align: left;">Bạn vừa yêu cầu cấp mã xác minh để đặt lại mật khẩu cho tài khoản liên kết với email: <strong>{to_email}</strong>.</p>
-                
-                <div class="code-container">
-                    <div class="code-label">🔑 Mã Xác Minh (OTP 5 Chữ Số)</div>
-                    <div class="code-box">{reset_token}</div>
-                    <div class="code-hint">Nhập mã này vào ô <strong>"Mã Token xác nhận"</strong> trên hệ thống.</div>
+                <p>Xin chào,</p>
+                <p>Chúng tôi nhận được yêu cầu đặt lại mật khẩu cho tài khoản liên kết với địa chỉ email: <strong>{to_email}</strong>.</p>
+                <p>Vui lòng nhấn vào nút bên dưới để thiết lập mật khẩu mới cho tài khoản của bạn:</p>
+
+                <div class="btn-container">
+                    <a href="{reset_url}" class="btn" target="_blank">Đặt Lại Mật Khẩu</a>
                 </div>
 
                 <div class="badge-warn">
-                    ⏱ <strong>Thời hạn sử dụng:</strong> Mã chỉ có hiệu lực trong <strong>{expire_minutes} phút</strong> và chỉ sử dụng được 1 lần.
+                    ⏱ <strong>Lưu ý:</strong> Liên kết này chỉ có hiệu lực trong vòng <strong>{expire_minutes} phút</strong> và chỉ sử dụng được <strong>một lần duy nhất</strong>.
                 </div>
 
-                <div class="btn-container">
-                    <a href="{reset_url}" class="btn" target="_blank">Hoặc nhấn vào đây để mở trực tiếp trang web</a>
+                <p style="font-size: 12px; color: #64748b; margin-top: 20px;">
+                    Nếu nút trên không hoạt động, bạn có thể sao chép và dán đường dẫn sau vào trình duyệt:
+                </p>
+                <div class="link-alt">
+                    <a href="{reset_url}" style="color: #4f46e5; text-decoration: none;">{reset_url}</a>
                 </div>
 
-                <p style="margin-top: 16px; font-size: 12px; color: #64748b; text-align: left;">
-                    Nếu bạn không yêu cầu mã này, vui lòng bỏ qua email. Mật khẩu của bạn vẫn an toàn tuyệt đối.
+                <p style="margin-top: 24px; font-size: 12px; color: #64748b;">
+                    Nếu bạn không yêu cầu đặt lại mật khẩu, vui lòng bỏ qua email này. Mật khẩu hiện tại của bạn vẫn an toàn tuyệt đối.
                 </p>
             </div>
             <div class="footer">
@@ -159,45 +158,63 @@ def send_password_reset_email(
             logger.error(f"Lỗi khi gửi qua SMTP đến {to_email}: {e}")
 
     # 2. Hỗ trợ gửi qua Resend REST API nếu có RESEND_API_KEY
-    resend_api_key = os.getenv("RESEND_API_KEY")
+    resend_api_key = os.getenv("RESEND_API_KEY") or (cfg["password"] if cfg.get("password", "").startswith("re_") else None)
     if resend_api_key:
         try:
             import json
             import urllib.request
             import urllib.error
 
-            request_data = {
-                "from": f"{cfg['from_name']} <{cfg['from_email']}>",
-                "to": [to_email],
-                "subject": subject,
-                "html": html_content,
-            }
-            req = urllib.request.Request(
-                "https://api.resend.com/emails",
-                data=json.dumps(request_data).encode("utf-8"),
-                headers={
-                    "Authorization": f"Bearer {resend_api_key}",
-                    "Content-Type": "application/json",
-                    "User-Agent": "resend-python/2.0.0",
-                },
-            )
-            with urllib.request.urlopen(req, timeout=10) as resp:
-                if resp.status in (200, 201):
+            # Nếu chưa xác thực tên miền riêng trên Resend, dùng onboarding@resend.dev theo chuẩn test của Resend
+            resend_sender = cfg["from_email"]
+            if "saleswarehouse.com" in resend_sender or not resend_sender:
+                resend_sender = "onboarding@resend.dev"
+
+            fallback_recipient = os.getenv("RESEND_TEST_EMAIL", "dtc245180006@ictu.edu.vn")
+
+            def _send_resend(recipient: str, mail_subject: str) -> bool:
+                req_data = {
+                    "from": f"{cfg['from_name']} <{resend_sender}>",
+                    "to": [recipient],
+                    "subject": mail_subject,
+                    "html": html_content,
+                }
+                req = urllib.request.Request(
+                    "https://api.resend.com/emails",
+                    data=json.dumps(req_data).encode("utf-8"),
+                    headers={
+                        "Authorization": f"Bearer {resend_api_key}",
+                        "Content-Type": "application/json",
+                        "User-Agent": "resend-python/2.0.0",
+                    },
+                )
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    return resp.status in (200, 201)
+
+            try:
+                if _send_resend(to_email, subject):
                     logger.info(f"Đã gửi email qua Resend API thành công đến {to_email}")
                     return True
-        except urllib.error.HTTPError as http_err:
-            error_body = ""
-            try:
-                error_body = http_err.read().decode("utf-8")
-            except Exception:
-                pass
-            if http_err.code == 403:
+            except urllib.error.HTTPError as http_err:
+                error_body = ""
                 try:
-                    print(f"\n[LƯU Ý RESEND SANDBOX 403]: Resend miễn phí chỉ cho phép gửi đến chính email đăng ký tài khoản (dtc245180006@ictu.edu.vn).")
-                    print(f"Để gửi đến '{to_email}' hoặc bất kỳ email nào khác, hãy cấu hình Gmail SMTP (App Password) trong backend/.env hoặc xác thực tên miền trên resend.com.\n")
+                    error_body = http_err.read().decode("utf-8")
                 except Exception:
                     pass
-            logger.error(f"Lỗi khi gửi qua Resend API đến {to_email}: HTTP {http_err.code} - {error_body}")
+
+                # Xử lý giới hạn Resend Sandbox: chỉ cho phép gửi về chính email đăng ký tài khoản
+                if http_err.code == 403 and to_email != fallback_recipient:
+                    try:
+                        print(f"\n[RESEND SANDBOX 403]: Resend chưa xác thực domain chỉ cho phép gửi đến email đăng ký.")
+                        print(f"Đang tự động chuyển tiếp email sang: {fallback_recipient}...")
+                        fwd_subject = f"[Chuyển tiếp cho {to_email}] {subject}"
+                        if _send_resend(fallback_recipient, fwd_subject):
+                            logger.info(f"Đã chuyển tiếp email qua Resend về {fallback_recipient} thành công!")
+                            return True
+                    except Exception as fwd_err:
+                        logger.error(f"Lỗi khi chuyển tiếp sandbox Resend: {fwd_err}")
+
+                logger.error(f"Lỗi khi gửi qua Resend API đến {to_email}: HTTP {http_err.code} - {error_body}")
         except Exception as err:
             logger.error(f"Lỗi khi gửi qua Resend API đến {to_email}: {err}")
 
@@ -209,7 +226,7 @@ def send_password_reset_email(
 # =============================================================================
 @event.listens_for(User, "before_update")
 def tu_dong_chuyen_sang_ma_5_so_va_5_phut(mapper, connection, target: User):
-    """SCRUM-200: Tự động chuyển đổi token sang mã xác minh 5 số và giới hạn thời gian đúng 5 phút."""
+    """SCRUM-200: Tự động chuyển đổi token sang mã xác minh 5 số và giới hạn thời gian đúng 30 phút."""
     try:
         ins = inspect(target)
         hist = ins.attrs.reset_password_token.history
@@ -218,8 +235,8 @@ def tu_dong_chuyen_sang_ma_5_so_va_5_phut(mapper, connection, target: User):
             if len(str(target.reset_password_token)) != 5 or not str(target.reset_password_token).isdigit():
                 otp_5_so = f"{secrets.randbelow(90000) + 10000}"
                 target.reset_password_token = otp_5_so
-            # Đặt hiệu lực đúng 5 phút
-            target.reset_password_expires_at = datetime.now(timezone.utc) + timedelta(minutes=5)
+            # Đặt hiệu lực đúng 30 phút
+            target.reset_password_expires_at = datetime.now(timezone.utc) + timedelta(minutes=30)
     except Exception as e:
         logger.warning(f"Lỗi khi chuyển đổi mã 5 số: {e}")
 
@@ -238,7 +255,7 @@ def tu_dong_gui_email_khi_sinh_token(mapper, connection, target: User):
                     to_email=target.email,
                     reset_token=token_moi,
                     expires_at=target.reset_password_expires_at,
-                    expire_minutes=5
+                    expire_minutes=30
                 )
     except Exception as e:
         logger.warning(f"Không thể tự động gửi email reset qua event listener: {e}")

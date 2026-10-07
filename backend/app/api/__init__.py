@@ -44,7 +44,7 @@ for module_info in pkgutil.iter_modules([str(current_dir)]):
                 api_v1_router.include_router(getattr(mod, "router"))
                 api_router.include_router(getattr(mod, "router"))
         except Exception as e:
-            print(f"[AutoRouter] Lỗi khi nạp module app.api.{name}: {e}")
+            print(f"[AutoRouter] Error loading module app.api.{name}: {e}")
 
 # Quét các module trong app/api/endpoints/
 endpoints_dir = current_dir / "endpoints"
@@ -58,4 +58,4 @@ if endpoints_dir.is_dir():
                     api_v1_router.include_router(getattr(mod, "router"))
                     api_router.include_router(getattr(mod, "router"))
             except Exception as e:
-                print(f"[AutoRouter] Lỗi khi nạp module app.api.endpoints.{name}: {e}")
+                print(f"[AutoRouter] Error loading module app.api.endpoints.{name}: {e}")

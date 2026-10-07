@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   Package,
   DollarSign,
@@ -16,6 +16,7 @@ import { DataTable, Column } from '../../components/common/DataTable';
 import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/common/Badge';
 import { formatCurrency, formatNumber } from '../../utils/formatters';
+import { exportToCSV } from '../../utils/csvExporter';
 import { productService } from '../../services/productService';
 import { Product } from '../../types/Product';
 import { productCategories } from '../../mock/products';
@@ -41,10 +42,47 @@ interface InventoryItemView {
 
 export const InventoryOverview: React.FC = () => {
   const { showToast } = useToast();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const urlSearch = searchParams.get('q') || '';
+  const urlWarehouse = searchParams.get('warehouse') || 'all';
+  const urlStatus = searchParams.get('status') || 'all';
+
   const [products, setProducts] = useState<Product[]>([]);
-  const [search, setSearch] = useState('');
-  const [warehouseFilter, setWarehouseFilter] = useState('all');
-  const [statusFilter, setStatusFilter] = useState('all');
+  const [search, setSearch] = useState(urlSearch);
+  const [warehouseFilter, setWarehouseFilter] = useState(urlWarehouse);
+  const [statusFilter, setStatusFilter] = useState(urlStatus);
+
+  // Đồng bộ hai chiều từ URL -> State khi người dùng nhấn Back / Forward trên trình duyệt
+  useEffect(() => {
+    setSearch(urlSearch);
+    setWarehouseFilter(urlWarehouse);
+    setStatusFilter(urlStatus);
+  }, [urlSearch, urlWarehouse, urlStatus]);
+
+  const handleSearchChange = (newSearch: string) => {
+    setSearch(newSearch);
+    const params = new URLSearchParams(searchParams);
+    if (newSearch.trim()) params.set('q', newSearch.trim());
+    else params.delete('q');
+    setSearchParams(params, { replace: true });
+  };
+
+  const handleWarehouseChange = (newWarehouse: string) => {
+    setWarehouseFilter(newWarehouse);
+    const params = new URLSearchParams(searchParams);
+    if (newWarehouse && newWarehouse !== 'all') params.set('warehouse', newWarehouse);
+    else params.delete('warehouse');
+    setSearchParams(params, { replace: true });
+  };
+
+  const handleStatusChange = (newStatus: string) => {
+    setStatusFilter(newStatus);
+    const params = new URLSearchParams(searchParams);
+    if (newStatus && newStatus !== 'all') params.set('status', newStatus);
+    else params.delete('status');
+    setSearchParams(params, { replace: true });
+  };
 
   useEffect(() => {
     productService.getAll().then(setProducts);
@@ -102,11 +140,12 @@ export const InventoryOverview: React.FC = () => {
   const outOfStockCount = inventoryItems.filter((i) => i.status === 'out_of_stock').length;
 
   const handleExportCSV = () => {
-    const csvRows = [
-      ['SKU', 'Sản phẩm', 'Kho', 'Tồn đầu', 'Nhập kỳ', 'Xuất kỳ', 'Tồn cuối', 'Giá trị tồn (VNĐ)', 'Trạng thái'],
-      ...filteredItems.map((item) => [
+    exportToCSV({
+      filename: `bao_cao_ton_kho_${Date.now()}`,
+      headers: ['SKU', 'Sản phẩm', 'Kho', 'Tồn đầu', 'Nhập kỳ', 'Xuất kỳ', 'Tồn cuối', 'Giá trị tồn (VNĐ)', 'Trạng thái'],
+      rows: filteredItems.map((item) => [
         item.sku,
-        `"${item.name.replace(/"/g, '""')}"`,
+        item.name,
         item.warehouse,
         item.initialStock,
         item.imported,
@@ -115,16 +154,8 @@ export const InventoryOverview: React.FC = () => {
         item.totalValue,
         item.status,
       ]),
-    ];
-    const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + csvRows.map((e) => e.join(',')).join('\n');
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `bao_cao_ton_kho_${Date.now()}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    showToast('Đã xuất báo cáo tồn kho thành công!', 'success');
+    });
+    showToast(`Đã xuất ${filteredItems.length} mặt hàng tồn kho thành công!`, 'success');
   };
 
   const columns: Column<InventoryItemView>[] = [
@@ -331,7 +362,7 @@ export const InventoryOverview: React.FC = () => {
                 <input
                   type="text"
                   value={search}
-                  onChange={(e) => setSearch(e.target.value)}
+                  onChange={(e) => handleSearchChange(e.target.value)}
                   placeholder="Tìm theo mã SKU hoặc tên sản phẩm..."
                   className="w-full pl-9 pr-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs sm:text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
@@ -340,7 +371,7 @@ export const InventoryOverview: React.FC = () => {
               <div className="flex items-center gap-2">
                 <select
                   value={warehouseFilter}
-                  onChange={(e) => setWarehouseFilter(e.target.value)}
+                  onChange={(e) => handleWarehouseChange(e.target.value)}
                   className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs sm:text-sm text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 >
                   <option value="all">Tất cả kho hàng</option>
@@ -350,7 +381,7 @@ export const InventoryOverview: React.FC = () => {
 
                 <select
                   value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
+                  onChange={(e) => handleStatusChange(e.target.value)}
                   className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs sm:text-sm text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 >
                   <option value="all">Tất cả trạng thái</option>

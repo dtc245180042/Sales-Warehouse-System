@@ -183,8 +183,12 @@ export const CustomerList: React.FC = () => {
       header: 'Trạng Thái',
       sortable: true,
       render: (c) => (
-        <Badge variant={c.status === 'active' ? 'success' : 'neutral'} size="sm" dot>
-          {c.status === 'active' ? 'Hoạt động' : 'Tạm ngưng'}
+        <Badge
+          variant={c.status === 'locked' ? 'danger' : c.status === 'active' ? 'success' : 'neutral'}
+          size="sm"
+          dot
+        >
+          {c.status === 'locked' ? 'Bị khoá GD' : c.status === 'active' ? 'Hoạt động' : 'Tạm ngưng'}
         </Badge>
       ),
     },

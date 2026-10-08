@@ -16,6 +16,8 @@ import {
   BarChart3,
   TrendingUp,
   Package,
+  Users,
+  ShoppingCart,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { UserRole } from '../../types/User';
@@ -98,9 +100,63 @@ export const Sidebar: React.FC<SidebarProps> = ({
       heading: 'ĐỐI TÁC & CUNG ỨNG',
       items: [
         {
+          title: 'Khách hàng & Đại lý',
+          path: '/customers',
+          icon: <Users className="w-5 h-5" />,
+          allowedRoles: [
+            'Admin',
+            'SalesManager',
+            'SalesStaff',
+            'WarehouseManager',
+            'WarehouseStaff',
+            'Accountant',
+            'Director',
+            'Manager',
+            'Staff',
+            'User',
+          ],
+        },
+        {
           title: 'Nhà cung cấp',
           path: '/suppliers',
           icon: <Building2 className="w-5 h-5" />,
+          allowedRoles: [
+            'Admin',
+            'SalesManager',
+            'SalesStaff',
+            'WarehouseManager',
+            'WarehouseStaff',
+            'Accountant',
+            'Director',
+            'Manager',
+            'Staff',
+            'User',
+          ],
+        },
+      ],
+    },
+    {
+      heading: 'BÁN HÀNG & PHÂN PHỐI',
+      items: [
+        {
+          title: 'Bán hàng tại quầy (POS)',
+          path: '/sales/pos',
+          icon: <ShoppingCart className="w-5 h-5" />,
+          allowedRoles: [
+            'Admin',
+            'SalesManager',
+            'SalesStaff',
+            'Accountant',
+            'Director',
+            'Manager',
+            'Staff',
+            'User',
+          ],
+        },
+        {
+          title: 'Quản lý đơn hàng',
+          path: '/orders',
+          icon: <ClipboardList className="w-5 h-5" />,
           allowedRoles: [
             'Admin',
             'SalesManager',

@@ -15,6 +15,8 @@ import {
   X,
   Sparkles,
   ArrowRight,
+  ShieldAlert,
+  Lock,
 } from 'lucide-react';
 import { Button } from '../../components/common/Button';
 import { Modal } from '../../components/common/Modal';
@@ -74,6 +76,12 @@ export const POS: React.FC = () => {
       return matchCat && matchSearch;
     });
   }, [products, categoryFilter, search]);
+
+  const selectedCustomer = useMemo(() => {
+    return customers.find((c) => c.id === selectedCustomerId);
+  }, [customers, selectedCustomerId]);
+
+  const isCustomerLocked = selectedCustomer?.status === 'locked';
 
   const addToCart = (product: Product) => {
     if (product.stock <= 0) {
@@ -167,6 +175,11 @@ export const POS: React.FC = () => {
   }, [total, paymentMethod]);
 
   const handleCheckout = async () => {
+    if (isCustomerLocked) {
+      showToast(`Đại lý '${selectedCustomer?.name}' đang bị khoá giao dịch. Không thể tạo đơn mới!`, 'error');
+      return;
+    }
+
     if (cart.length === 0) {
       showToast('Giỏ hàng đang trống! Vui lòng chọn sản phẩm.', 'warning');
       return;
@@ -343,7 +356,7 @@ export const POS: React.FC = () => {
             >
               {customers.map((c) => (
                 <option key={c.id} value={c.id}>
-                  {c.name} ({c.phone})
+                  {c.name} {c.status === 'locked' ? '(⛔ BỊ KHOÁ GD)' : `(${c.phone})`}
                 </option>
               ))}
             </select>
@@ -352,6 +365,24 @@ export const POS: React.FC = () => {
             {cart.reduce((s, i) => s + i.quantity, 0)} sp
           </span>
         </div>
+
+        {/* Banner cảnh báo đại lý bị khoá trên POS (SC-228 Subtask 6 & 8) */}
+        {isCustomerLocked && (
+          <div
+            id="pos-customer-locked-alert"
+            className="p-3 bg-rose-50 dark:bg-rose-950/50 border-b border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-200 flex items-start gap-2.5 text-xs animate-pulse"
+          >
+            <ShieldAlert className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-bold text-rose-900 dark:text-rose-100">
+                ĐẠI LÝ ĐANG BỊ KHOÁ GIAO DỊCH
+              </p>
+              <p className="text-[11px] mt-0.5 text-rose-700 dark:text-rose-300">
+                Đại lý '{selectedCustomer?.name}' đang bị khoá giao dịch. Không thể tạo đơn mới trên hệ thống POS!
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Cart Items List */}
         <div className="flex-1 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800 p-2">
@@ -524,14 +555,20 @@ export const POS: React.FC = () => {
             </div>
 
             <Button
-              variant="primary"
+              id="btn-pos-checkout"
+              variant={isCustomerLocked ? "secondary" : "primary"}
               size="lg"
               onClick={handleCheckout}
               isLoading={isPaying}
-              disabled={cart.length === 0}
-              className="px-8 shadow-lg shadow-indigo-500/25 font-bold"
+              disabled={cart.length === 0 || isCustomerLocked}
+              className={`px-8 font-bold ${
+                isCustomerLocked
+                  ? 'bg-slate-300 dark:bg-slate-700 text-slate-500 cursor-not-allowed shadow-none'
+                  : 'shadow-lg shadow-indigo-500/25'
+              }`}
+              leftIcon={isCustomerLocked ? <Lock className="w-4 h-4 text-slate-400" /> : undefined}
             >
-              Thanh Toán
+              {isCustomerLocked ? 'Đại lý bị khoá' : 'Thanh Toán'}
             </Button>
           </div>
         </div>

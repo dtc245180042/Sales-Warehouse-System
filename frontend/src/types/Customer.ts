@@ -9,5 +9,9 @@ export interface Customer {
   totalSpent: number;
   lastOrderDate?: string;
   createdAt: string;
-  status: 'active' | 'inactive';
+  status: 'active' | 'inactive' | 'locked';
+  isLocked?: boolean;
+  lockReason?: string;
+  lockedAt?: string;
+  lockedBy?: string;
 }

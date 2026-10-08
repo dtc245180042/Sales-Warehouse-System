@@ -12,6 +12,7 @@ import { Login } from '../pages/auth/Login';
 import { ForgotPassword } from '../pages/auth/ForgotPassword';
 import { ResetPassword } from '../pages/auth/ResetPassword';
 import { ErrorPage } from '../pages/error/ErrorPage';
+import { ErrorBoundary } from '../components/common/ErrorBoundary';
 
 // Core Dashboard & Management Pages (Sprint 1: SCRUM-198, SCRUM-201, SCRUM-202, SCRUM-205, SCRUM-206, SCRUM-207)
 import { Dashboard } from '../pages/dashboard/Dashboard';
@@ -35,6 +36,11 @@ import { ProductDetail } from '../pages/products/ProductDetail';
 import { ProductCreate } from '../pages/products/ProductCreate';
 import { ProductEdit } from '../pages/products/ProductEdit';
 import { ProductUnitPage } from '../pages/products/ProductUnitPage';
+
+// Report Pages (Báo cáo bán hàng theo ngành hàng & Doanh thu)
+import { SalesReport } from '../pages/reports/SalesReport';
+import { RevenueReport } from '../pages/reports/RevenueReport';
+import { InventoryReport } from '../pages/reports/InventoryReport';
 
 // All 7 business roles allowed in Sprint 1 & 2 backoffice
 const ALL_BACKOFFICE_ROLES: UserRole[] = [
@@ -91,7 +97,9 @@ export const AppRoutes: React.FC = () => {
       <Route
         element={
           <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
-            <DashboardLayout />
+            <ErrorBoundary>
+              <DashboardLayout />
+            </ErrorBoundary>
           </ProtectedRoute>
         }
       >
@@ -139,16 +147,20 @@ export const AppRoutes: React.FC = () => {
         <Route
           path="/categories"
           element={
-            <ProtectedRoute allowedRoles={['Admin', 'SalesManager', 'Manager', 'Staff']}>
-              <CategoryManagement />
+            <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
+              <ErrorBoundary>
+                <CategoryManagement />
+              </ErrorBoundary>
             </ProtectedRoute>
           }
         />
         <Route
           path="/products/categories"
           element={
-            <ProtectedRoute allowedRoles={['Admin', 'SalesManager', 'Manager', 'Staff']}>
-              <CategoryManagement />
+            <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
+              <ErrorBoundary>
+                <CategoryManagement />
+              </ErrorBoundary>
             </ProtectedRoute>
           }
         />
@@ -249,6 +261,34 @@ export const AppRoutes: React.FC = () => {
           element={
             <ProtectedRoute allowedRoles={['Admin', 'SalesManager', 'WarehouseManager', 'Director', 'Manager']}>
               <ProductEdit />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* ============================================================ */}
+        {/* BÁO CÁO & THỐNG KÊ DOANH SỐ THEO NGÀNH HÀNG                  */}
+        {/* ============================================================ */}
+        <Route
+          path="/reports/sales"
+          element={
+            <ProtectedRoute allowedRoles={['Admin', 'SalesManager', 'SalesStaff', 'Director', 'Accountant', 'Manager', 'Staff']}>
+              <SalesReport />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/reports/revenue"
+          element={
+            <ProtectedRoute allowedRoles={['Admin', 'SalesManager', 'Director', 'Accountant', 'Manager']}>
+              <RevenueReport />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/reports/inventory"
+          element={
+            <ProtectedRoute allowedRoles={['Admin', 'WarehouseManager', 'WarehouseStaff', 'Director', 'Manager']}>
+              <InventoryReport />
             </ProtectedRoute>
           }
         />

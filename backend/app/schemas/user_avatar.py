@@ -14,6 +14,7 @@ class AvatarInfo(BaseModel):
     width: Optional[int] = None
     height: Optional[int] = None
     updated_at: Optional[datetime] = None
+    external_url: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -23,6 +24,11 @@ class AvatarUploadResponse(BaseModel):
     success: bool = True
     message: str
     data: AvatarInfo
+
+
+class AvatarSetUrlRequest(BaseModel):
+    """Yêu cầu cập nhật đường dẫn ảnh đại diện (như ImgBB Cloud URL)."""
+    avatar_url: str
 
 
 class AvatarDeleteResponse(BaseModel):

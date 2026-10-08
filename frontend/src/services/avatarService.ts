@@ -39,6 +39,16 @@ export const avatarService = {
   },
 
   /**
+   * Lưu đường dẫn ảnh đại diện (như ImgBB Cloud URL)
+   */
+  setAvatarUrl: async (avatarUrl: string): Promise<AvatarUploadResponse> => {
+    const response = await apiClient.post<AvatarUploadResponse>('/user-avatars/set-url', {
+      avatar_url: avatarUrl,
+    });
+    return response.data;
+  },
+
+  /**
    * Lấy thông tin metadata ảnh đại diện của người dùng hiện tại
    */
   getMyAvatar: async (): Promise<AvatarInfo> => {

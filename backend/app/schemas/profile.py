@@ -64,6 +64,10 @@ class ProfileUpdateRequest(BaseModel):
         None,
         description="Số điện thoại di động Việt Nam"
     )
+    avatar_url: Optional[str] = Field(
+        None,
+        description="Đường dẫn ảnh đại diện (như ImgBB Cloud URL hoặc liên kết ảnh)"
+    )
 
     model_config = ConfigDict(extra="forbid")
 
@@ -91,6 +95,7 @@ class ProfileResponse(BaseModel):
     role: Optional[str] = None
     full_name: Optional[str] = None
     phone_number: Optional[str] = None
+    avatar_url: Optional[str] = None
     assigned_warehouse: Optional[str] = None
     is_active: bool = True
     created_at: Optional[datetime] = None

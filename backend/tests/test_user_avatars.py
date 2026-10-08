@@ -193,3 +193,27 @@ def test_upload_avatar_empty_file_rejected(auth_headers):
     res = client.post("/api/v1/user-avatars/upload", headers=headers, files=files)
     assert res.status_code == 400
 
+
+def test_set_external_avatar_url_imgbb(auth_headers):
+    """Kiểm tra lưu trữ và truy xuất avatar từ đường dẫn ImgBB Cloud."""
+    headers, user_id = auth_headers
+    imgbb_url = "https://i.ibb.co/abc1234/my-avatar.jpg"
+
+    # Gửi yêu cầu lưu URL
+    res = client.post("/api/v1/user-avatars/set-url", headers=headers, json={"avatar_url": imgbb_url})
+    assert res.status_code == 200
+    data = res.json()
+    assert data["success"] is True
+    assert data["data"]["avatar_url"] == imgbb_url
+    assert data["data"]["thumbnail_url"] == imgbb_url
+
+    # Kiểm tra GET /me trả về đúng ImgBB URL
+    res_me = client.get("/api/v1/user-avatars/me", headers=headers)
+    assert res_me.status_code == 200
+    assert res_me.json()["avatar_url"] == imgbb_url
+
+    # Kiểm tra GET /{user_id}/avatar chuyển hướng (302) tới URL ImgBB
+    res_redirect = client.get(f"/api/v1/user-avatars/{user_id}/avatar", follow_redirects=False)
+    assert res_redirect.status_code == 302
+    assert res_redirect.headers["location"] == imgbb_url
+

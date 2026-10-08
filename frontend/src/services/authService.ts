@@ -165,6 +165,16 @@ export const authService = {
       throw new Error(phoneValidation.message || 'Số điện thoại không hợp lệ.');
     }
 
+    if (data.avatar && data.avatar.trim()) {
+      try {
+        await apiClient.post('/user-avatars/set-url', {
+          avatar_url: data.avatar.trim(),
+        });
+      } catch (avatarErr) {
+        console.warn('Lỗi đồng bộ avatar URL:', avatarErr);
+      }
+    }
+
     try {
       const res = await apiClient.put('/profile/me', {
         full_name: trimmedName,
@@ -173,6 +183,9 @@ export const authService = {
       });
       if (res.data) {
         const user = mapBackendUserToFrontend(res.data);
+        if (data.avatar && data.avatar.trim()) {
+          user.avatar = data.avatar.trim();
+        }
         setStorageItem(STORAGE_KEYS.CURRENT_USER, user);
         return user;
       }

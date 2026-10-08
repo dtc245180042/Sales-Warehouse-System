@@ -1,6 +1,6 @@
 import os
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.core.database import lay_phien_db
@@ -10,9 +10,11 @@ from app.schemas.user_avatar import (
     AvatarInfo,
     AvatarUploadResponse,
     AvatarDeleteResponse,
+    AvatarSetUrlRequest,
 )
 from app.services.avatar_service import (
     save_user_avatar,
+    save_user_avatar_url,
     get_user_avatar,
     delete_user_avatar,
     build_avatar_urls,
@@ -136,6 +138,46 @@ async def tai_len_anh_dai_dien_theo_user_id(
     )
 
 
+@router.post(
+    "/set-url",
+    response_model=AvatarUploadResponse,
+    summary="Cập nhật ảnh đại diện bằng đường dẫn URL (như ImgBB Cloud URL)"
+)
+def dat_duong_dan_anh_dai_dien(
+    du_lieu: AvatarSetUrlRequest,
+    nguoi_dung_hien_tai: User = Depends(lay_nguoi_dung_hien_tai),
+    phien_db: Session = Depends(lay_phien_db)
+):
+    """Cập nhật ảnh đại diện từ đường dẫn trực tiếp (ImgBB URL hoặc link ảnh)."""
+    user_avatar = save_user_avatar_url(
+        db=phien_db,
+        user_id=nguoi_dung_hien_tai.id,
+        avatar_url=du_lieu.avatar_url.strip()
+    )
+    avatar_url, thumb_url = build_avatar_urls(
+        nguoi_dung_hien_tai.id,
+        user_avatar.updated_at,
+        user_avatar=user_avatar
+    )
+    info = AvatarInfo(
+        user_id=user_avatar.user_id,
+        original_filename=user_avatar.original_filename,
+        avatar_url=avatar_url,
+        thumbnail_url=thumb_url,
+        content_type=user_avatar.content_type,
+        file_size=user_avatar.file_size,
+        width=user_avatar.width,
+        height=user_avatar.height,
+        updated_at=user_avatar.updated_at,
+        external_url=getattr(user_avatar, "external_url", None)
+    )
+    return AvatarUploadResponse(
+        success=True,
+        message="Cập nhật đường dẫn ảnh đại diện thành công.",
+        data=info
+    )
+
+
 @router.get(
     "/me",
     response_model=AvatarInfo,
@@ -153,7 +195,11 @@ def lay_thong_tin_avatar_cua_toi(
             detail="Người dùng chưa thiết lập ảnh đại diện."
         )
 
-    avatar_url, thumb_url = build_avatar_urls(nguoi_dung_hien_tai.id, user_avatar.updated_at)
+    avatar_url, thumb_url = build_avatar_urls(
+        nguoi_dung_hien_tai.id,
+        user_avatar.updated_at,
+        user_avatar=user_avatar
+    )
     return AvatarInfo(
         user_id=user_avatar.user_id,
         original_filename=user_avatar.original_filename,
@@ -163,7 +209,8 @@ def lay_thong_tin_avatar_cua_toi(
         file_size=user_avatar.file_size,
         width=user_avatar.width,
         height=user_avatar.height,
-        updated_at=user_avatar.updated_at
+        updated_at=user_avatar.updated_at,
+        external_url=getattr(user_avatar, "external_url", None)
     )
 
 
@@ -177,7 +224,18 @@ def lay_file_anh_dai_dien(
 ):
     """Trả về file ảnh đại diện của người dùng theo user_id."""
     user_avatar = get_user_avatar(phien_db, user_id)
-    if not user_avatar or not os.path.exists(user_avatar.avatar_path):
+    if not user_avatar:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Không tìm thấy file ảnh đại diện."
+        )
+
+    if user_avatar.avatar_path and (
+        user_avatar.avatar_path.startswith("http://") or user_avatar.avatar_path.startswith("https://")
+    ):
+        return RedirectResponse(url=user_avatar.avatar_path, status_code=302)
+
+    if not os.path.exists(user_avatar.avatar_path):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Không tìm thấy file ảnh đại diện."
@@ -200,7 +258,18 @@ def lay_file_thumbnail_dai_dien(
 ):
     """Trả về file thumbnail thu nhỏ của người dùng theo user_id."""
     user_avatar = get_user_avatar(phien_db, user_id)
-    if not user_avatar or not os.path.exists(user_avatar.thumbnail_path):
+    if not user_avatar:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Không tìm thấy file thumbnail ảnh đại diện."
+        )
+
+    if user_avatar.thumbnail_path and (
+        user_avatar.thumbnail_path.startswith("http://") or user_avatar.thumbnail_path.startswith("https://")
+    ):
+        return RedirectResponse(url=user_avatar.thumbnail_path, status_code=302)
+
+    if not os.path.exists(user_avatar.thumbnail_path):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Không tìm thấy file thumbnail ảnh đại diện."
@@ -230,7 +299,11 @@ def lay_thong_tin_avatar_theo_id(
             detail="Người dùng chưa thiết lập ảnh đại diện."
         )
 
-    avatar_url, thumb_url = build_avatar_urls(user_id, user_avatar.updated_at)
+    avatar_url, thumb_url = build_avatar_urls(
+        user_id,
+        user_avatar.updated_at,
+        user_avatar=user_avatar
+    )
     return AvatarInfo(
         user_id=user_avatar.user_id,
         original_filename=user_avatar.original_filename,
@@ -240,7 +313,8 @@ def lay_thong_tin_avatar_theo_id(
         file_size=user_avatar.file_size,
         width=user_avatar.width,
         height=user_avatar.height,
-        updated_at=user_avatar.updated_at
+        updated_at=user_avatar.updated_at,
+        external_url=getattr(user_avatar, "external_url", None)
     )
 
 

@@ -19,6 +19,7 @@ import {
 import { Button } from '../../components/common/Button';
 import { Modal } from '../../components/common/Modal';
 import { Badge } from '../../components/common/Badge';
+import { CurrencyInput } from '../../components/common/CurrencyInput';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import { productService } from '../../services/productService';
 import { orderService } from '../../services/orderService';
@@ -500,11 +501,11 @@ export const POS: React.FC = () => {
             <div className="space-y-1.5 pt-1 text-xs">
               <div className="flex items-center justify-between">
                 <span className="text-slate-500">Khách đưa (VNĐ):</span>
-                <input
-                  type="number"
-                  value={cashGiven || ''}
-                  onChange={(e) => setCashGiven(Number(e.target.value))}
-                  className="w-32 px-2 py-1 text-right bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg font-bold text-slate-900 dark:text-white"
+                <CurrencyInput
+                  value={cashGiven}
+                  onChange={(val) => setCashGiven(val)}
+                  placeholder="0"
+                  className="w-36 px-2.5 py-1 text-right bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
                 />
               </div>
               <div className="flex items-center justify-between">

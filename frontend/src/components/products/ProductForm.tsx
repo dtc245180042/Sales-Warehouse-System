@@ -4,6 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../common/Button';
+import { CurrencyInput } from '../common/CurrencyInput';
 import { Product } from '../../types/Product';
 import { productCategories } from '../../mock/products';
 import { initialSuppliers } from '../../mock/suppliers';
@@ -22,6 +23,9 @@ import {
   X,
   ExternalLink,
   ImageIcon,
+  Wand2,
+  HelpCircle,
+  Sparkles,
 } from 'lucide-react';
 import {
   uploadImageToImgBB,
@@ -29,9 +33,119 @@ import {
   setImgBBApiKey,
 } from '../../services/imageUploadService';
 
+// Tiện ích bỏ dấu tiếng Việt để tạo mã SKU
+export function removeVietnameseTones(str: string): string {
+  return str
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D');
+}
+
+/**
+ * Quy chuẩn Cách 1: Mã thông minh phân cấp
+ * Cấu trúc: [MÃ_NHÓM]-[THƯƠNG_HIỆU/HÃNG]-[MODEL/TÊN]-[THUỘC_TÍNH]
+ * Ví dụ: DT-APL-IP15-128, NGK-COCA-330-LON, GD-SUN-SHD-CHAO
+ */
+export function generateSmartSKU(
+  categoryName: string = '',
+  supplierOrBrand: string = '',
+  productName: string = '',
+  unitOrSpec: string = ''
+): string {
+  // 1. Mã nhóm hàng
+  const cleanCat = removeVietnameseTones(categoryName).toUpperCase().trim();
+  let catCode = 'SP';
+  if (cleanCat.includes('DIEN THOAI') || cleanCat.includes('TABLET') || cleanCat.includes('SMARTPHONE')) {
+    catCode = 'DT';
+  } else if (cleanCat.includes('MAY TINH') || cleanCat.includes('LAPTOP')) {
+    catCode = 'LT';
+  } else if (cleanCat.includes('MAN HINH') || cleanCat.includes('MONITOR')) {
+    catCode = 'MH';
+  } else if (cleanCat.includes('NUOC GIAI KHAT') || cleanCat.includes('DO UONG')) {
+    catCode = 'NGK';
+  } else if (cleanCat.includes('NUOC KHOANG')) {
+    catCode = 'NK';
+  } else if (cleanCat.includes('BIA') || cleanCat.includes('RUOU')) {
+    catCode = 'BR';
+  } else if (cleanCat.includes('GIA DUNG') || cleanCat.includes('DO GIA DUNG')) {
+    catCode = 'GD';
+  } else if (cleanCat.includes('THIET BI') || cleanCat.includes('DIEN TU')) {
+    catCode = 'DTU';
+  } else if (cleanCat.includes('VAN PHONG PHAM')) {
+    catCode = 'VPP';
+  } else if (cleanCat.includes('THOI TRANG') || cleanCat.includes('QUAN AO')) {
+    catCode = 'TT';
+  } else if (cleanCat) {
+    const words = cleanCat.split(/\s+/).filter(Boolean);
+    catCode = words.map((w) => w[0]).join('').slice(0, 3) || 'SP';
+  }
+
+  // 2. Thương hiệu / Hãng sản xuất
+  const cleanBrand = removeVietnameseTones(supplierOrBrand).toUpperCase().trim();
+  let brandCode = 'GEN';
+  if (cleanBrand.includes('APPLE')) brandCode = 'APL';
+  else if (cleanBrand.includes('SAMSUNG')) brandCode = 'SAM';
+  else if (cleanBrand.includes('XIAOMI')) brandCode = 'MI';
+  else if (cleanBrand.includes('SONY')) brandCode = 'SNY';
+  else if (cleanBrand.includes('COCA')) brandCode = 'COCA';
+  else if (cleanBrand.includes('PEPSI')) brandCode = 'PEPSI';
+  else if (cleanBrand.includes('SUNHOUSE')) brandCode = 'SUN';
+  else if (cleanBrand.includes('AQUAFINA')) brandCode = 'AQUA';
+  else if (cleanBrand.includes('DELL')) brandCode = 'DELL';
+  else if (cleanBrand.includes('HP')) brandCode = 'HP';
+  else if (cleanBrand.includes('ASUS')) brandCode = 'ASUS';
+  else if (cleanBrand) {
+    const words = cleanBrand.replace(/[^A-Z0-9\s]/g, '').split(/\s+/).filter(Boolean);
+    if (words.length === 1) {
+      brandCode = words[0].slice(0, 4);
+    } else {
+      brandCode = words.map((w) => w.slice(0, 2)).join('').slice(0, 4);
+    }
+  }
+
+  // 3. Model / Tên viết tắt
+  const cleanName = removeVietnameseTones(productName).toUpperCase().trim();
+  let modelCode = 'MD';
+  if (cleanName) {
+    const tokens = cleanName.replace(/[^A-Z0-9\s]/g, ' ').split(/\s+/).filter(Boolean);
+    const filteredTokens = tokens.filter(
+      (t) => !cleanCat.includes(t) && !cleanBrand.includes(t) && t.length > 1
+    );
+    if (filteredTokens.length > 0) {
+      modelCode = filteredTokens.slice(0, 2).map((t) => t.slice(0, 4)).join('');
+    } else if (tokens.length > 0) {
+      modelCode = tokens.slice(0, 2).join('').slice(0, 6);
+    }
+  }
+
+  // 4. Thuộc tính / Dung lượng / Đơn vị
+  let attrCode = '';
+  const cleanSpec = removeVietnameseTones(unitOrSpec).toUpperCase().trim();
+  const capacityMatch = cleanName.match(/(\d+\s*(?:GB|TB|ML|L|KG|CM|INCH))/i);
+  if (capacityMatch) {
+    attrCode = capacityMatch[0].replace(/\s+/g, '');
+  } else if (cleanSpec) {
+    const specTokens = cleanSpec.replace(/[^A-Z0-9\s]/g, '').split(/\s+/).filter(Boolean);
+    attrCode = specTokens[0]?.slice(0, 4) || '';
+  }
+
+  const parts = [catCode, brandCode, modelCode];
+  if (attrCode) parts.push(attrCode);
+
+  return parts.filter(Boolean).join('-').toUpperCase();
+}
+
 const productSchema = z.object({
   name: z.string().min(2, 'Tên sản phẩm tối thiểu 2 ký tự'),
-  sku: z.string().min(2, 'Mã SKU tối thiểu 2 ký tự'),
+  sku: z
+    .string()
+    .min(3, 'Mã SKU tối thiểu 3 ký tự')
+    .max(35, 'Mã SKU tối đa 35 ký tự')
+    .regex(
+      /^[A-Z0-9]+(-[A-Z0-9]+)*$/,
+      'Mã SKU phải theo chuẩn Cách 1: CHỮ IN HOA, không dấu tiếng Việt, không khoảng trắng, ngăn cách bằng dấu "-" (VD: DT-APL-IP15-128)'
+    ),
   barcode: z.string().min(6, 'Mã vạch tối thiểu 6 ký tự'),
   category: z.string().min(1, 'Vui lòng chọn danh mục'),
   categoryId: z.number().optional(),
@@ -244,6 +358,27 @@ export const ProductForm: React.FC<ProductFormProps> = ({
     }
   }, [watchedSku, existingSkus, isEdit, initialValues?.sku, setError, clearErrors]);
 
+  // SCRUM-220: Tự động sinh mã SKU thông minh theo Cách 1: [MÃ_NHÓM]-[HÃNG]-[MODEL]-[THUỘC_TÍNH]
+  const handleAutoGenerateSKU = () => {
+    const name = watch('name') || '';
+    const cat = watch('category') || '';
+    const supplierId = watch('supplierId') || '';
+    const supplier = initialSuppliers.find((s) => s.id === supplierId)?.name || '';
+    const unit = watch('unit') || '';
+    const spec = watch('packagingSpecification') || '';
+
+    if (!name.trim()) {
+      showToast('Vui lòng nhập Tên sản phẩm trước khi tạo mã tự động', 'warning');
+      return;
+    }
+
+    const generated = generateSmartSKU(cat, supplier, name, `${unit} ${spec}`);
+    setValue('sku', generated, { shouldValidate: true });
+    clearErrors('sku');
+    setSkuError('');
+    showToast(`Đã tự động sinh mã SKU thông minh: ${generated}`, 'success', 'Quy chuẩn Cách 1');
+  };
+
   const handleUploadFile = async (file: File, keyToUse?: string) => {
     const currentKey = keyToUse || getImgBBApiKey();
     if (!currentKey) {
@@ -353,25 +488,49 @@ export const ProductForm: React.FC<ProductFormProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center justify-between">
-                  <span>Mã SKU *</span>
-                  <span className="text-[10px] text-indigo-500 font-normal">Duy nhất toàn công ty</span>
+                  <div className="flex items-center gap-1.5">
+                    <span>Mã SKU *</span>
+                    <span className="text-[10px] text-indigo-500 font-normal">(Cách 1: Phân cấp)</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleAutoGenerateSKU}
+                    className="text-[11px] font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 flex items-center gap-1 bg-indigo-50 dark:bg-indigo-950/50 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 px-2 py-0.5 rounded-md transition-all shadow-sm"
+                    title="Tự động phân tích nhóm hàng, thương hiệu, tên và thuộc tính để sinh mã SKU theo Cách 1"
+                  >
+                    <Sparkles className="w-3 h-3 text-indigo-500 animate-pulse" />
+                    <span>Tạo mã Cách 1</span>
+                  </button>
                 </label>
                 <input
                   type="text"
                   {...register('sku')}
-                  placeholder="VD: IP15P-128"
-                  onChange={(e) => setValue('sku', e.target.value.toUpperCase())}
+                  placeholder="VD: DT-APL-IP15-128"
+                  onChange={(e) => {
+                    const formatted = e.target.value.toUpperCase().replace(/\s+/g, '-');
+                    setValue('sku', formatted, { shouldValidate: true });
+                  }}
                   className={`w-full px-3.5 py-2.5 rounded-xl border ${
                     skuError || errors.sku
                       ? 'border-rose-500 bg-rose-50/30 dark:bg-rose-950/20'
                       : 'border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800'
-                  } text-sm text-slate-900 dark:text-slate-100 uppercase focus:outline-none focus:ring-2 focus:ring-indigo-500`}
+                  } text-sm text-slate-900 dark:text-slate-100 uppercase font-mono tracking-wide focus:outline-none focus:ring-2 focus:ring-indigo-500`}
                 />
                 {(skuError || errors.sku) && (
                   <p className="text-xs text-rose-500 mt-1 font-medium flex items-center gap-1">
                     <span>⚠️</span> {skuError || errors.sku?.message}
                   </p>
                 )}
+                <div className="mt-1.5 p-2 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 text-[11px] text-slate-500 dark:text-slate-400 flex items-start gap-1.5">
+                  <HelpCircle className="w-3.5 h-3.5 text-indigo-500 mt-0.5 shrink-0" />
+                  <div>
+                    <span className="font-semibold text-slate-700 dark:text-slate-300">Cấu trúc: </span>
+                    <span>[MÃ_NHÓM]-[HÃNG]-[MODEL]-[THUỘC_TÍNH]</span>
+                    <div className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">
+                      Ví dụ: <span className="text-indigo-600 dark:text-indigo-400 font-mono font-medium">DT-APL-IP15-128</span>, <span className="text-indigo-600 dark:text-indigo-400 font-mono font-medium">NGK-COCA-330-LON</span>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <div>
@@ -415,10 +574,14 @@ export const ProductForm: React.FC<ProductFormProps> = ({
                   )}
                 </label>
                 {canManageCostPrice ? (
-                  <input
-                    type="number"
-                    {...register('costPrice', { valueAsNumber: true })}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  <CurrencyInput
+                    value={watch('costPrice')}
+                    onChange={(val) => {
+                      setValue('costPrice', val, { shouldValidate: true });
+                    }}
+                    placeholder="VD: 1.000.000"
+                    suffix="VNĐ"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
                   />
                 ) : (
                   <>
@@ -444,9 +607,13 @@ export const ProductForm: React.FC<ProductFormProps> = ({
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
                   Giá bán lẻ (VNĐ) *
                 </label>
-                <input
-                  type="number"
-                  {...register('salePrice', { valueAsNumber: true })}
+                <CurrencyInput
+                  value={watch('salePrice')}
+                  onChange={(val) => {
+                    setValue('salePrice', val, { shouldValidate: true });
+                  }}
+                  placeholder="VD: 1.500.000"
+                  suffix="VNĐ"
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-bold"
                 />
                 {errors.salePrice && <p className="text-xs text-rose-500 mt-1">{errors.salePrice.message}</p>}

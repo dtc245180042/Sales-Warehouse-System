@@ -16,6 +16,7 @@ import { PageContainer } from '../../components/layout/PageContainer';
 import { Button } from '../../components/common/Button';
 import { ConfirmDialog } from '../../components/common/ConfirmDialog';
 import { UnitQtySelector, UnitQtySelectorValue } from '../../components/common/UnitQtySelector';
+import { CurrencyInput } from '../../components/common/CurrencyInput';
 import { formatCurrency } from '../../utils/formatters';
 import { initialSuppliers } from '../../mock/suppliers';
 import { unitConfigService } from '../../mock/unitConversions';
@@ -275,13 +276,12 @@ export const StockIn: React.FC = () => {
                       <label className="block text-[11px] font-semibold text-slate-500 dark:text-slate-400 mb-1">
                         Giá nhập (đ/cơ sở)
                       </label>
-                      <input
-                        type="number"
-                        min={0}
-                        step={10000}
+                      <CurrencyInput
                         value={item.costPrice}
-                        onChange={(e) => handlePriceChange(index, Number(e.target.value))}
-                        className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs sm:text-sm text-slate-800 dark:text-slate-200 focus:ring-1 focus:ring-indigo-500"
+                        onChange={(val) => handlePriceChange(index, val)}
+                        placeholder="0"
+                        suffix="đ"
+                        className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs sm:text-sm text-slate-800 dark:text-slate-200 focus:ring-1 focus:ring-indigo-500 font-medium"
                         id={`stockin-price-${index}`}
                       />
                     </div>

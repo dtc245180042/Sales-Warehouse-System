@@ -9,31 +9,47 @@ const STORAGE_KEYS = {
   REMEMBER_EMAIL: 'kv_remember_email',
 };
 
+// Helper: Chuyển đổi tên vai trò từ Backend DB sang UserRole chuẩn của Frontend
+export function mapBackendRoleNameToFrontend(rawRoleName: any): UserRole {
+  const str = String(typeof rawRoleName === 'object' && rawRoleName !== null ? rawRoleName.name : rawRoleName || '');
+  const norm = str.toUpperCase().replace(/[\s_-]+/g, '');
+  if (norm.includes('ADMIN')) return 'Admin';
+  if (norm.includes('SALESMGR') || norm.includes('SALESMANAGER') || norm === 'MANAGER') return 'SalesManager';
+  if (norm.includes('SALESREP') || norm.includes('SALESSTAFF') || norm === 'SALES') return 'SalesStaff';
+  if (norm.includes('WHMANAGER') || norm.includes('WAREHOUSEMGR') || norm.includes('WAREHOUSEMANAGER')) return 'WarehouseManager';
+  if (norm.includes('WHSTAFF') || norm.includes('WAREHOUSESTAFF') || norm === 'WAREHOUSE') return 'WarehouseStaff';
+  if (norm.includes('ACCOUNTANT') || norm.includes('KETOAN')) return 'Accountant';
+  if (norm.includes('DIRECTOR') || norm.includes('GIAMDOC')) return 'Director';
+  if (norm.includes('CUSTOMER') || norm.includes('KHACHHANG')) return 'User';
+  return 'SalesStaff';
+}
+
 // Helper: Chuyển đổi định dạng User từ Backend API sang User của Frontend
 export function mapBackendUserToFrontend(apiUser: any): User {
-  let role: UserRole = 'Staff';
   const rawRole = apiUser.role || '';
-
-  if (rawRole === 'Admin') role = 'Admin';
-  else if (rawRole === 'Sales Manager') role = 'SalesManager';
-  else if (rawRole === 'Sales Rep') role = 'SalesStaff';
-  else if (rawRole === 'WH Manager') role = 'WarehouseManager';
-  else if (rawRole === 'Warehouse') role = 'WarehouseStaff';
-  else if (rawRole === 'Accountant') role = 'Accountant';
-  else if (rawRole === 'Director') role = 'Director';
-  else if (rawRole === 'Customer') role = 'User';
-  else role = (rawRole as UserRole) || 'Staff';
+  const role: UserRole = mapBackendRoleNameToFrontend(rawRole);
 
   const displayName = apiUser.full_name || apiUser.username || apiUser.email;
   const isSalesRole = ['SalesManager', 'SalesStaff'].includes(role);
   const location = apiUser.assigned_warehouse || '';
+
+  // Chuyển đổi mảng roles quan hệ từ backend sang các UserRole của frontend
+  let mappedRoles: UserRole[] = [];
+  if (Array.isArray(apiUser.roles) && apiUser.roles.length > 0) {
+    mappedRoles = apiUser.roles.map((r: any) => mapBackendRoleNameToFrontend(r));
+  }
+  if (!mappedRoles.includes(role)) {
+    mappedRoles.unshift(role);
+  }
+  // Loại bỏ các vai trò trùng lặp
+  mappedRoles = Array.from(new Set(mappedRoles));
 
   return {
     id: String(apiUser.id),
     name: displayName,
     email: apiUser.email,
     role: role,
-    roles: apiUser.roles?.map((r: any) => r.name || r) || [role],
+    roles: mappedRoles,
     status: apiUser.is_active ? 'active' : 'locked',
     avatar: apiUser.avatar_url || apiUser.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=6366f1&color=fff`,
     phone: apiUser.phone_number || '',
@@ -165,10 +181,16 @@ export const authService = {
       throw new Error(phoneValidation.message || 'Số điện thoại không hợp lệ.');
     }
 
-    if (data.avatar && data.avatar.trim()) {
+    const currentUser = authService.getCurrentUser();
+    // Luôn giữ avatar hợp lệ nhất: data.avatar hoặc currentUser?.avatar
+    const effectiveAvatar =
+      (data.avatar && data.avatar.trim()) ||
+      (currentUser?.avatar && !currentUser.avatar.includes('ui-avatars.com') ? currentUser.avatar : undefined);
+
+    if (effectiveAvatar) {
       try {
         await apiClient.post('/user-avatars/set-url', {
-          avatar_url: data.avatar.trim(),
+          avatar_url: effectiveAvatar,
         });
       } catch (avatarErr) {
         console.warn('Lỗi đồng bộ avatar URL:', avatarErr);
@@ -179,12 +201,12 @@ export const authService = {
       const res = await apiClient.put('/profile/me', {
         full_name: trimmedName,
         phone_number: phoneValidation.normalized || data.phone.trim(),
-        avatar_url: data.avatar,
+        avatar_url: effectiveAvatar,
       });
       if (res.data) {
         const user = mapBackendUserToFrontend(res.data);
-        if (data.avatar && data.avatar.trim()) {
-          user.avatar = data.avatar.trim();
+        if (effectiveAvatar) {
+          user.avatar = effectiveAvatar;
         }
         setStorageItem(STORAGE_KEYS.CURRENT_USER, user);
         return user;
@@ -193,14 +215,13 @@ export const authService = {
       // Fallback local
     }
 
-    const currentUser = authService.getCurrentUser();
     if (!currentUser) throw new Error('Chưa đăng nhập');
 
     const updatedUser: User = {
       ...currentUser,
       name: trimmedName,
       phone: phoneValidation.normalized || data.phone.trim(),
-      ...(data.avatar ? { avatar: data.avatar } : {}),
+      ...(effectiveAvatar ? { avatar: effectiveAvatar } : {}),
     };
 
     setStorageItem(STORAGE_KEYS.CURRENT_USER, updatedUser);

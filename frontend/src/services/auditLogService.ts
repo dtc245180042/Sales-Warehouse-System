@@ -40,6 +40,7 @@ export interface AuditLogBackendItem {
   user_fullname?: string | null;
   user_role?: string | null;
   ip_address?: string | null;
+  device?: string | null;
   status?: string | null;
   created_at: string;
 }
@@ -95,6 +96,13 @@ export function mapBackendToActivityLog(item: AuditLogBackendItem): ActivityLog 
     ? `${item.entity_name} (${item.entity_id})`
     : item.entity_id || 'Hệ thống';
 
+  // Trích xuất thông tin thiết bị
+  const deviceStr =
+    item.device ||
+    item.new_values?.device ||
+    item.new_values?.device_summary ||
+    (normModule === 'AUTH' ? 'Trình duyệt Web' : undefined);
+
   let meta: Record<string, any> | undefined = undefined;
   if (item.new_values || item.old_values) {
     meta = {
@@ -104,6 +112,27 @@ export function mapBackendToActivityLog(item: AuditLogBackendItem): ActivityLog 
     };
   } else if (item.reason) {
     meta = { 'Lý do': item.reason };
+  }
+
+  if (deviceStr) {
+    meta = {
+      ...(meta || {}),
+      'Thiết bị thao tác': deviceStr,
+    };
+  }
+
+  if (item.new_values?.login_time_formatted) {
+    meta = {
+      ...(meta || {}),
+      'Thời điểm đăng nhập': item.new_values.login_time_formatted,
+    };
+  }
+
+  if (item.new_values?.logout_time_formatted) {
+    meta = {
+      ...(meta || {}),
+      'Thời điểm đăng xuất': item.new_values.logout_time_formatted,
+    };
   }
 
   return {
@@ -117,6 +146,7 @@ export function mapBackendToActivityLog(item: AuditLogBackendItem): ActivityLog 
     target: targetLabel,
     detail: item.change_summary || item.reason || `${item.action} trên ${item.entity_type}`,
     ipAddress: item.ip_address || '127.0.0.1',
+    device: deviceStr,
     status: normStatus,
     metadata: meta,
   };

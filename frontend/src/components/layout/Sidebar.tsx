@@ -16,6 +16,7 @@ import {
   BarChart3,
   TrendingUp,
   Package,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { UserRole } from '../../types/User';
@@ -174,6 +175,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 'Director',
                 'Manager',
                 'Staff',
+              ],
+            },
+            {
+              title: 'Nhập từ Excel',
+              path: '/products/import',
+              icon: <FileSpreadsheet className="w-3.5 h-3.5" />,
+              allowedRoles: [
+                'Admin',
+                'SalesManager',
+                'Director',
+                'Manager',
               ],
             },
           ],

@@ -70,6 +70,7 @@ export const Settings: React.FC = () => {
       await updateProfile({
         name: trimmedName,
         phone: normalizedPhone,
+        avatar: user?.avatar,
       });
       setProfilePhone(normalizedPhone);
       showToast('Đã lưu thông tin hồ sơ người dùng thành công!', 'success');

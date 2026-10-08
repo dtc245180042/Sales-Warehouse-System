@@ -13,6 +13,27 @@ from app.models.order import Order
 from app.models.inventory import InventoryHistory
 
 
+from app.core.device_parser import phan_tich_thiet_bi, lay_dia_chi_ip
+
+
+def dam_bao_cot_device_ton_tai(db: Session):
+    """Tự động kiểm tra và tạo cột device trong bảng audit_logs nếu chưa tồn tại (tương thích SQLite/MySQL/PostgreSQL)."""
+    try:
+        from sqlalchemy import text
+        db.execute(text("SELECT device FROM audit_logs LIMIT 1"))
+    except Exception:
+        try:
+            db.rollback()
+            from sqlalchemy import text
+            db.execute(text("ALTER TABLE audit_logs ADD COLUMN device VARCHAR(255)"))
+            db.commit()
+        except Exception:
+            try:
+                db.rollback()
+            except Exception:
+                pass
+
+
 def log_activity(
     db: Session,
     entity_type: str,
@@ -28,11 +49,17 @@ def log_activity(
     user_role: Optional[str] = None,
     reason: Optional[str] = None,
     ip_address: Optional[str] = None,
+    device: Optional[str] = None,
     status: Optional[str] = "success",
 ) -> AuditLog:
     """Hàm lõi ghi nhận sự kiện vào sổ nhật ký kiểm toán hệ thống."""
+    dam_bao_cot_device_ton_tai(db)
+
     if not change_summary:
         change_summary = f"{action} trên {entity_type} [{entity_id}]"
+
+    if not device and new_values and isinstance(new_values, dict):
+        device = new_values.get("device") or new_values.get("device_summary")
 
     log_entry = AuditLog(
         entity_type=entity_type.upper(),
@@ -48,13 +75,144 @@ def log_activity(
         user_role=user_role,
         reason=reason,
         ip_address=ip_address,
+        device=device,
         status=status or "success",
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(),
     )
     db.add(log_entry)
     db.commit()
     db.refresh(log_entry)
     return log_entry
+
+
+def log_login_activity(
+    db: Session,
+    request: Any,
+    user: Optional[Any] = None,
+    status: str = "success",
+    reason: Optional[str] = None,
+    username_attempt: Optional[str] = None,
+) -> AuditLog:
+    """
+    Ghi nhật ký chi tiết sự kiện Đăng nhập:
+    - Thời gian chi tiết (ngày giờ phút giây)
+    - Thiết bị (Hệ điều hành, Trình duyệt, Loại thiết bị)
+    - Địa chỉ IP
+    - Kết quả: Thành công hoặc Thất bại (kèm lý do: sai mật khẩu, tài khoản bị khóa...)
+    """
+    user_agent_str = request.headers.get("user-agent", "") if request else ""
+    device_info = phan_tich_thiet_bi(user_agent_str)
+    ip_addr = lay_dia_chi_ip(request) if request else "127.0.0.1"
+    now_dt = datetime.now()
+    thoi_gian_str = now_dt.strftime("%H:%M:%S ngày %d/%m/%Y")
+
+    user_id = user.id if user else None
+    username = user.username if user else (username_attempt or "unknown")
+    user_fullname = getattr(user, "full_name", None) or username
+    user_role = getattr(user, "role", None) or "User"
+
+    if status == "success":
+        summary = (
+            f"Đăng nhập thành công vào hệ thống lúc {thoi_gian_str} "
+            f"trên thiết bị: {device_info['device_summary']} (IP: {ip_addr})"
+        )
+    else:
+        ly_do_text = f" ({reason})" if reason else ""
+        summary = (
+            f"Đăng nhập thất bại{ly_do_text} lúc {thoi_gian_str} "
+            f"trên thiết bị: {device_info['device_summary']} (IP: {ip_addr})"
+        )
+
+    metadata_values = {
+        "device": device_info["device_summary"],
+        "os": device_info["os"],
+        "browser": device_info["browser"],
+        "device_type": device_info["device_type"],
+        "ip": ip_addr,
+        "timestamp": now_dt.isoformat(),
+        "login_time_formatted": thoi_gian_str,
+        "action_type": "LOGIN",
+    }
+    if reason:
+        metadata_values["reason"] = reason
+
+    return log_activity(
+        db=db,
+        entity_type="AUTH",
+        entity_id=str(user_id or username),
+        entity_name=f"Tài khoản: {user_fullname}",
+        action="LOGIN",
+        old_values=None,
+        new_values=metadata_values,
+        change_summary=summary,
+        user_id=user_id,
+        username=username,
+        user_fullname=user_fullname,
+        user_role=user_role,
+        reason=reason,
+        ip_address=ip_addr,
+        device=device_info["device_summary"],
+        status=status,
+    )
+
+
+def log_logout_activity(
+    db: Session,
+    request: Any,
+    user: Any,
+) -> AuditLog:
+    """
+    Ghi nhật ký chi tiết sự kiện Đăng xuất:
+    - Thời gian đăng xuất (ngày giờ phút giây)
+    - Thiết bị thao tác
+    - Địa chỉ IP
+    - Mô tả hành động
+    """
+    user_agent_str = request.headers.get("user-agent", "") if request else ""
+    device_info = phan_tich_thiet_bi(user_agent_str)
+    ip_addr = lay_dia_chi_ip(request) if request else "127.0.0.1"
+    now_dt = datetime.now()
+    thoi_gian_str = now_dt.strftime("%H:%M:%S ngày %d/%m/%Y")
+
+    user_id = getattr(user, "id", None)
+    username = getattr(user, "username", "unknown")
+    user_fullname = getattr(user, "full_name", None) or username
+    user_role = getattr(user, "role", None) or "User"
+
+    summary = (
+        f"Đăng xuất khỏi hệ thống an toàn lúc {thoi_gian_str} "
+        f"trên thiết bị: {device_info['device_summary']} (IP: {ip_addr})"
+    )
+
+    metadata_values = {
+        "device": device_info["device_summary"],
+        "os": device_info["os"],
+        "browser": device_info["browser"],
+        "device_type": device_info["device_type"],
+        "ip": ip_addr,
+        "timestamp": now_dt.isoformat(),
+        "logout_time_formatted": thoi_gian_str,
+        "action_type": "LOGOUT",
+    }
+
+    return log_activity(
+        db=db,
+        entity_type="AUTH",
+        entity_id=str(user_id or username),
+        entity_name=f"Tài khoản: {user_fullname}",
+        action="LOGOUT",
+        old_values=None,
+        new_values=metadata_values,
+        change_summary=summary,
+        user_id=user_id,
+        username=username,
+        user_fullname=user_fullname,
+        user_role=user_role,
+        reason="Người dùng chủ động đăng xuất khỏi phiên làm việc",
+        ip_address=ip_addr,
+        device=device_info["device_summary"],
+        status="success",
+    )
 
 
 def _build_audit_log_query(

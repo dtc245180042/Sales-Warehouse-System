@@ -23,6 +23,78 @@ router = APIRouter(prefix="/users", tags=["Users Management"])
 # Danh sách các vai trò thuộc nhóm Kho
 VAI_TRO_KHO = [UserRole.WAREHOUSE.value, UserRole.WH_MANAGER.value, "WAREHOUSE", "WH_MANAGER"]
 
+ROLE_ALIASES = {
+    "ADMIN": "ADMIN",
+    "SYSTEM ADMIN": "ADMIN",
+    "QUẢN TRỊ VIÊN": "ADMIN",
+    "SALES MANAGER": "SALES_MANAGER",
+    "SALESMANAGER": "SALES_MANAGER",
+    "MANAGER": "SALES_MANAGER",
+    "QL KINH DOANH": "SALES_MANAGER",
+    "SALES REP": "SALES_REP",
+    "SALESREP": "SALES_REP",
+    "SALES STAFF": "SALES_REP",
+    "SALESSTAFF": "SALES_REP",
+    "SALES": "SALES_REP",
+    "NHÂN VIÊN BÁN HÀNG": "SALES_REP",
+    "WH MANAGER": "WH_MANAGER",
+    "WHMANAGER": "WH_MANAGER",
+    "WAREHOUSE MANAGER": "WH_MANAGER",
+    "WAREHOUSEMANAGER": "WH_MANAGER",
+    "QL KHO": "WH_MANAGER",
+    "WAREHOUSE": "WAREHOUSE",
+    "WAREHOUSE STAFF": "WAREHOUSE",
+    "WAREHOUSESTAFF": "WAREHOUSE",
+    "THỦ KHO": "WAREHOUSE",
+    "ACCOUNTANT": "ACCOUNTANT",
+    "KẾ TOÁN": "ACCOUNTANT",
+    "DIRECTOR": "DIRECTOR",
+    "BAN GIÁM ĐỐC": "DIRECTOR",
+    "CUSTOMER": "CUSTOMER",
+    "USER": "CUSTOMER",
+}
+
+
+def tim_hoac_tao_role(phien_db: Session, raw_name: str) -> Optional[Role]:
+    """Tìm hoặc tạo đối tượng Role tương thích với chuỗi role truyền vào."""
+    if not raw_name:
+        return None
+    raw_str = str(raw_name).strip()
+    norm_upper = raw_str.upper()
+    alias_target = ROLE_ALIASES.get(norm_upper, norm_upper)
+
+    # 1. Tìm chính xác theo tên
+    role_obj = phien_db.query(Role).filter(
+        or_(
+            Role.name == raw_str,
+            Role.name == norm_upper,
+            Role.name == alias_target,
+            Role.name.ilike(raw_str),
+            Role.name.ilike(alias_target)
+        )
+    ).first()
+
+    # 2. Tìm theo nhóm tương đương nếu DB dùng mã cũ
+    if not role_obj:
+        if "SALES_MANAGER" in alias_target:
+            role_obj = phien_db.query(Role).filter(Role.name.in_(["SALES_MANAGER", "MANAGER"])).first()
+        elif "SALES_REP" in alias_target:
+            role_obj = phien_db.query(Role).filter(Role.name.in_(["SALES_REP", "SALES"])).first()
+        elif "WH_MANAGER" in alias_target:
+            role_obj = phien_db.query(Role).filter(Role.name.in_(["WH_MANAGER", "WAREHOUSE"])).first()
+
+    # 3. Tạo mới nếu chưa có để đảm bảo không mất vai trò
+    if not role_obj:
+        try:
+            role_obj = Role(name=alias_target, display_name=raw_str, description=f"Vai trò {raw_str}")
+            phien_db.add(role_obj)
+            phien_db.flush()
+        except Exception:
+            phien_db.rollback()
+            role_obj = phien_db.query(Role).filter(Role.name == alias_target).first()
+
+    return role_obj
+
 
 @router.post(
     "",
@@ -86,13 +158,14 @@ def tao_nguoi_dung(
     )
 
     # Gán các vai trò quan hệ nếu có
-    if cac_vai_tro:
-        for ten_role in cac_vai_tro:
-            role_obj = phien_db.query(Role).filter(
-                or_(Role.name == ten_role.upper(), Role.name == ten_role)
-            ).first()
-            if role_obj and role_obj not in nguoi_dung_moi.roles:
-                nguoi_dung_moi.roles.append(role_obj)
+    cac_role_can_gan = list(cac_vai_tro) if cac_vai_tro else []
+    if vai_tro_chinh and vai_tro_chinh not in cac_role_can_gan:
+        cac_role_can_gan.append(vai_tro_chinh)
+
+    for ten_role in cac_role_can_gan:
+        role_obj = tim_hoac_tao_role(phien_db, ten_role)
+        if role_obj and role_obj not in nguoi_dung_moi.roles:
+            nguoi_dung_moi.roles.append(role_obj)
 
     phien_db.add(nguoi_dung_moi)
     phien_db.commit()
@@ -208,11 +281,13 @@ def cap_nhat_nguoi_dung(
     # Cập nhật quan hệ Role nếu được truyền
     if du_lieu.role_names is not None:
         target_user.roles.clear()
-        for ten_role in du_lieu.role_names:
-            role_obj = phien_db.query(Role).filter(
-                or_(Role.name == ten_role.upper(), Role.name == ten_role)
-            ).first()
-            if role_obj:
+        cac_role_can_gan = list(du_lieu.role_names)
+        if du_lieu.role and du_lieu.role not in cac_role_can_gan:
+            cac_role_can_gan.append(du_lieu.role)
+
+        for ten_role in cac_role_can_gan:
+            role_obj = tim_hoac_tao_role(phien_db, ten_role)
+            if role_obj and role_obj not in target_user.roles:
                 target_user.roles.append(role_obj)
 
     phien_db.commit()

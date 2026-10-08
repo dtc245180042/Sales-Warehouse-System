@@ -14,13 +14,13 @@ from app.api import api_router, api_v1_router
 def khoi_tao_tai_khoan_ban_dau(phien_db: Session):
     """Khởi tạo tài khoản mẫu đầy đủ thông tin cho 7 vai trò hệ thống theo đúng SCRUM."""
     danh_sach_tai_khoan_mau = [
-        ("admin", "admin@warehouse.local", "Admin@1234", UserRole.ADMIN.value, "Trần Quản Trị Hệ Thống", "0901234567", None),
-        ("sales_mgr", "sales_mgr@warehouse.local", "SalesMgr@1234", UserRole.SALES_MANAGER.value, "Nguyễn Văn Giám Đốc Kinh Doanh", "0902345678", None),
-        ("sales_rep", "sales_rep@warehouse.local", "SalesRep@1234", UserRole.SALES_REP.value, "Lê Thị Nhân Viên Kinh Doanh", "0903456789", None),
-        ("wh_mgr", "wh_mgr@warehouse.local", "WhMgr@1234", UserRole.WH_MANAGER.value, "Phạm Văn Trưởng Kho", "0904567890", "Kho Tổng Hà Nội"),
-        ("warehouse", "warehouse@warehouse.local", "Warehouse@1234", UserRole.WAREHOUSE.value, "Hoàng Văn Thủ Kho", "0905678901", "Kho Đà Nẵng"),
-        ("accountant", "accountant@warehouse.local", "Accountant@1234", UserRole.ACCOUNTANT.value, "Đỗ Thị Kế Toán Trưởng", "0906789012", None),
-        ("customer", "customer@warehouse.local", "Customer@1234", UserRole.CUSTOMER.value, "Công ty TNHH Đại Lý Tuấn Phương", "0907890123", None),
+        ("admin", "admin@warehouse.local", "123456", UserRole.ADMIN.value, "Trần Quản Trị Hệ Thống", "0901234567", None),
+        ("sales_mgr", "sales_mgr@warehouse.local", "123456", UserRole.SALES_MANAGER.value, "Nguyễn Văn Giám Đốc Kinh Doanh", "0902345678", None),
+        ("sales_rep", "sales_rep@warehouse.local", "123456", UserRole.SALES_REP.value, "Lê Thị Nhân Viên Kinh Doanh", "0903456789", None),
+        ("wh_mgr", "wh_mgr@warehouse.local", "123456", UserRole.WH_MANAGER.value, "Phạm Văn Trưởng Kho", "0904567890", "Kho Tổng Hà Nội"),
+        ("warehouse", "warehouse@warehouse.local", "123456", UserRole.WAREHOUSE.value, "Hoàng Văn Thủ Kho", "0905678901", "Kho Đà Nẵng"),
+        ("accountant", "accountant@warehouse.local", "123456", UserRole.ACCOUNTANT.value, "Đỗ Thị Kế Toán Trưởng", "0906789012", None),
+        ("customer", "customer@warehouse.local", "123456", UserRole.CUSTOMER.value, "Công ty TNHH Đại Lý Tuấn Phương", "0907890123", None),
     ]
     for ten_dang_nhap, dia_chi_email, mat_khau_goc, vai_tro, ho_ten, sdt, kho in danh_sach_tai_khoan_mau:
         existing = phien_db.query(User).filter(
@@ -46,6 +46,10 @@ def khoi_tao_tai_khoan_ban_dau(phien_db: Session):
                 tai_khoan_moi.roles.append(role_obj)
             phien_db.add(tai_khoan_moi)
         else:
+            existing.hashed_password = bam_mat_khau(mat_khau_goc)
+            existing.failed_login_attempts = 0
+            existing.locked_until = None
+            existing.is_active = True
             if not existing.full_name:
                 existing.full_name = ho_ten
             if not existing.phone_number:

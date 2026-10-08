@@ -21,8 +21,8 @@ def _get_smtp_config():
     return {
         "host": os.getenv("SMTP_HOST", ""),
         "port": int(os.getenv("SMTP_PORT", "587")),
-        "user": os.getenv("SMTP_USER", ""),
-        "password": os.getenv("SMTP_PASSWORD", ""),
+        "user": os.getenv("SMTP_USER", "").strip(),
+        "password": os.getenv("SMTP_PASSWORD", "").replace(" ", "").strip(),
         "from_email": os.getenv("EMAILS_FROM_EMAIL", os.getenv("SMTP_USER", "noreply@saleswarehouse.com")),
         "from_name": os.getenv("EMAILS_FROM_NAME", "KhoVận Pro - Quản Lý Bán Hàng & Kho"),
         "frontend_url": os.getenv("FRONTEND_URL", "http://localhost:5173"),

@@ -12,6 +12,7 @@ class AuditLogBase(BaseModel):
     new_values: Optional[Dict[str, Any]] = Field(None, description="Giá trị sau thay đổi")
     change_summary: Optional[str] = Field(None, description="Tóm tắt nội dung thay đổi")
     reason: Optional[str] = Field(None, description="Lý do điều chỉnh")
+    device: Optional[str] = Field(None, description="Thiết bị / Trình duyệt thao tác")
 
 
 class AuditLogCreate(AuditLogBase):
@@ -20,6 +21,7 @@ class AuditLogCreate(AuditLogBase):
     user_fullname: Optional[str] = None
     user_role: Optional[str] = None
     ip_address: Optional[str] = None
+    device: Optional[str] = None
     status: Optional[str] = "success"
 
 
@@ -30,6 +32,7 @@ class AuditLogResponse(AuditLogBase):
     user_fullname: Optional[str] = None
     user_role: Optional[str] = None
     ip_address: Optional[str] = None
+    device: Optional[str] = None
     status: Optional[str] = "success"
     created_at: datetime
 

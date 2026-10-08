@@ -103,6 +103,7 @@ def test_delete_clean_user_succeeds(admin_user: User, regular_user: User, db_ses
     assert data["deleted_user_id"] == target_id
 
     # Xác nhận người dùng đã biến mất hoàn toàn khỏi DB
+    db_session.rollback()
     db_session.expire_all()
     deleted = db_session.query(User).filter(User.id == target_id).first()
     assert deleted is None

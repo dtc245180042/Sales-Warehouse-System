@@ -134,6 +134,7 @@ def export_audit_logs_csv(
             "Tên đối tượng",
             "Mô tả thay đổi",
             "Trạng thái",
+            "Thiết bị",
             "Địa chỉ IP",
             "Lý do",
         ])
@@ -162,6 +163,7 @@ def export_audit_logs_csv(
                 if log.status == "success"
                 else ("Thất bại" if log.status == "failed" else "Cảnh báo")
             )
+            device_str = getattr(log, "device", "") or ""
             writer.writerow([
                 f"LOG-{log.id:04d}",
                 dt_str,
@@ -174,6 +176,7 @@ def export_audit_logs_csv(
                 log.entity_name or "",
                 log.change_summary or "",
                 status_label,
+                device_str,
                 log.ip_address or "",
                 log.reason or "",
             ])

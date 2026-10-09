@@ -46,6 +46,12 @@ class OrderCreate(BaseModel):
     staff_id: Optional[str] = None
     staff_name: Optional[str] = None
     note: Optional[str] = None
+    delivery_address_id: Optional[int] = None
+    delivery_address_name: Optional[str] = None
+    delivery_receiver_name: Optional[str] = None
+    delivery_phone: Optional[str] = None
+    delivery_address: Optional[str] = None
+    delivery_notes: Optional[str] = None
 
 
 class OrderStatusUpdate(BaseModel):
@@ -73,10 +79,40 @@ class OrderResponse(BaseModel):
     staff_id: Optional[str] = None
     staff_name: Optional[str] = None
     note: Optional[str] = None
+    delivery_address_id: Optional[int] = None
+    delivery_address_name: Optional[str] = None
+    delivery_receiver_name: Optional[str] = None
+    delivery_phone: Optional[str] = None
+    delivery_address: Optional[str] = None
+    delivery_notes: Optional[str] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
+
+    @computed_field
+    def deliveryAddressId(self) -> Optional[int]:
+        return self.delivery_address_id
+
+    @computed_field
+    def deliveryAddressName(self) -> Optional[str]:
+        return self.delivery_address_name
+
+    @computed_field
+    def deliveryReceiverName(self) -> Optional[str]:
+        return self.delivery_receiver_name
+
+    @computed_field
+    def deliveryPhone(self) -> Optional[str]:
+        return self.delivery_phone
+
+    @computed_field
+    def deliveryAddress(self) -> Optional[str]:
+        return self.delivery_address
+
+    @computed_field
+    def deliveryNotes(self) -> Optional[str]:
+        return self.delivery_notes
 
     @computed_field
     def customerId(self) -> str:

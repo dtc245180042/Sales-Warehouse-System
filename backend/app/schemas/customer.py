@@ -35,6 +35,11 @@ class CustomerResponse(CustomerBase):
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
+    assigned_staff_id: Optional[str] = None
+    assigned_staff_name: Optional[str] = None
+    assigned_staff_phone: Optional[str] = None
+    assigned_at: Optional[str] = None
+
     model_config = ConfigDict(from_attributes=True)
 
     @computed_field
@@ -52,3 +57,19 @@ class CustomerResponse(CustomerBase):
     @computed_field
     def createdAt(self) -> Optional[str]:
         return self.created_at.strftime("%Y-%m-%d") if self.created_at else None
+
+    @computed_field
+    def assignedStaffId(self) -> Optional[str]:
+        return self.assigned_staff_id
+
+    @computed_field
+    def assignedStaffName(self) -> Optional[str]:
+        return self.assigned_staff_name
+
+    @computed_field
+    def assignedStaffPhone(self) -> Optional[str]:
+        return self.assigned_staff_phone
+
+    @computed_field
+    def assignedAt(self) -> Optional[str]:
+        return self.assigned_at

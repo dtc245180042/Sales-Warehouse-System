@@ -32,6 +32,11 @@ export interface Order {
   staffId: string;
   staffName: string;
   note?: string;
+  deliveryAddressId?: number;
+  deliveryReceiverName?: string;
+  deliveryPhone?: string;
+  deliveryAddress?: string;
+  deliveryNotes?: string;
   createdAt: string;
   updatedAt: string;
 }

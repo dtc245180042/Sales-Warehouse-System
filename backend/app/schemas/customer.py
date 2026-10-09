@@ -1,6 +1,6 @@
 import re
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator
 
 
@@ -11,8 +11,9 @@ class CustomerBase(BaseModel):
     address: Optional[str] = Field(None, description="Địa chỉ")
     customer_group: str = Field("RETAIL", description="Nhóm khách hàng (TIER_1, TIER_2, WHOLESALE, VIP, RETAIL)")
     tax_code: Optional[str] = Field(None, description="Mã số thuế đại lý (10 hoặc 13 số)")
-    region: Optional[str] = Field(None, description="Khu vực / Tỉnh thành phụ trách")
-    status: str = Field("active", description="Trạng thái (active, inactive)")
+    region: Optional[str] = Field(None, description="Khu vực địa bàn / Tỉnh thành phụ trách (ví dụ: Miền Bắc, Miền Trung, Miền Nam)")
+    assigned_sales_rep: Optional[str] = Field(None, description="Nhân viên kinh doanh phụ trách")
+    status: str = Field("active", description="Trạng thái (active, inactive, locked)")
 
     @field_validator("tax_code")
     def validate_tax_code(cls, v):
@@ -60,6 +61,7 @@ class CustomerUpdate(BaseModel):
     customer_group: Optional[str] = None
     tax_code: Optional[str] = None
     region: Optional[str] = None
+    assigned_sales_rep: Optional[str] = None
     status: Optional[str] = None
 
     @field_validator("code")
@@ -162,3 +164,29 @@ class CustomerResponse(CustomerBase):
     @computed_field
     def assignedAt(self) -> Optional[str]:
         return self.assigned_at
+
+    @computed_field
+    def assignedSalesRep(self) -> Optional[str]:
+        return self.assigned_sales_rep or self.assigned_staff_name
+
+    @computed_field
+    def customerGroup(self) -> str:
+        return self.customer_group
+
+
+class CustomerPaginationResponse(BaseModel):
+    """Schema danh sách đại lý phân trang theo chuẩn SCRUM-229."""
+    items: List[CustomerResponse]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+
+
+class CustomerFilterOptions(BaseModel):
+    """Schema danh sách các tùy chọn lọc đại lý (SCRUM-229)."""
+    regions: List[str]
+    customer_groups: List[str]
+    sales_reps: List[str]
+    statuses: List[str]
+

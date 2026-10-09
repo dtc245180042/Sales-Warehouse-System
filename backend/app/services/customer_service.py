@@ -1,6 +1,7 @@
+import math
 import re
 import uuid
-from typing import List, Optional, Tuple, Dict, Any
+from typing import List, Optional, Tuple, Dict, Any, Union
 from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from sqlalchemy import func, or_
@@ -32,6 +33,10 @@ SEED_CUSTOMERS = [
         "customer_group": "RETAIL",
         "tax_code": None,
         "region": "Miền Nam",
+        "assigned_sales_rep": "Lê Thị Nhân Viên Kinh Doanh",
+        "total_orders": 18,
+        "total_spent": 145800000.0,
+        "last_order_date": "2026-09-28",
         "status": "active"
     },
     {
@@ -44,6 +49,10 @@ SEED_CUSTOMERS = [
         "customer_group": "VIP",
         "tax_code": None,
         "region": "Miền Bắc",
+        "assigned_sales_rep": "Nguyễn Văn Giám Đốc Kinh Doanh",
+        "total_orders": 12,
+        "total_spent": 98500000.0,
+        "last_order_date": "2026-09-25",
         "status": "active"
     },
     {
@@ -56,6 +65,10 @@ SEED_CUSTOMERS = [
         "customer_group": "TIER_1",
         "tax_code": "0301234567",
         "region": "Miền Nam",
+        "assigned_sales_rep": "Lê Thị Nhân Viên Kinh Doanh",
+        "total_orders": 34,
+        "total_spent": 420000000.0,
+        "last_order_date": "2026-10-01",
         "status": "active"
     },
     {
@@ -68,7 +81,11 @@ SEED_CUSTOMERS = [
         "customer_group": "TIER_1",
         "tax_code": "0307890123",
         "region": "Miền Nam",
-        "status": "active"
+        "assigned_sales_rep": "Trần Quản Trị Hệ Thống",
+        "total_orders": 25,
+        "total_spent": 310000000.0,
+        "last_order_date": "2026-09-30",
+        "status": "locked"
     },
     {
         "id": "CUS-005",
@@ -80,12 +97,17 @@ SEED_CUSTOMERS = [
         "customer_group": "TIER_2",
         "tax_code": "0401122334",
         "region": "Miền Trung",
+        "assigned_sales_rep": "Lê Thị Nhân Viên Kinh Doanh",
+        "total_orders": 16,
+        "total_spent": 195000000.0,
+        "last_order_date": "2026-09-22",
         "status": "active"
     }
 ]
 
 
 def ensure_seed_customers(db: Session):
+    """Đảm bảo dữ liệu mẫu và tự động bổ sung region, assigned_sales_rep nếu chưa có."""
     if db.query(Customer).count() == 0:
         for c in SEED_CUSTOMERS:
             cust = Customer(**c)
@@ -98,6 +120,68 @@ def ensure_seed_customers(db: Session):
             if not db.query(CustomerAssignment).filter(CustomerAssignment.customer_id == cust.id).first():
                 db.add(CustomerAssignment(customer_id=cust.id))
         db.commit()
+    else:
+        # Bổ sung dữ liệu khu vực và người phụ trách cho các bản ghi cũ chưa có
+        customers = db.query(Customer).all()
+        updated = False
+        sample_regions = ["Miền Bắc", "Miền Trung", "Miền Nam", "Tây Nguyên"]
+        sample_reps = [
+            "Lê Thị Nhân Viên Kinh Doanh",
+            "Nguyễn Văn Giám Đốc Kinh Doanh",
+            "Trần Quản Trị Hệ Thống"
+        ]
+        for idx, cus in enumerate(customers):
+            if not cus.region:
+                # Gán theo địa chỉ hoặc xoay vòng
+                addr = (cus.address or "").lower()
+                if "hà nội" in addr or "bắc" in addr:
+                    cus.region = "Miền Bắc"
+                elif "đà nẵng" in addr or "huế" in addr or "trung" in addr:
+                    cus.region = "Miền Trung"
+                else:
+                    cus.region = sample_regions[idx % len(sample_regions)]
+                updated = True
+            if not cus.assigned_sales_rep:
+                cus.assigned_sales_rep = sample_reps[idx % len(sample_reps)]
+                updated = True
+        if updated:
+            try:
+                db.commit()
+            except Exception:
+                db.rollback()
+
+
+def get_filter_options(db: Session) -> Dict[str, List[str]]:
+    """Lấy danh sách các giá trị bộ lọc đại lý đang có trong hệ thống (SCRUM-229)."""
+    ensure_seed_customers(db)
+    
+    # Lấy danh sách khu vực
+    regions_query = db.query(Customer.region).filter(Customer.region.isnot(None)).distinct().all()
+    regions = sorted(list({r[0] for r in regions_query if r[0]}))
+    if not regions:
+        regions = ["Miền Bắc", "Miền Trung", "Miền Nam", "Tây Nguyên"]
+
+    # Lấy danh sách nhóm khách hàng
+    groups_query = db.query(Customer.customer_group).filter(Customer.customer_group.isnot(None)).distinct().all()
+    groups = sorted(list({g[0] for g in groups_query if g[0]}))
+    if not groups:
+        groups = ["TIER_1", "TIER_2", "WHOLESALE", "VIP", "RETAIL"]
+
+    # Lấy danh sách người phụ trách
+    reps_query = db.query(Customer.assigned_sales_rep).filter(Customer.assigned_sales_rep.isnot(None)).distinct().all()
+    reps = sorted(list({rp[0] for rp in reps_query if rp[0]}))
+    if not reps:
+        reps = ["Lê Thị Nhân Viên Kinh Doanh", "Nguyễn Văn Giám Đốc Kinh Doanh", "Trần Quản Trị Hệ Thống"]
+
+    # Danh sách trạng thái chuẩn
+    statuses = ["active", "inactive", "locked"]
+
+    return {
+        "regions": regions,
+        "customer_groups": groups,
+        "sales_reps": reps,
+        "statuses": statuses,
+    }
 
 
 def _get_dynamic_customer_stats(db: Session, customer_id: str) -> Tuple[int, float, Optional[str]]:
@@ -161,6 +245,7 @@ def _enrich_customer_response(db: Session, customer: Customer) -> CustomerRespon
         total_orders=orders_count,
         total_spent=total_spent,
         last_order_date=last_order_date,
+        assigned_sales_rep=getattr(customer, "assigned_sales_rep", None) or assigned_staff_name,
         assigned_staff_id=assigned_staff_id,
         assigned_staff_name=assigned_staff_name,
         assigned_staff_phone=assigned_staff_phone,
@@ -191,15 +276,61 @@ def check_sales_rep_scope(db: Session, customer_id: str, current_user: Optional[
             )
 
 
+def get_filter_options(db: Session) -> Dict[str, List[str]]:
+    """Lấy danh sách các giá trị bộ lọc đại lý đang có trong hệ thống (SCRUM-229)."""
+    ensure_seed_customers(db)
+
+    # Lấy danh sách khu vực
+    regions_query = db.query(Customer.region).filter(Customer.region.isnot(None)).distinct().all()
+    regions = sorted(list({r[0] for r in regions_query if r[0]}))
+    if not regions:
+        regions = ["Miền Bắc", "Miền Trung", "Miền Nam", "Tây Nguyên"]
+
+    # Lấy danh sách nhóm khách hàng
+    groups_query = db.query(Customer.customer_group).filter(Customer.customer_group.isnot(None)).distinct().all()
+    groups = sorted(list({g[0] for g in groups_query if g[0]}))
+    if not groups:
+        groups = ["TIER_1", "TIER_2", "WHOLESALE", "VIP", "RETAIL"]
+
+    # Lấy danh sách người phụ trách
+    reps_query = db.query(Customer.assigned_sales_rep).filter(Customer.assigned_sales_rep.isnot(None)).distinct().all()
+    reps = sorted(list({rp[0] for rp in reps_query if rp[0]}))
+    if not reps:
+        reps = ["Lê Thị Nhân Viên Kinh Doanh", "Nguyễn Văn Giám Đốc Kinh Doanh", "Trần Quản Trị Hệ Thống"]
+
+    # Danh sách trạng thái chuẩn
+    statuses = ["active", "inactive", "locked"]
+
+    return {
+        "regions": regions,
+        "customer_groups": groups,
+        "sales_reps": reps,
+        "statuses": statuses,
+    }
+
+
 def get_all_customers(
     db: Session,
     search: Optional[str] = None,
     customer_group: Optional[str] = None,
     assigned_staff_id: Optional[str] = None,
     region: Optional[str] = None,
+    assigned_sales_rep: Optional[str] = None,
     status_filter: Optional[str] = None,
+    status: Optional[str] = None,
+    page: Optional[int] = None,
+    page_size: Optional[int] = None,
     current_user: Optional[User] = None,
-) -> List[CustomerResponse]:
+) -> Union[Dict[str, Any], List[CustomerResponse]]:
+    """
+    Truy vấn và lọc danh sách đại lý theo các tiêu chí (S3-03, SC-228, SCRUM-229):
+    - Tìm nhanh theo mã đại lý, tên, số điện thoại hoặc MST
+    - Lọc theo khu vực địa bàn (region)
+    - Lọc theo nhóm khách hàng (customer_group)
+    - Lọc theo người phụ trách (assigned_sales_rep / assigned_staff_id)
+    - Lọc theo trạng thái (status: active, inactive, locked)
+    - Phân trang dữ liệu (khi truyền page/page_size)
+    """
     ensure_seed_customers(db)
     query = db.query(Customer)
 
@@ -234,8 +365,8 @@ def get_all_customers(
                 except ValueError:
                     pass
 
-    # Bộ lọc tìm kiếm
-    if search:
+    # 1. Tìm nhanh theo mã, tên, số điện thoại, MST
+    if search and search.strip():
         s = f"%{search.strip()}%"
         query = query.filter(
             or_(
@@ -246,12 +377,12 @@ def get_all_customers(
             )
         )
 
-    # Bộ lọc nhóm khách hàng
-    if customer_group and customer_group.upper() != "ALL":
-        query = query.filter(Customer.customer_group == customer_group.upper())
+    # 2. Bộ lọc nhóm khách hàng
+    if customer_group and customer_group.strip().upper() != "ALL":
+        query = query.filter(Customer.customer_group == customer_group.strip().upper())
 
-    # Bộ lọc khu vực (Region Filter)
-    if region and region.strip() and region.upper() != "ALL":
+    # 3. Bộ lọc khu vực (Region Filter)
+    if region and region.strip() and region.strip().upper() != "ALL":
         reg = f"%{region.strip()}%"
         query = query.filter(
             or_(
@@ -260,11 +391,35 @@ def get_all_customers(
             )
         )
 
-    # Bộ lọc trạng thái
-    if status_filter and status_filter.lower() != "all":
-        query = query.filter(Customer.status == status_filter.lower())
+    # 4. Bộ lọc người phụ trách (assigned_sales_rep)
+    if assigned_sales_rep and assigned_sales_rep.strip().lower() != "all":
+        query = query.filter(Customer.assigned_sales_rep == assigned_sales_rep.strip())
 
-    customers = query.order_by(Customer.code.asc()).all()
+    # 5. Bộ lọc trạng thái (status hoặc status_filter)
+    st = status or status_filter
+    if st and st.strip().lower() != "all":
+        query = query.filter(Customer.status == st.strip().lower())
+
+    # Sắp xếp mặc định theo mã đại lý tăng dần
+    query = query.order_by(Customer.code.asc())
+
+    # 6. Phân trang nếu được yêu cầu
+    if page is not None or page_size is not None:
+        total = query.count()
+        p = max(1, page or 1)
+        ps = max(1, min(page_size or 10, 1000))
+        offset = (p - 1) * ps
+        items = query.offset(offset).limit(ps).all()
+        total_pages = max(1, math.ceil(total / ps))
+        return {
+            "items": [_enrich_customer_response(db, c) for c in items],
+            "total": total,
+            "page": p,
+            "page_size": ps,
+            "total_pages": total_pages,
+        }
+
+    customers = query.all()
     return [_enrich_customer_response(db, c) for c in customers]
 
 

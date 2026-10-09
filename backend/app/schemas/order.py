@@ -7,6 +7,7 @@ class OrderItemBase(BaseModel):
     product_id: Union[str, int] = Field(..., description="ID sản phẩm")
     sku: Optional[str] = Field(None, description="Mã SKU")
     name: str = Field(..., description="Tên sản phẩm")
+    unit: Optional[str] = Field("cái", description="Đơn vị tính (S3-09: cái, hộp, thùng...)")
     price: float = Field(0.0, ge=0, description="Đơn giá")
     quantity: int = Field(1, ge=1, description="Số lượng")
     discount: float = Field(0.0, ge=0, description="Giảm giá sản phẩm")
@@ -24,7 +25,7 @@ class OrderItemResponse(OrderItemBase):
 
     @computed_field
     def productId(self) -> str:
-        return self.product_id
+        return str(self.product_id)
 
 
 class OrderCreate(BaseModel):
@@ -42,7 +43,7 @@ class OrderCreate(BaseModel):
     change_amount: float = 0.0
     payment_method: str = "cash"
     payment_status: str = "paid"
-    status: str = "pending"
+    status: str = "pending"  # pending, draft, confirmed, shipping, completed, cancelled
     staff_id: Optional[str] = None
     staff_name: Optional[str] = None
     note: Optional[str] = None
@@ -52,10 +53,79 @@ class OrderCreate(BaseModel):
     delivery_phone: Optional[str] = None
     delivery_address: Optional[str] = None
     delivery_notes: Optional[str] = None
+    expected_delivery_date: Optional[str] = None  # S3-09: Ngày giao hàng mong muốn
+
+
+class OrderDraftUpdate(BaseModel):
+    customer_id: Optional[str] = None
+    customer_name: Optional[str] = None
+    customer_phone: Optional[str] = None
+    customer_address: Optional[str] = None
+    price_list_id: Optional[int] = None
+    items: Optional[List[OrderItemCreate]] = None
+    subtotal: Optional[float] = None
+    discount: Optional[float] = None
+    tax: Optional[float] = None
+    total: Optional[float] = None
+    payment_method: Optional[str] = None
+    payment_status: Optional[str] = None
+    note: Optional[str] = None
+    delivery_address_id: Optional[int] = None
+    delivery_address_name: Optional[str] = None
+    delivery_receiver_name: Optional[str] = None
+    delivery_phone: Optional[str] = None
+    delivery_address: Optional[str] = None
+    delivery_notes: Optional[str] = None
+    expected_delivery_date: Optional[str] = None
+
+
+class OrderCalculateItem(BaseModel):
+    product_id: Union[str, int]
+    quantity: int = Field(1, ge=1)
+    price: Optional[float] = None
+    unit: Optional[str] = "cái"
+
+
+class OrderCalculateRequest(BaseModel):
+    customer_id: str
+    items: List[OrderCalculateItem] = Field(..., min_length=1)
+    price_list_id: Optional[int] = None
+
+
+class OrderCalculateItemResponse(BaseModel):
+    product_id: str
+    sku: Optional[str] = None
+    name: str
+    unit: Optional[str] = "cái"
+    unit_price: float
+    quantity: int
+    discount_amount: float = 0.0
+    discount_rate: Optional[float] = 0.0
+    subtotal: float
+    applied_discount_name: Optional[str] = None
+
+
+class OrderCalculateResponse(BaseModel):
+    subtotal: float
+    discount: float
+    total: float
+    items: List[OrderCalculateItemResponse] = []
+
+
+class ProductSearchForOrderResponse(BaseModel):
+    id: int
+    sku: str
+    name: str
+    price: float
+    sale_price: float
+    stock: int
+    unit: str
+    packaging_spec: Optional[str] = None
+    available_units: List[str] = []
 
 
 class OrderStatusUpdate(BaseModel):
-    status: str = Field(..., description="Trạng thái mới: pending, confirmed, shipping, completed, cancelled")
+    status: str = Field(..., description="Trạng thái mới: draft, pending, confirmed, shipping, completed, cancelled")
 
 
 class OrderResponse(BaseModel):
@@ -85,6 +155,7 @@ class OrderResponse(BaseModel):
     delivery_phone: Optional[str] = None
     delivery_address: Optional[str] = None
     delivery_notes: Optional[str] = None
+    expected_delivery_date: Optional[str] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
@@ -113,6 +184,10 @@ class OrderResponse(BaseModel):
     @computed_field
     def deliveryNotes(self) -> Optional[str]:
         return self.delivery_notes
+
+    @computed_field
+    def expectedDeliveryDate(self) -> Optional[str]:
+        return self.expected_delivery_date
 
     @computed_field
     def customerId(self) -> str:
@@ -157,6 +232,7 @@ class OrderResponse(BaseModel):
     @computed_field
     def createdAt(self) -> Optional[str]:
         return self.created_at.strftime("%Y-%m-%d %H:%M") if self.created_at else None
+
 
     @computed_field
     def updatedAt(self) -> Optional[str]:

@@ -24,6 +24,7 @@ import {
   ExternalLink,
   ChevronLeft,
   ChevronRight,
+  ShoppingCart,
 } from 'lucide-react';
 import { PageContainer } from '../../components/layout/PageContainer';
 import { DataTable, Column } from '../../components/common/DataTable';
@@ -548,6 +549,13 @@ export const CustomerList: React.FC = () => {
       render: (c) => (
         <div className="flex items-center justify-end gap-1.5">
           <Link
+            to={`/orders/create?customerId=${c.id}`}
+            className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/40"
+            title="Tạo đơn hàng hiện trường"
+          >
+            <ShoppingCart className="w-4 h-4" />
+          </Link>
+          <Link
             to={`/customers/${c.id}`}
             className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-slate-800"
             title="Xem hồ sơ chi tiết"
@@ -874,11 +882,19 @@ export const CustomerList: React.FC = () => {
                   <div className="flex items-center justify-between gap-2 pt-3 mt-3 border-t border-slate-100 dark:border-slate-800">
                     <a
                       href={`tel:${c.phone}`}
-                      className="flex-1 py-1.5 px-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 font-semibold text-xs flex items-center justify-center gap-1.5 hover:bg-emerald-100 transition-colors"
+                      className="py-1.5 px-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 font-semibold text-xs flex items-center justify-center gap-1.5 hover:bg-emerald-100 transition-colors"
                     >
                       <Phone className="w-3.5 h-3.5" />
                       <span>{c.phone}</span>
                     </a>
+                    <Link
+                      to={`/orders/create?customerId=${c.id}`}
+                      className="py-1.5 px-2.5 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 font-semibold text-xs flex items-center justify-center gap-1 hover:bg-blue-100 transition-colors"
+                      title="Tạo đơn hàng hiện trường"
+                    >
+                      <ShoppingCart className="w-3.5 h-3.5" />
+                      <span>Tạo đơn</span>
+                    </Link>
                     <Link
                       to={`/customers/${c.id}`}
                       className="p-1.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300"

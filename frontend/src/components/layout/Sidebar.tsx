@@ -18,6 +18,7 @@ import {
   Package,
   FileSpreadsheet,
   Users,
+  ShoppingCart,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { UserRole } from '../../types/User';
@@ -81,6 +82,45 @@ export const Sidebar: React.FC<SidebarProps> = ({
           title: 'Tổng quan Dashboard',
           path: '/dashboard',
           icon: <LayoutDashboard className="w-5 h-5" />,
+          allowedRoles: [
+            'Admin',
+            'SalesManager',
+            'SalesStaff',
+            'WarehouseManager',
+            'WarehouseStaff',
+            'Accountant',
+            'Director',
+            'Manager',
+            'Staff',
+            'User',
+          ],
+        },
+      ],
+    },
+    {
+      heading: 'BÁN HÀNG & ĐƠN HÀNG',
+      items: [
+        {
+          title: 'Tạo đơn hiện trường (360px)',
+          path: '/orders/create',
+          icon: <ShoppingCart className="w-5 h-5" />,
+          allowedRoles: [
+            'Admin',
+            'SalesManager',
+            'SalesStaff',
+            'WarehouseManager',
+            'WarehouseStaff',
+            'Accountant',
+            'Director',
+            'Manager',
+            'Staff',
+            'User',
+          ],
+        },
+        {
+          title: 'Quản lý đơn hàng',
+          path: '/orders',
+          icon: <LayoutList className="w-5 h-5" />,
           allowedRoles: [
             'Admin',
             'SalesManager',

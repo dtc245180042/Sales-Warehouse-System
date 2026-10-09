@@ -27,6 +27,11 @@ import { CategoryManagement } from '../pages/categories/CategoryManagement';
 import { CustomerList } from '../pages/customers/CustomerList';
 import { CustomerDetail } from '../pages/customers/CustomerDetail';
 
+// Orders & Field Sales (SCRUM-230, S3-09)
+import { CreateOrder } from '../pages/orders/CreateOrder';
+import { Orders } from '../pages/sales/Orders';
+import { OrderDetail } from '../pages/sales/OrderDetail';
+
 // Supplier Management Pages (SCRUM-217)
 import { SupplierList } from '../pages/suppliers/SupplierList';
 import { SupplierDetail } from '../pages/suppliers/SupplierDetail';
@@ -184,6 +189,32 @@ export const AppRoutes: React.FC = () => {
           element={
             <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
               <CustomerDetail />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Quản lý Đơn hàng & Tạo đơn hiện trường Mobile 360px (SCRUM-230, S3-09) */}
+        <Route
+          path="/orders"
+          element={
+            <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
+              <Orders />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/orders/create"
+          element={
+            <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
+              <CreateOrder />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/orders/:id"
+          element={
+            <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
+              <OrderDetail />
             </ProtectedRoute>
           }
         />

@@ -15,7 +15,7 @@ import { validateVNPhoneNumber } from '../utils/phoneUtils';
 
 // Create base Axios instance (ready for real backend URL)
 export const apiClient = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8001/api/v1',
+  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1',
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json',
@@ -88,7 +88,7 @@ export const api = {
             originalPrice: Number(p.salePrice ?? p.sale_price ?? 0) * 1.1,
             stock: Number(p.stock ?? 0),
             unit: p.unit || 'Chiếc',
-            image: p.image || p.image_url || p.imageUrl || '/images/products/placeholder.jpg',
+            image: (p.image && !p.image.includes('/images/products/') && !p.image.includes('placeholder')) ? (p.image || p.image_url || p.imageUrl || '') : '',
             description: p.description || '',
             rating: 4.8,
             reviewsCount: 15,

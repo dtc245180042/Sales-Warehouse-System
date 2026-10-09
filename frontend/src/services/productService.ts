@@ -33,7 +33,7 @@ function mapApiProduct(p: any): Product {
     minStock: Number(p.minStock ?? p.min_stock ?? 5),
     unit: p.unit || 'Chiếc',
     packagingSpecification: p.packagingSpecification || p.packaging_specification || '1 chiếc/hộp',
-    image: p.image || p.image_url || p.imageUrl || '/images/products/placeholder.jpg',
+    image: (p.image && !p.image.includes('/images/products/') && !p.image.includes('placeholder')) ? (p.image || p.image_url || p.imageUrl || '') : '',
     description: p.description || '',
     status: normalizedStatus,
     hasTransactions: Boolean(p.hasTransactions ?? p.has_transactions ?? false),
@@ -67,7 +67,11 @@ export const productService = {
     } catch (err) {
       console.warn('[productService] Backend API offline hoặc lỗi, sử dụng bộ nhớ cục bộ:', err);
     }
-    return getStorageItem<Product[]>(STORAGE_KEY, initialProducts);
+    const stored = getStorageItem<Product[]>(STORAGE_KEY, initialProducts);
+    return stored.map((p) => ({
+      ...p,
+      image: (p.image && !p.image.includes('/images/products/') && !p.image.includes('placeholder')) ? p.image : '',
+    }));
   },
 
   getById: async (id: string): Promise<Product | undefined> => {
@@ -81,9 +85,14 @@ export const productService = {
       // Dự phòng từ cache nếu lỗi mạng
     }
     const products = getStorageItem<Product[]>(STORAGE_KEY, initialProducts);
-    return products.find(
+    const found = products.find(
       (p) => String(p.id).trim() === strId || p.sku.trim().toUpperCase() === strId.toUpperCase()
     );
+    if (!found) return undefined;
+    return {
+      ...found,
+      image: (found.image && !found.image.includes('/images/products/') && !found.image.includes('placeholder')) ? found.image : '',
+    };
   },
 
   create: async (data: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>): Promise<Product> => {

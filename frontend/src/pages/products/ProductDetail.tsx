@@ -9,9 +9,9 @@ import {
   Calendar,
   TrendingUp,
   PackageCheck,
-  AlertTriangle,
   History,
   ArrowDownLeft,
+  Package,
 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { PageContainer } from '../../components/layout/PageContainer';
@@ -99,16 +99,21 @@ export const ProductDetail: React.FC = () => {
         {/* Left Column: Image & Quick Stats */}
         <div className="space-y-6">
           <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-card text-center">
-            <img
-              src={product.image}
-              alt={product.name}
-              className="w-full h-64 object-cover rounded-xl border border-slate-200 dark:border-slate-700 mx-auto mb-4 bg-slate-50 dark:bg-slate-800"
-              onError={(e) => {
-                const target = e.currentTarget;
-                target.onerror = null;
-                target.src = '/images/product-placeholder.jpg';
-              }}
-            />
+            {product.image ? (
+              <img
+                src={product.image}
+                alt={product.name}
+                className="w-full h-64 object-cover rounded-xl border border-slate-200 dark:border-slate-700 mx-auto mb-4 bg-slate-50 dark:bg-slate-800"
+                onError={(e) => {
+                  e.currentTarget.style.display = 'none';
+                }}
+              />
+            ) : (
+              <div className="w-full h-48 rounded-xl border border-dashed border-slate-200 dark:border-slate-700 mx-auto mb-4 bg-slate-50 dark:bg-slate-800/60 flex flex-col items-center justify-center text-slate-400">
+                <Package className="w-12 h-12 stroke-[1.2] mb-1 text-slate-300 dark:text-slate-600" />
+                <span className="text-xs">Không có hình ảnh</span>
+              </div>
+            )}
             <div className="flex items-center justify-center gap-2 mb-2">
               <Badge
                 variant={

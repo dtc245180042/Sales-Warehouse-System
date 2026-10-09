@@ -9,37 +9,38 @@ import {
   Banknote,
   QrCode,
   Printer,
-  CheckCircle2,
   ShoppingCart,
   User,
   X,
   Sparkles,
-  ArrowRight,
-  MapPin,
+  TrendingDown,
+  Layers,
+  Info,
   Package,
-  AlertTriangle,
 } from 'lucide-react';
 import { Button } from '../../components/common/Button';
 import { Modal } from '../../components/common/Modal';
-import { Badge } from '../../components/common/Badge';
 import { CurrencyInput } from '../../components/common/CurrencyInput';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import { productService } from '../../services/productService';
 import { orderService } from '../../services/orderService';
 import { customerService } from '../../services/customerService';
-import { deliveryAddressService } from '../../services/deliveryAddressService';
-import { creditService } from '../../services/creditService';
 import { Product } from '../../types/Product';
 import { Customer } from '../../types/Customer';
-import { DeliveryAddress } from '../../types/DeliveryAddress';
-import { CustomerCreditProfile } from '../../types/CreditProfile';
 import { OrderItem, PaymentMethod } from '../../types/Order';
+import { productCategories } from '../../mock/products';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
+import { VOLUME_DISCOUNT_TIERS, getVolumeDiscountInfo } from '../agents/AgentOrderCreate';
+import { VolumeDiscountPolicyModal } from '../../components/sales/VolumeDiscountPolicyModal';
 
 interface CartItem extends OrderItem {
   image: string;
   stock: number;
+  discountPct: number;
+  discountAmt: number;
+  neededForNext: number;
+  nextTierPct: number;
 }
 
 export const POS: React.FC = () => {
@@ -49,25 +50,19 @@ export const POS: React.FC = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>('CUS-010'); // Default Walk-in
-  const [creditProfile, setCreditProfile] = useState<CustomerCreditProfile | null>(null);
-  const [deliveryAddresses, setDeliveryAddresses] = useState<DeliveryAddress[]>([]);
-  const [selectedDeliveryAddressId, setSelectedDeliveryAddressId] = useState<number | undefined>(undefined);
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [search, setSearch] = useState<string>('');
   const [barcodeInput, setBarcodeInput] = useState<string>('');
-  const [displayCount, setDisplayCount] = useState<number>(60);
-
-  // Reset giới hạn hiển thị khi đổi danh mục hoặc tìm kiếm
-  useEffect(() => {
-    setDisplayCount(60);
-  }, [categoryFilter, search]);
 
   // Cart
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [discount, setDiscount] = useState<number>(0);
+  const [manualDiscount, setManualDiscount] = useState<number>(0);
   const [taxRate, setTaxRate] = useState<number>(0); // 0% or 8% or 10%
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
   const [cashGiven, setCashGiven] = useState<number>(0);
+
+  // Modal Bậc chiết khấu
+  const [showTierModal, setShowTierModal] = useState(false);
 
   // Completed order receipt modal
   const [completedOrder, setCompletedOrder] = useState<any | null>(null);
@@ -79,61 +74,41 @@ export const POS: React.FC = () => {
     customerService.getAll().then(setCustomers);
   }, []);
 
-  // Tự động load danh sách điểm giao hàng của đại lý được chọn (SCRUM-437)
-  useEffect(() => {
-    if (selectedCustomerId) {
-      deliveryAddressService.getByCustomerId(selectedCustomerId).then((addrs) => {
-        setDeliveryAddresses(addrs);
-        const def = addrs.find((a) => a.isDefault);
-        if (def) {
-          setSelectedDeliveryAddressId(def.id);
-        } else if (addrs.length > 0) {
-          setSelectedDeliveryAddressId(addrs[0].id);
-        } else {
-          setSelectedDeliveryAddressId(undefined);
-        }
-      });
-    } else {
-      setDeliveryAddresses([]);
-      setSelectedDeliveryAddressId(undefined);
-    }
-  }, [selectedCustomerId]);
-
-  // Tự động kiểm tra hồ sơ hạn mức công nợ của đại lý
-  useEffect(() => {
-    if (selectedCustomerId && selectedCustomerId !== 'CUS-010') {
-      creditService
-        .getProfile(selectedCustomerId)
-        .then(setCreditProfile)
-        .catch(() => setCreditProfile(null));
-    } else {
-      setCreditProfile(null);
-    }
-  }, [selectedCustomerId]);
-
-  // Lấy danh mục tự động từ các sản phẩm thực tế có trong hệ thống
-  const categoriesWithCounts = useMemo(() => {
-    const counts: Record<string, number> = {};
-    products.forEach((p) => {
-      const cat = p.category?.trim() || 'Khác';
-      counts[cat] = (counts[cat] || 0) + 1;
-    });
-    return Object.entries(counts).map(([name, count]) => ({ name, count }));
-  }, [products]);
-
   // Filter products for POS grid
   const filteredProducts = useMemo(() => {
     return products.filter((p) => {
-      const pCat = p.category?.trim() || 'Khác';
-      const matchCat = categoryFilter === 'all' || pCat === categoryFilter;
+      const matchCat = categoryFilter === 'all' || p.category === categoryFilter;
       const matchSearch =
-        !search.trim() ||
         p.name.toLowerCase().includes(search.toLowerCase()) ||
         p.sku.toLowerCase().includes(search.toLowerCase()) ||
         p.barcode.includes(search);
       return matchCat && matchSearch;
     });
   }, [products, categoryFilter, search]);
+
+  // Helper tính dòng giỏ hàng kèm chiết khấu theo số lượng (SCRUM-486)
+  const buildCartItem = (product: Product, quantity: number): CartItem => {
+    const { discountPct, nextTier, neededForNext } = getVolumeDiscountInfo(quantity);
+    const rawTotal = product.salePrice * quantity;
+    const discountAmt = Math.round((rawTotal * discountPct) / 100);
+    const subtotal = rawTotal - discountAmt;
+
+    return {
+      productId: product.id,
+      sku: product.sku,
+      name: product.name,
+      price: product.salePrice,
+      quantity,
+      discount: discountAmt,
+      discountPct,
+      discountAmt,
+      subtotal,
+      image: product.image,
+      stock: product.stock,
+      neededForNext,
+      nextTierPct: nextTier ? nextTier.discountPct : discountPct,
+    };
+  };
 
   const addToCart = (product: Product) => {
     if (product.stock <= 0) {
@@ -148,35 +123,20 @@ export const POS: React.FC = () => {
           showToast(`Chỉ còn ${product.stock} sản phẩm khả dụng trong kho`, 'warning');
           return prev;
         }
+        const newQty = existing.quantity + 1;
         return prev.map((item) =>
-          item.productId === product.id
-            ? {
-                ...item,
-                quantity: item.quantity + 1,
-                subtotal: (item.quantity + 1) * item.price,
-              }
-            : item
+          item.productId === product.id ? buildCartItem(product, newQty) : item
         );
       } else {
-        return [
-          ...prev,
-          {
-            productId: product.id,
-            sku: product.sku,
-            name: product.name,
-            price: product.salePrice,
-            quantity: 1,
-            discount: 0,
-            subtotal: product.salePrice,
-            image: product.image,
-            stock: product.stock,
-          },
-        ];
+        return [...prev, buildCartItem(product, 1)];
       }
     });
   };
 
   const handleUpdateQty = (productId: string, delta: number) => {
+    const product = products.find((p) => p.id === productId);
+    if (!product) return;
+
     setCart((prev) =>
       prev
         .map((item) => {
@@ -186,11 +146,8 @@ export const POS: React.FC = () => {
               showToast(`Đã đạt giới hạn tồn kho (${item.stock})`, 'warning');
               return item;
             }
-            return {
-              ...item,
-              quantity: newQty,
-              subtotal: newQty * item.price,
-            };
+            if (newQty <= 0) return { ...item, quantity: 0 };
+            return buildCartItem(product, newQty);
           }
           return item;
         })
@@ -213,10 +170,13 @@ export const POS: React.FC = () => {
     }
   };
 
-  // Calculations
-  const subtotal = cart.reduce((sum, item) => sum + item.subtotal, 0);
-  const taxAmount = Math.round((subtotal - discount) * (taxRate / 100));
-  const total = Math.max(0, subtotal - discount + taxAmount);
+  // Calculations theo thời gian thực (SCRUM-480 + SCRUM-486)
+  const rawSubtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const volumeDiscountTotal = cart.reduce((sum, item) => sum + item.discountAmt, 0);
+  const afterVolumeDiscount = rawSubtotal - volumeDiscountTotal;
+  const totalDiscount = volumeDiscountTotal + (manualDiscount || 0);
+  const taxAmount = Math.round(Math.max(0, afterVolumeDiscount - manualDiscount) * (taxRate / 100));
+  const total = Math.max(0, afterVolumeDiscount - manualDiscount + taxAmount);
   const changeAmount = Math.max(0, (cashGiven || 0) - total);
 
   // Set default cash given to exact total whenever total changes if cashGiven was 0
@@ -240,20 +200,13 @@ export const POS: React.FC = () => {
     setIsPaying(true);
     try {
       const customer = customers.find((c) => c.id === selectedCustomerId);
-      const chosenAddr = deliveryAddresses.find((a) => a.id === selectedDeliveryAddressId);
       const newOrder = await orderService.create({
         customerId: customer?.id || 'CUS-010',
         customerName: customer?.name || 'Khách Lẻ Tại Quầy',
         customerPhone: customer?.phone || '0900000000',
-        customerAddress: customer?.address,
-        deliveryAddressId: chosenAddr?.id,
-        deliveryReceiverName: chosenAddr?.receiverName,
-        deliveryPhone: chosenAddr?.phone,
-        deliveryAddress: chosenAddr?.address,
-        deliveryNotes: chosenAddr?.directionsNote,
-        items: cart.map(({ image, stock, ...rest }) => rest),
-        subtotal,
-        discount,
+        items: cart.map(({ image, stock, discountPct, discountAmt, neededForNext, nextTierPct, ...rest }) => rest),
+        subtotal: rawSubtotal,
+        discount: totalDiscount,
         tax: taxAmount,
         total,
         paidAmount: paymentMethod === 'cash' ? cashGiven : total,
@@ -263,20 +216,21 @@ export const POS: React.FC = () => {
         status: 'completed',
         staffId: user?.id || 'USR-003',
         staffName: user?.name || 'Thu Ngân',
-        note: 'Đơn hàng POS bán tại quầy',
+        note: `Đơn hàng POS bán tại quầy${volumeDiscountTotal > 0 ? ` (Chiết khấu SL: ${formatCurrency(volumeDiscountTotal)})` : ''}`,
       });
 
-      // Update local product stock
-      const updatedProducts = await productService.getAll();
-      setProducts(updatedProducts);
-
-      setCompletedOrder(newOrder);
+      setCompletedOrder({
+        ...newOrder,
+        volumeDiscountTotal,
+        items: [...cart],
+      });
       setIsReceiptModalOpen(true);
       setCart([]);
-      setDiscount(0);
+      setManualDiscount(0);
       showToast(`Thanh toán thành công! Mã đơn: ${newOrder.code}`, 'success');
-    } catch (err: any) {
-      showToast(err.message || 'Lỗi thanh toán đơn hàng', 'error');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Lỗi thanh toán đơn hàng';
+      showToast(msg, 'error');
     } finally {
       setIsPaying(false);
     }
@@ -313,238 +267,224 @@ export const POS: React.FC = () => {
               className="w-full pl-9 pr-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs sm:text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
             />
           </form>
+
+          {/* Nút xem chính sách chiết khấu số lượng */}
+          <button
+            type="button"
+            onClick={() => setShowTierModal(true)}
+            className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-indigo-600 bg-indigo-50 dark:bg-indigo-950/40 rounded-xl hover:bg-indigo-100 transition shrink-0"
+            title="Xem chính sách chiết khấu số lượng"
+          >
+            <Layers className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Bậc CK</span>
+          </button>
         </div>
 
-        {/* Category Pills (Lấy chuẩn xác từ 5000 sản phẩm thực tế) */}
+        {/* Category Pills */}
         <div className="px-4 py-2 border-b border-slate-100 dark:border-slate-800 flex items-center gap-2 overflow-x-auto shrink-0 no-scrollbar">
           <button
             onClick={() => setCategoryFilter('all')}
             className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
               categoryFilter === 'all'
                 ? 'bg-indigo-600 text-white shadow-sm'
-                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
             }`}
           >
             Tất cả ({products.length})
           </button>
-          {categoriesWithCounts.map((c) => (
+          {productCategories.map((c) => (
             <button
-              key={c.name}
+              key={c.id}
               onClick={() => setCategoryFilter(c.name)}
               className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
                 categoryFilter === c.name
                   ? 'bg-indigo-600 text-white shadow-sm'
-                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
               }`}
             >
-              {c.name} ({c.count})
+              {c.name}
             </button>
           ))}
         </div>
 
-        {/* Product Cards Grid (Bỏ hẳn ảnh để tối ưu tốc độ & không bao giờ bị vỡ khung) */}
-        <div className="flex-1 overflow-y-auto p-4">
-          {filteredProducts.length === 0 ? (
-            <div className="h-full flex flex-col items-center justify-center p-8 text-center text-slate-400">
-              <Package className="w-12 h-12 stroke-[1.2] mb-3 opacity-40 text-slate-400" />
-              <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">
-                Không tìm thấy sản phẩm nào
-              </p>
-              <p className="text-xs text-slate-400 mt-1">
-                Vui lòng thử tìm kiếm với từ khóa khác hoặc chọn nhóm hàng khác
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
-                {filteredProducts.slice(0, displayCount).map((p) => {
-                  const isOutOfStock = p.stock <= 0;
-                  return (
-                    <div
-                      key={p.id}
-                      onClick={() => !isOutOfStock && addToCart(p)}
-                      className={`group relative p-3.5 rounded-2xl border transition-all flex flex-col justify-between select-none ${
-                        isOutOfStock
-                          ? 'border-slate-200 dark:border-slate-800 opacity-50 cursor-not-allowed bg-slate-50 dark:bg-slate-900/50'
-                          : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-850 hover:border-indigo-500 hover:shadow-md cursor-pointer active:scale-95'
+        {/* Product Cards Grid */}
+        <div className="flex-1 overflow-y-auto p-4 grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
+          {filteredProducts.map((p) => {
+            const isOutOfStock = p.stock <= 0;
+            return (
+              <div
+                key={p.id}
+                onClick={() => !isOutOfStock && addToCart(p)}
+                className={`group relative p-3 rounded-2xl border transition-all flex flex-col justify-between select-none aspect-square ${
+                  isOutOfStock
+                    ? 'border-slate-200 dark:border-slate-800 opacity-50 cursor-not-allowed bg-slate-50 dark:bg-slate-900/50'
+                    : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-850 hover:border-indigo-500 hover:shadow-md cursor-pointer active:scale-95'
+                }`}
+              >
+                {/* Phần trên: Tên sản phẩm & SKU */}
+                <div className="min-w-0">
+                  <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 line-clamp-2 leading-snug">
+                    {p.name}
+                  </h4>
+                  <span className="text-[10px] text-slate-400 block mt-1 font-mono truncate">
+                    {p.sku}
+                  </span>
+                </div>
+
+                {/* Phần dưới: Tồn kho & CK số lượng, kèm Giá & Nút thêm */}
+                <div className="space-y-2 mt-auto">
+                  {/* Badges: Tồn kho & Chiết khấu số lượng */}
+                  <div className="flex items-center justify-between gap-1 flex-wrap">
+                    <span
+                      className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${
+                        p.stock <= 0
+                          ? 'bg-rose-500 text-white'
+                          : p.stock <= p.minStock
+                          ? 'bg-amber-500 text-white'
+                          : 'bg-slate-800 text-white dark:bg-slate-700'
                       }`}
                     >
-                      <div>
-                        <div className="flex items-center justify-between gap-1.5 mb-2.5">
-                          <span className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 truncate max-w-[130px]">
-                            {p.category || 'Khác'}
-                          </span>
-                          <span
-                            className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md shrink-0 ${
-                              p.stock <= 0
-                                ? 'bg-rose-100 text-rose-600 dark:bg-rose-950/60 dark:text-rose-400'
-                                : p.stock <= p.minStock
-                                ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-400'
-                                : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400'
-                            }`}
-                          >
-                            Tồn: {p.stock}
-                          </span>
-                        </div>
-
-                        <h4 className="text-xs font-bold text-slate-800 dark:text-slate-100 line-clamp-2 leading-snug group-hover:text-indigo-600 transition-colors">
-                          {p.name}
-                        </h4>
-                        <div className="flex items-center gap-1.5 mt-1.5">
-                          <span className="text-[10px] font-mono text-slate-400">{p.sku}</span>
-                          {p.unit && (
-                            <span className="text-[10px] text-slate-400">· {p.unit}</span>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
-                        <span className="text-sm font-black text-indigo-600 dark:text-indigo-400">
-                          {formatCurrency(p.salePrice)}
-                        </span>
-                        <div className="w-7 h-7 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center group-hover:bg-indigo-600 group-hover:text-white transition-all shadow-sm">
-                          <Plus className="w-4 h-4" />
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {filteredProducts.length > displayCount && (
-                <div className="pt-2 pb-4 flex justify-center">
-                  <button
-                    onClick={() => setDisplayCount((prev) => prev + 60)}
-                    className="px-5 py-2 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/50 dark:hover:bg-indigo-900/60 text-xs font-bold text-indigo-600 dark:text-indigo-400 rounded-xl transition-all shadow-sm flex items-center gap-2"
-                  >
-                    <span>
-                      Xem thêm {Math.min(60, filteredProducts.length - displayCount)} sản phẩm (Đang hiện {displayCount}/{filteredProducts.length})
+                      Tồn: {p.stock}
                     </span>
-                  </button>
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-indigo-50 text-indigo-600 dark:bg-indigo-950/60 dark:text-indigo-400">
+                      CK SL đến 15%
+                    </span>
+                  </div>
+
+                  {/* Giá bán & Nút thêm */}
+                  <div className="pt-2 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
+                    <span className="text-xs font-extrabold text-indigo-600 dark:text-indigo-400 truncate">
+                      {formatCurrency(p.salePrice)}
+                    </span>
+                    <div className="w-6 h-6 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center group-hover:bg-indigo-600 group-hover:text-white transition-colors shrink-0">
+                      <Plus className="w-3.5 h-3.5" />
+                    </div>
+                  </div>
                 </div>
-              )}
-            </div>
-          )}
+              </div>
+            );
+          })}
         </div>
       </div>
 
       {/* RIGHT SIDE: Cart, Customer & Checkout (40%) */}
       <div className="lg:w-2/5 flex flex-col bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-card overflow-hidden">
-        {/* Customer & Delivery Point Header (SCRUM-437) */}
-        <div className="p-3.5 border-b border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-850 space-y-2">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2 flex-1 min-w-0">
-              <User className="w-4 h-4 text-indigo-600 shrink-0" />
-              <select
-                value={selectedCustomerId}
-                onChange={(e) => setSelectedCustomerId(e.target.value)}
-                className="bg-transparent border-none text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-200 focus:outline-none cursor-pointer flex-1 truncate"
-              >
-                {customers.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name} ({c.phone})
-                  </option>
-                ))}
-              </select>
-            </div>
-            <span className="text-xs font-bold text-indigo-600 bg-indigo-50 dark:bg-indigo-950/60 px-2 py-0.5 rounded-full shrink-0">
-              {cart.reduce((s, i) => s + i.quantity, 0)} sp
-            </span>
+        {/* Customer Header */}
+        <div className="p-3.5 border-b border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-850 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 flex-1">
+            <User className="w-4 h-4 text-indigo-600 shrink-0" />
+            <select
+              value={selectedCustomerId}
+              onChange={(e) => setSelectedCustomerId(e.target.value)}
+              className="flex-1 bg-transparent border-0 text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-200 focus:outline-none cursor-pointer"
+            >
+              {customers.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name} ({c.phone})
+                </option>
+              ))}
+            </select>
           </div>
-
-          {/* Delivery Point Selection (S3-04) */}
-          {deliveryAddresses.length > 0 && (
-            <div className="flex items-center gap-2 pt-2 border-t border-slate-200/60 dark:border-slate-800/60">
-              <MapPin className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
-              <div className="flex-1 min-w-0">
-                <select
-                  value={selectedDeliveryAddressId ?? ''}
-                  onChange={(e) => setSelectedDeliveryAddressId(e.target.value ? Number(e.target.value) : undefined)}
-                  className="w-full bg-transparent border-none text-xs font-medium text-slate-700 dark:text-slate-300 focus:outline-none cursor-pointer truncate"
-                  title="Chọn điểm giao hàng / kho bãi nhận hàng"
-                >
-                  {deliveryAddresses.map((addr) => (
-                    <option key={addr.id} value={addr.id}>
-                      {addr.isDefault ? '⭐ ' : '📍 '}{addr.name} - {addr.receiverName} ({addr.phone})
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          )}
-
-          {/* Cảnh báo công nợ màu cam khi tạo đơn */}
-          {creditProfile && creditProfile.creditLimit === 0 && total > 0 && (
-            <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 flex items-start gap-2 text-xs text-amber-800 dark:text-amber-200">
-              <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600 mt-0.5" />
-              <div>
-                <span className="font-bold">Chưa cấp hạn mức nợ:</span> Đại lý chưa được cấp hạn mức công nợ. Bắt buộc thu đủ 100% tiền hàng ({formatCurrency(total)}) trước khi xuất kho!
-              </div>
-            </div>
-          )}
-
-          {creditProfile && creditProfile.creditLimit > 0 && (creditProfile.currentDebt + total > creditProfile.creditLimit) && (
-            <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 flex items-start gap-2 text-xs text-amber-800 dark:text-amber-200">
-              <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600 mt-0.5" />
-              <div>
-                <span className="font-bold">Cảnh báo vượt hạn mức công nợ:</span> Đơn hàng này ({formatCurrency(total)}) sẽ khiến tổng dư nợ ({formatCurrency(creditProfile.currentDebt + total)}) vượt quá hạn mức được cấp ({formatCurrency(creditProfile.creditLimit)}). Cần thu đủ tiền trước khi xuất kho!
-              </div>
-            </div>
-          )}
+          <span className="text-xs font-bold text-indigo-600 bg-indigo-50 dark:bg-indigo-950/60 px-2 py-0.5 rounded-full shrink-0">
+            {cart.reduce((s, i) => s + i.quantity, 0)} sp
+          </span>
         </div>
 
-        {/* Cart Items List */}
+        {/* Cart Items List với chiết khấu dự kiến theo số lượng (SCRUM-486) */}
         <div className="flex-1 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800 p-2">
           {cart.length > 0 ? (
             cart.map((item) => (
               <div
                 key={item.productId}
-                className="p-2.5 flex items-center justify-between gap-3 hover:bg-slate-50 dark:hover:bg-slate-800/40 rounded-xl transition-colors"
+                className="p-2.5 flex flex-col gap-1.5 hover:bg-slate-50 dark:hover:bg-slate-800/40 rounded-xl transition-colors"
               >
-                <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                  <div className="w-9 h-9 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
-                    <Package className="w-4 h-4" />
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                    {item.image ? (
+                      <img
+                        src={item.image}
+                        alt={item.name}
+                        className="w-10 h-10 rounded-lg object-cover shrink-0 bg-slate-100"
+                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                      />
+                    ) : (
+                      <div className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
+                        <Package className="w-4 h-4" />
+                      </div>
+                    )}
+                    <div className="truncate flex-1">
+                      <p className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate">
+                        {item.name}
+                      </p>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {item.discountPct > 0 ? (
+                          <>
+                            <span className="text-[10px] line-through text-slate-400">
+                              {formatCurrency(item.price)}
+                            </span>
+                            <span className="text-[11px] font-bold text-slate-900 dark:text-white">
+                              {formatCurrency(Math.round(item.price * (1 - item.discountPct / 100)))}
+                            </span>
+                            <span className="inline-flex items-center text-[9px] font-bold px-1 py-0.2 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
+                              CK {item.discountPct}%
+                            </span>
+                          </>
+                        ) : (
+                          <span className="text-[11px] font-semibold text-slate-700 dark:text-slate-300">
+                            {formatCurrency(item.price)}
+                          </span>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                  <div className="truncate">
-                    <p className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate">
-                      {item.name}
+
+                  {/* Quantity Controls */}
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      onClick={() => handleUpdateQty(item.productId, -1)}
+                      className="w-6 h-6 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center justify-center hover:bg-slate-200"
+                    >
+                      <Minus className="w-3 h-3" />
+                    </button>
+                    <span className="w-6 text-center text-xs font-bold text-slate-900 dark:text-white">
+                      {item.quantity}
+                    </span>
+                    <button
+                      onClick={() => handleUpdateQty(item.productId, 1)}
+                      className="w-6 h-6 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center justify-center hover:bg-slate-200"
+                    >
+                      <Plus className="w-3 h-3" />
+                    </button>
+                  </div>
+
+                  <div className="text-right shrink-0 min-w-[70px]">
+                    <p className="text-xs font-bold text-slate-900 dark:text-white">
+                      {formatCurrency(item.subtotal)}
                     </p>
-                    <p className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400">
-                      {formatCurrency(item.price)}
-                    </p>
+                    <button
+                      onClick={() => handleUpdateQty(item.productId, -item.quantity)}
+                      className="text-[10px] text-slate-400 hover:text-rose-500"
+                    >
+                      Xóa
+                    </button>
                   </div>
                 </div>
 
-                {/* Quantity Controls */}
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <button
-                    onClick={() => handleUpdateQty(item.productId, -1)}
-                    className="w-6 h-6 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center justify-center hover:bg-slate-200"
-                  >
-                    <Minus className="w-3 h-3" />
-                  </button>
-                  <span className="w-6 text-center text-xs font-bold text-slate-900 dark:text-white">
-                    {item.quantity}
-                  </span>
-                  <button
-                    onClick={() => handleUpdateQty(item.productId, 1)}
-                    className="w-6 h-6 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center justify-center hover:bg-slate-200"
-                  >
-                    <Plus className="w-3 h-3" />
-                  </button>
-                </div>
-
-                <div className="text-right shrink-0 min-w-[70px]">
-                  <p className="text-xs font-bold text-slate-900 dark:text-white">
-                    {formatCurrency(item.subtotal)}
-                  </p>
-                  <button
-                    onClick={() => handleUpdateQty(item.productId, -item.quantity)}
-                    className="text-[10px] text-slate-400 hover:text-rose-500"
-                  >
-                    Xóa
-                  </button>
-                </div>
+                {/* Gợi ý bậc chiết khấu tiếp theo (SCRUM-486) */}
+                {item.neededForNext > 0 && item.nextTierPct > item.discountPct && (
+                  <div className="text-[10px] text-indigo-600 dark:text-indigo-400 bg-indigo-50/70 dark:bg-indigo-950/30 px-2 py-0.5 rounded-md flex items-center justify-between">
+                    <span>
+                      Thêm <strong>{item.neededForNext} sp</strong> để hưởng mức <strong>CK {item.nextTierPct}%</strong>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleUpdateQty(item.productId, item.neededForNext)}
+                      className="font-bold underline hover:no-underline"
+                    >
+                      +{item.neededForNext}
+                    </button>
+                  </div>
+                )}
               </div>
             ))
           ) : (
@@ -558,18 +498,36 @@ export const POS: React.FC = () => {
           )}
         </div>
 
-        {/* Payment Summary Footer */}
-        <div className="border-t border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-850 p-4 space-y-3">
-          {/* Discount & Tax Row */}
+        {/* Payment Summary Footer với chiết khấu số lượng thời gian thực (SCRUM-480) */}
+        <div className="border-t border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-850 p-4 space-y-2.5">
+          {/* Discount details */}
+          <div className="space-y-1 text-xs">
+            <div className="flex justify-between text-slate-500 dark:text-slate-400">
+              <span>Tạm tính (giá gốc):</span>
+              <span className="font-semibold text-slate-700 dark:text-slate-300">{formatCurrency(rawSubtotal)}</span>
+            </div>
+
+            {volumeDiscountTotal > 0 && (
+              <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-semibold">
+                <span className="flex items-center gap-1">
+                  <TrendingDown className="w-3 h-3" />
+                  Chiết khấu theo số lượng:
+                </span>
+                <span>-{formatCurrency(volumeDiscountTotal)}</span>
+              </div>
+            )}
+          </div>
+
+          {/* Manual Discount & Tax Row */}
           <div className="grid grid-cols-2 gap-2 text-xs">
             <div>
-              <span className="text-slate-500 dark:text-slate-400">Giảm giá (VNĐ):</span>
+              <span className="text-slate-500 dark:text-slate-400">Giảm giá thêm (VNĐ):</span>
               <input
                 type="number"
                 min={0}
                 step={10000}
-                value={discount || ''}
-                onChange={(e) => setDiscount(Number(e.target.value))}
+                value={manualDiscount || ''}
+                onChange={(e) => setManualDiscount(Number(e.target.value))}
                 placeholder="0"
                 className="w-full mt-1 px-2.5 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs focus:ring-1 focus:ring-indigo-500"
               />
@@ -590,8 +548,8 @@ export const POS: React.FC = () => {
 
           {/* Payment Method Selector */}
           <div>
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1.5">
-              Phương thức thanh toán
+            <span className="text-xs text-slate-500 dark:text-slate-400 block mb-1">
+              Phương thức thanh toán:
             </span>
             <div className="grid grid-cols-3 gap-2">
               <button
@@ -675,6 +633,28 @@ export const POS: React.FC = () => {
         </div>
       </div>
 
+      {/* Modal Bậc Chiết Khấu Số Lượng (SCRUM-486 / SCRUM-487) */}
+      <VolumeDiscountPolicyModal
+        isOpen={showTierModal}
+        onClose={() => setShowTierModal(false)}
+        onPolicyUpdated={() => {
+          setCart((prev) =>
+            prev.map((it) => {
+              const { discountPct, nextTier, neededForNext } = getVolumeDiscountInfo(it.quantity);
+              const discountAmt = Math.round((it.price * it.quantity * discountPct) / 100);
+              return {
+                ...it,
+                discountPct,
+                discountAmt,
+                subtotal: it.price * it.quantity - discountAmt,
+                neededForNext,
+                nextTierPct: nextTier ? nextTier.discountPct : discountPct,
+              };
+            })
+          );
+        }}
+      />
+
       {/* POS Receipt Modal after Checkout */}
       {completedOrder && (
         <Modal
@@ -733,6 +713,7 @@ export const POS: React.FC = () => {
                     <p className="font-semibold">{it.name}</p>
                     <p className="text-[10px] text-slate-500">
                       {it.quantity} x {formatCurrency(it.price)}
+                      {it.discountAmt > 0 && ` (-${formatCurrency(it.discountAmt)})`}
                     </p>
                   </div>
                   <span className="font-bold shrink-0">{formatCurrency(it.subtotal)}</span>
@@ -748,7 +729,7 @@ export const POS: React.FC = () => {
               </div>
               {completedOrder.discount > 0 && (
                 <div className="flex justify-between text-rose-600">
-                  <span>Giảm giá:</span>
+                  <span>Tổng giảm giá:</span>
                   <span>-{formatCurrency(completedOrder.discount)}</span>
                 </div>
               )}
@@ -790,3 +771,5 @@ export const POS: React.FC = () => {
     </div>
   );
 };
+
+export default POS;

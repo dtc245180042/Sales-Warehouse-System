@@ -16,8 +16,11 @@ import {
   BarChart3,
   TrendingUp,
   Package,
-  FileSpreadsheet,
   Users,
+  ShoppingBag,
+  Store,
+  Receipt,
+  PlusCircle,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { UserRole } from '../../types/User';
@@ -100,8 +103,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       heading: 'ĐỐI TÁC & CUNG ỨNG',
       items: [
         {
-          title: 'Đại lý & Khách hàng',
-          path: '/customers',
+          title: 'Đại lý phân phối',
           icon: <Users className="w-5 h-5" />,
           allowedRoles: [
             'Admin',
@@ -114,6 +116,38 @@ export const Sidebar: React.FC<SidebarProps> = ({
             'Manager',
             'Staff',
             'User',
+          ],
+          submenu: [
+            {
+              title: 'Danh sách đại lý',
+              path: '/agents',
+              icon: <LayoutList className="w-3.5 h-3.5" />,
+              allowedRoles: [
+                'Admin',
+                'SalesManager',
+                'SalesStaff',
+                'WarehouseManager',
+                'WarehouseStaff',
+                'Accountant',
+                'Director',
+                'Manager',
+                'Staff',
+                'User',
+              ],
+            },
+            {
+              title: 'Tạo đơn đại lý',
+              path: '/agents/orders/new',
+              icon: <PlusCircle className="w-3.5 h-3.5" />,
+              allowedRoles: [
+                'Admin',
+                'SalesManager',
+                'SalesStaff',
+                'Director',
+                'Manager',
+                'Staff',
+              ],
+            },
           ],
         },
         {
@@ -131,6 +165,38 @@ export const Sidebar: React.FC<SidebarProps> = ({
             'Manager',
             'Staff',
             'User',
+          ],
+        },
+      ],
+    },
+    {
+      heading: 'BÁN HÀNG & POS',
+      items: [
+        {
+          title: 'Bán hàng tại quầy (POS)',
+          path: '/sales/pos',
+          icon: <Store className="w-5 h-5" />,
+          allowedRoles: [
+            'Admin',
+            'SalesManager',
+            'SalesStaff',
+            'Director',
+            'Manager',
+            'Staff',
+          ],
+        },
+        {
+          title: 'Đơn hàng & Báo giá',
+          path: '/sales/orders',
+          icon: <Receipt className="w-5 h-5" />,
+          allowedRoles: [
+            'Admin',
+            'SalesManager',
+            'SalesStaff',
+            'Accountant',
+            'Director',
+            'Manager',
+            'Staff',
           ],
         },
       ],
@@ -193,17 +259,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 'Director',
                 'Manager',
                 'Staff',
-              ],
-            },
-            {
-              title: 'Nhập từ Excel',
-              path: '/products/import',
-              icon: <FileSpreadsheet className="w-3.5 h-3.5" />,
-              allowedRoles: [
-                'Admin',
-                'SalesManager',
-                'Director',
-                'Manager',
               ],
             },
           ],

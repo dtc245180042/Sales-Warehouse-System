@@ -2,8 +2,8 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 from app.core.database import lay_phien_db
+from app.core.dependencies import lay_nguoi_dung_tuy_chon
 from app.models.auth import User
-from app.core.dependencies import lay_nguoi_dung_hien_tai, lay_nguoi_dung_tuy_chon
 from app.schemas.customer import (
     CustomerCreate,
     CustomerUpdate,
@@ -20,19 +20,25 @@ router = APIRouter(prefix="/customers", tags=["Khách hàng & Đại lý"])
 def get_customers(
     search: Optional[str] = Query(None, description="Tìm theo tên, mã, MST hoặc số điện thoại"),
     customer_group: Optional[str] = Query(None, description="Lọc theo nhóm: TIER_1, TIER_2, WHOLESALE, VIP, RETAIL"),
+    assigned_staff_id: Optional[str] = Query(None, description="Lọc theo nhân viên phụ trách hoặc 'unassigned'"),
     region: Optional[str] = Query(None, description="Lọc theo khu vực/địa bàn"),
     status: Optional[str] = Query(None, description="Lọc theo trạng thái: active, inactive"),
     current_user: Optional[User] = Depends(lay_nguoi_dung_tuy_chon),
     db: Session = Depends(lay_phien_db),
 ):
-    """Lấy danh sách khách hàng và đại lý (phân quyền phạm vi phụ trách cho Sales Rep)."""
+    """
+    Lấy danh sách khách hàng và đại lý.
+    - Sales Rep: Chỉ xem các đại lý mình phụ trách (lọc ở tầng query).
+    - Manager/Admin: Xem 100% đại lý và hỗ trợ lọc theo nhân viên/khu vực/trạng thái.
+    """
     return customer_service.get_all_customers(
         db=db,
         search=search,
         customer_group=customer_group,
+        assigned_staff_id=assigned_staff_id,
         region=region,
         status_filter=status,
-        current_user=current_user
+        current_user=current_user,
     )
 
 
@@ -42,11 +48,14 @@ def get_customer_detail(
     current_user: Optional[User] = Depends(lay_nguoi_dung_tuy_chon),
     db: Session = Depends(lay_phien_db),
 ):
-    """Lấy thông tin chi tiết một đại lý/khách hàng."""
+    """
+    Lấy thông tin chi tiết một khách hàng / đại lý.
+    - Sales Rep truy cập đại lý ngoài phạm vi phụ trách: trả 404 (chống IDOR).
+    """
     return customer_service.get_customer_by_id(
         db=db,
         customer_id=customer_id,
-        current_user=current_user
+        current_user=current_user,
     )
 
 
@@ -60,7 +69,7 @@ def get_customer_applied_price_list(
     return customer_service.get_applied_price_list_for_customer(
         db=db,
         customer_id=customer_id,
-        current_user=current_user
+        current_user=current_user,
     )
 
 
@@ -71,11 +80,15 @@ def create_customer(
     current_user: Optional[User] = Depends(lay_nguoi_dung_tuy_chon),
     db: Session = Depends(lay_phien_db),
 ):
-    """Thêm mới một đại lý hoặc khách hàng (Tự động khởi tạo hồ sơ công nợ và phân công)."""
+    """
+    Thêm mới một khách hàng hoặc đại lý.
+    - Tự động khởi tạo hồ sơ công nợ và phân công.
+    - Nếu Sales Rep tạo: Tự động gán cho chính họ trong cùng transaction.
+    """
     return customer_service.create_customer(
         db=db,
         customer_in=customer_in,
-        current_user=current_user
+        current_user=current_user,
     )
 
 
@@ -86,12 +99,12 @@ def update_customer(
     current_user: Optional[User] = Depends(lay_nguoi_dung_tuy_chon),
     db: Session = Depends(lay_phien_db),
 ):
-    """Cập nhật thông tin hồ sơ đại lý."""
+    """Cập nhật thông tin khách hàng / đại lý."""
     return customer_service.update_customer(
         db=db,
         customer_id=customer_id,
         customer_in=customer_in,
-        current_user=current_user
+        current_user=current_user,
     )
 
 
@@ -107,7 +120,7 @@ def update_customer_status(
         db=db,
         customer_id=customer_id,
         status_in=status_in,
-        current_user=current_user
+        current_user=current_user,
     )
 
 
@@ -121,6 +134,6 @@ def delete_customer(
     customer_service.delete_customer(
         db=db,
         customer_id=customer_id,
-        current_user=current_user
+        current_user=current_user,
     )
     return {"message": f"Đã xóa đại lý '{customer_id}' thành công."}

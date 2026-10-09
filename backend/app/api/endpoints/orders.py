@@ -2,6 +2,8 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 from app.core.database import lay_phien_db
+from app.core.dependencies import lay_nguoi_dung_tuy_chon
+from app.models.auth import User
 from app.schemas.order import OrderCreate, OrderStatusUpdate, OrderResponse
 from app.services import order_service
 
@@ -15,13 +17,15 @@ def get_orders(
     status_filter: Optional[str] = Query(None, description="Lọc trạng thái: pending, confirmed, shipping, completed, cancelled"),
     customer_id: Optional[str] = Query(None, description="Lọc theo mã khách hàng"),
     db: Session = Depends(lay_phien_db),
+    current_user: Optional[User] = Depends(lay_nguoi_dung_tuy_chon),
 ):
-    """Lấy danh sách đơn hàng trong hệ thống."""
+    """Lấy danh sách đơn hàng trong hệ thống (lọc phạm vi cho Sales Rep)."""
     return order_service.get_all_orders(
         db=db,
         search=search,
         status_filter=status_filter,
         customer_id=customer_id,
+        current_user=current_user,
     )
 
 
@@ -29,9 +33,10 @@ def get_orders(
 def get_order_detail(
     order_id: str,
     db: Session = Depends(lay_phien_db),
+    current_user: Optional[User] = Depends(lay_nguoi_dung_tuy_chon),
 ):
-    """Lấy chi tiết một đơn hàng kèm danh sách mặt hàng."""
-    return order_service.get_order_by_id(db=db, order_id=order_id)
+    """Lấy chi tiết một đơn hàng kèm danh sách mặt hàng (kiểm tra phạm vi cho Sales Rep)."""
+    return order_service.get_order_by_id(db=db, order_id=order_id, current_user=current_user)
 
 
 @router.post("", response_model=OrderResponse, status_code=status.HTTP_201_CREATED)
@@ -39,9 +44,10 @@ def get_order_detail(
 def create_new_order(
     order_in: OrderCreate,
     db: Session = Depends(lay_phien_db),
+    current_user: Optional[User] = Depends(lay_nguoi_dung_tuy_chon),
 ):
-    """Tạo đơn hàng mới (tự động trừ kho và cập nhật chi tiêu đối tác)."""
-    return order_service.create_order(db=db, order_in=order_in)
+    """Tạo đơn hàng mới (tự động trừ kho và cập nhật chi tiêu đối tác; chặn POS ngoài phạm vi cho Sales Rep)."""
+    return order_service.create_order(db=db, order_in=order_in, current_user=current_user)
 
 
 @router.patch("/{order_id}/status", response_model=OrderResponse)

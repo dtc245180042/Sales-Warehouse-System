@@ -1,6 +1,7 @@
 import re
 import uuid
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Dict, Any
+from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from sqlalchemy import func, or_
 from sqlalchemy.exc import IntegrityError
@@ -13,8 +14,12 @@ from app.models.customer_assignment import CustomerAssignment, CustomerAssignmen
 from app.models.customer_credit_profile import CustomerCreditProfile
 from app.models.price_list import PriceList
 from app.models.audit_log import AuditLog
-from app.schemas.customer import CustomerCreate, CustomerUpdate, CustomerResponse, CustomerStatusUpdate
-
+from app.schemas.customer import (
+    CustomerCreate,
+    CustomerUpdate,
+    CustomerResponse,
+    CustomerStatusUpdate,
+)
 
 SEED_CUSTOMERS = [
     {
@@ -117,12 +122,20 @@ def _enrich_customer_response(db: Session, customer: Customer) -> CustomerRespon
     assigned_staff_id = None
     assigned_staff_name = None
     assigned_staff_phone = None
+    assigned_at = None
     assignment = db.query(CustomerAssignment).filter(CustomerAssignment.customer_id == customer.id).first()
     if assignment and assignment.assigned_staff_id:
         assigned_staff_id = str(assignment.assigned_staff_id)
         if assignment.staff:
             assigned_staff_name = assignment.staff.full_name or assignment.staff.username
             assigned_staff_phone = assignment.staff.phone_number
+        else:
+            staff = db.query(User).filter(User.id == assignment.assigned_staff_id).first()
+            if staff:
+                assigned_staff_name = staff.full_name or staff.username
+                assigned_staff_phone = staff.phone_number
+        if assignment.assigned_at:
+            assigned_at = assignment.assigned_at.strftime("%Y-%m-%d %H:%M:%S")
 
     # Đọc hạn mức công nợ từ bảng phụ customer_credit_profiles
     credit_limit = None
@@ -151,12 +164,17 @@ def _enrich_customer_response(db: Session, customer: Customer) -> CustomerRespon
         assigned_staff_id=assigned_staff_id,
         assigned_staff_name=assigned_staff_name,
         assigned_staff_phone=assigned_staff_phone,
+        assigned_at=assigned_at,
         credit_limit=credit_limit,
         max_debt_days=max_debt_days,
         current_debt=current_debt,
         created_at=customer.created_at,
         updated_at=customer.updated_at
     )
+
+
+# Alias để tương thích cả hai nhánh
+enrich_customer_with_assignment = _enrich_customer_response
 
 
 def check_sales_rep_scope(db: Session, customer_id: str, current_user: Optional[User]):
@@ -177,6 +195,7 @@ def get_all_customers(
     db: Session,
     search: Optional[str] = None,
     customer_group: Optional[str] = None,
+    assigned_staff_id: Optional[str] = None,
     region: Optional[str] = None,
     status_filter: Optional[str] = None,
     current_user: Optional[User] = None,
@@ -184,14 +203,38 @@ def get_all_customers(
     ensure_seed_customers(db)
     query = db.query(Customer)
 
-    # Phạm vi phân quyền: Sales Rep chỉ thấy đại lý mình phụ trách
+    # Phạm vi phân quyền (Scope Guard):
+    # Sales Rep: Chỉ được xem đại lý mình phụ trách (assigned_staff_id == user.id)
     if current_user and current_user.role == UserRole.SALES_REP.value:
-        assigned_cust_ids = db.query(CustomerAssignment.customer_id).filter(
+        query = query.join(
+            CustomerAssignment, Customer.id == CustomerAssignment.customer_id
+        ).filter(
             CustomerAssignment.assigned_staff_id == current_user.id
-        ).all()
-        allowed_ids = [r[0] for r in assigned_cust_ids]
-        query = query.filter(Customer.id.in_(allowed_ids))
+        )
+    else:
+        # Manager / Admin: Xem được 100% và hỗ trợ lọc theo nhân viên
+        if assigned_staff_id:
+            if assigned_staff_id == "unassigned":
+                query = query.outerjoin(
+                    CustomerAssignment, Customer.id == CustomerAssignment.customer_id
+                ).filter(
+                    or_(
+                        CustomerAssignment.assigned_staff_id.is_(None),
+                        CustomerAssignment.id.is_(None)
+                    )
+                )
+            else:
+                try:
+                    staff_id_int = int(assigned_staff_id)
+                    query = query.join(
+                        CustomerAssignment, Customer.id == CustomerAssignment.customer_id
+                    ).filter(
+                        CustomerAssignment.assigned_staff_id == staff_id_int
+                    )
+                except ValueError:
+                    pass
 
+    # Bộ lọc tìm kiếm
     if search:
         s = f"%{search.strip()}%"
         query = query.filter(
@@ -202,10 +245,22 @@ def get_all_customers(
                 Customer.tax_code.ilike(s)
             )
         )
+
+    # Bộ lọc nhóm khách hàng
     if customer_group and customer_group.upper() != "ALL":
         query = query.filter(Customer.customer_group == customer_group.upper())
-    if region and region.upper() != "ALL":
-        query = query.filter(Customer.region.ilike(f"%{region.strip()}%"))
+
+    # Bộ lọc khu vực (Region Filter)
+    if region and region.strip() and region.upper() != "ALL":
+        reg = f"%{region.strip()}%"
+        query = query.filter(
+            or_(
+                Customer.region.ilike(reg),
+                Customer.address.ilike(reg)
+            )
+        )
+
+    # Bộ lọc trạng thái
     if status_filter and status_filter.lower() != "all":
         query = query.filter(Customer.status == status_filter.lower())
 
@@ -216,7 +271,7 @@ def get_all_customers(
 def get_customer_by_id(
     db: Session,
     customer_id: str,
-    current_user: Optional[User] = None
+    current_user: Optional[User] = None,
 ) -> CustomerResponse:
     ensure_seed_customers(db)
     cus = db.query(Customer).filter(
@@ -228,7 +283,7 @@ def get_customer_by_id(
             detail=f"Không tìm thấy thông tin đại lý với mã '{customer_id}'."
         )
 
-    # Scope Guard
+    # Scope Guard chống IDOR
     check_sales_rep_scope(db, cus.id, current_user)
     return _enrich_customer_response(db, cus)
 
@@ -236,7 +291,7 @@ def get_customer_by_id(
 def create_customer(
     db: Session,
     customer_in: CustomerCreate,
-    current_user: Optional[User] = None
+    current_user: Optional[User] = None,
 ) -> CustomerResponse:
     ensure_seed_customers(db)
 
@@ -290,28 +345,52 @@ def create_customer(
             detail=f"Mã đại lý '{code}' đã tồn tại trong hệ thống. Vui lòng sử dụng mã khác."
         )
 
-    # 3. Tạo hồ sơ công nợ mặc định & Phân công trong cùng 1 Transaction
+    # 3. Tạo hồ sơ công nợ mặc định trong cùng 1 Transaction
     credit_prof = CustomerCreditProfile(
         customer_id=customer.id,
         credit_limit=0,
         max_debt_days=0,
         current_debt=0,
-        updated_by=current_user.username if current_user else "System"
+        updated_by=current_user.username if current_user else "Hệ thống"
     )
     db.add(credit_prof)
 
-    # Nếu Sales Rep tạo đại lý -> tự động gán cho chính mình
-    assigned_staff_id = current_user.id if current_user and current_user.role == UserRole.SALES_REP.value else None
-    assigned_by = current_user.username if current_user else "System"
-    assignment = CustomerAssignment(
-        customer_id=customer.id,
-        assigned_staff_id=assigned_staff_id,
-        assigned_by=assigned_by,
-        notes="Tự động khởi tạo khi tạo hồ sơ đại lý"
-    )
-    db.add(assignment)
+    # 4. Phân công trong cùng 1 Transaction
+    if current_user and current_user.role == UserRole.SALES_REP.value:
+        assignment = CustomerAssignment(
+            customer_id=customer.id,
+            assigned_staff_id=current_user.id,
+            assigned_by=current_user.username,
+            assigned_at=datetime.now(timezone.utc),
+            notes="Tự động phân công khi nhân viên kinh doanh tạo đại lý mới"
+        )
+        db.add(assignment)
 
-    # 4. Ghi AuditLog
+        # Ghi nhận lịch sử phân công tự động
+        history = CustomerAssignmentHistory(
+            customer_id=customer.id,
+            customer_name=customer.name,
+            from_staff_id=None,
+            from_staff_name=None,
+            to_staff_id=str(current_user.id),
+            to_staff_name=current_user.full_name or current_user.username,
+            action_type="ASSIGN",
+            reason="Tự động phân công khi nhân viên kinh doanh tạo đại lý mới",
+            performed_by=current_user.username,
+            created_at=datetime.now(timezone.utc),
+        )
+        db.add(history)
+    else:
+        assignment = CustomerAssignment(
+            customer_id=customer.id,
+            assigned_staff_id=None,
+            assigned_by=current_user.username if current_user else "Hệ thống",
+            assigned_at=datetime.now(timezone.utc),
+            notes="Đại lý mới chưa phân công"
+        )
+        db.add(assignment)
+
+    # 5. Ghi AuditLog
     if current_user:
         audit = AuditLog(
             entity_type="CUSTOMER",
@@ -337,7 +416,7 @@ def update_customer(
     db: Session,
     customer_id: str,
     customer_in: CustomerUpdate,
-    current_user: Optional[User] = None
+    current_user: Optional[User] = None,
 ) -> CustomerResponse:
     ensure_seed_customers(db)
     customer = db.query(Customer).filter(
@@ -472,7 +551,7 @@ def update_customer_status(
 def delete_customer(
     db: Session,
     customer_id: str,
-    current_user: Optional[User] = None
+    current_user: Optional[User] = None,
 ) -> bool:
     """
     Xóa đại lý: Chặn (400) nếu tồn tại đơn hàng, công nợ hoặc lịch sử phân công (SCRUM-433).

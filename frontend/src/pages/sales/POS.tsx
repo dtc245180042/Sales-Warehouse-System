@@ -15,6 +15,9 @@ import {
   X,
   Sparkles,
   ArrowRight,
+  MapPin,
+  Package,
+  AlertTriangle,
 } from 'lucide-react';
 import { Button } from '../../components/common/Button';
 import { Modal } from '../../components/common/Modal';
@@ -24,10 +27,13 @@ import { formatCurrency, formatDate } from '../../utils/formatters';
 import { productService } from '../../services/productService';
 import { orderService } from '../../services/orderService';
 import { customerService } from '../../services/customerService';
+import { deliveryAddressService } from '../../services/deliveryAddressService';
+import { creditService } from '../../services/creditService';
 import { Product } from '../../types/Product';
 import { Customer } from '../../types/Customer';
+import { DeliveryAddress } from '../../types/DeliveryAddress';
+import { CustomerCreditProfile } from '../../types/CreditProfile';
 import { OrderItem, PaymentMethod } from '../../types/Order';
-import { productCategories } from '../../mock/products';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 
@@ -43,9 +49,18 @@ export const POS: React.FC = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>('CUS-010'); // Default Walk-in
+  const [creditProfile, setCreditProfile] = useState<CustomerCreditProfile | null>(null);
+  const [deliveryAddresses, setDeliveryAddresses] = useState<DeliveryAddress[]>([]);
+  const [selectedDeliveryAddressId, setSelectedDeliveryAddressId] = useState<number | undefined>(undefined);
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [search, setSearch] = useState<string>('');
   const [barcodeInput, setBarcodeInput] = useState<string>('');
+  const [displayCount, setDisplayCount] = useState<number>(60);
+
+  // Reset giới hạn hiển thị khi đổi danh mục hoặc tìm kiếm
+  useEffect(() => {
+    setDisplayCount(60);
+  }, [categoryFilter, search]);
 
   // Cart
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -64,11 +79,55 @@ export const POS: React.FC = () => {
     customerService.getAll().then(setCustomers);
   }, []);
 
+  // Tự động load danh sách điểm giao hàng của đại lý được chọn (SCRUM-437)
+  useEffect(() => {
+    if (selectedCustomerId) {
+      deliveryAddressService.getByCustomerId(selectedCustomerId).then((addrs) => {
+        setDeliveryAddresses(addrs);
+        const def = addrs.find((a) => a.isDefault);
+        if (def) {
+          setSelectedDeliveryAddressId(def.id);
+        } else if (addrs.length > 0) {
+          setSelectedDeliveryAddressId(addrs[0].id);
+        } else {
+          setSelectedDeliveryAddressId(undefined);
+        }
+      });
+    } else {
+      setDeliveryAddresses([]);
+      setSelectedDeliveryAddressId(undefined);
+    }
+  }, [selectedCustomerId]);
+
+  // Tự động kiểm tra hồ sơ hạn mức công nợ của đại lý
+  useEffect(() => {
+    if (selectedCustomerId && selectedCustomerId !== 'CUS-010') {
+      creditService
+        .getProfile(selectedCustomerId)
+        .then(setCreditProfile)
+        .catch(() => setCreditProfile(null));
+    } else {
+      setCreditProfile(null);
+    }
+  }, [selectedCustomerId]);
+
+  // Lấy danh mục tự động từ các sản phẩm thực tế có trong hệ thống
+  const categoriesWithCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    products.forEach((p) => {
+      const cat = p.category?.trim() || 'Khác';
+      counts[cat] = (counts[cat] || 0) + 1;
+    });
+    return Object.entries(counts).map(([name, count]) => ({ name, count }));
+  }, [products]);
+
   // Filter products for POS grid
   const filteredProducts = useMemo(() => {
     return products.filter((p) => {
-      const matchCat = categoryFilter === 'all' || p.category === categoryFilter;
+      const pCat = p.category?.trim() || 'Khác';
+      const matchCat = categoryFilter === 'all' || pCat === categoryFilter;
       const matchSearch =
+        !search.trim() ||
         p.name.toLowerCase().includes(search.toLowerCase()) ||
         p.sku.toLowerCase().includes(search.toLowerCase()) ||
         p.barcode.includes(search);
@@ -181,10 +240,17 @@ export const POS: React.FC = () => {
     setIsPaying(true);
     try {
       const customer = customers.find((c) => c.id === selectedCustomerId);
+      const chosenAddr = deliveryAddresses.find((a) => a.id === selectedDeliveryAddressId);
       const newOrder = await orderService.create({
         customerId: customer?.id || 'CUS-010',
         customerName: customer?.name || 'Khách Lẻ Tại Quầy',
         customerPhone: customer?.phone || '0900000000',
+        customerAddress: customer?.address,
+        deliveryAddressId: chosenAddr?.id,
+        deliveryReceiverName: chosenAddr?.receiverName,
+        deliveryPhone: chosenAddr?.phone,
+        deliveryAddress: chosenAddr?.address,
+        deliveryNotes: chosenAddr?.directionsNote,
         items: cart.map(({ image, stock, ...rest }) => rest),
         subtotal,
         discount,
@@ -249,109 +315,182 @@ export const POS: React.FC = () => {
           </form>
         </div>
 
-        {/* Category Pills */}
+        {/* Category Pills (Lấy chuẩn xác từ 5000 sản phẩm thực tế) */}
         <div className="px-4 py-2 border-b border-slate-100 dark:border-slate-800 flex items-center gap-2 overflow-x-auto shrink-0 no-scrollbar">
           <button
             onClick={() => setCategoryFilter('all')}
             className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
               categoryFilter === 'all'
                 ? 'bg-indigo-600 text-white shadow-sm'
-                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
+                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
             }`}
           >
             Tất cả ({products.length})
           </button>
-          {productCategories.map((c) => (
+          {categoriesWithCounts.map((c) => (
             <button
-              key={c.id}
+              key={c.name}
               onClick={() => setCategoryFilter(c.name)}
               className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
                 categoryFilter === c.name
                   ? 'bg-indigo-600 text-white shadow-sm'
-                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
               }`}
             >
-              {c.name}
+              {c.name} ({c.count})
             </button>
           ))}
         </div>
 
-        {/* Product Cards Grid */}
-        <div className="flex-1 overflow-y-auto p-4 grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
-          {filteredProducts.map((p) => {
-            const isOutOfStock = p.stock <= 0;
-            return (
-              <div
-                key={p.id}
-                onClick={() => !isOutOfStock && addToCart(p)}
-                className={`group relative p-3 rounded-2xl border transition-all flex flex-col justify-between select-none ${
-                  isOutOfStock
-                    ? 'border-slate-200 dark:border-slate-800 opacity-50 cursor-not-allowed bg-slate-50 dark:bg-slate-900/50'
-                    : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-850 hover:border-indigo-500 hover:shadow-md cursor-pointer active:scale-95'
-                }`}
-              >
-                <div>
-                  <div className="relative aspect-square w-full rounded-xl overflow-hidden mb-2 bg-slate-100 dark:bg-slate-800">
-                    <img
-                      src={p.image}
-                      alt={p.name}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                    />
-                    <div className="absolute top-1.5 right-1.5">
-                      <span
-                        className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md backdrop-blur-md ${
-                          p.stock <= 0
-                            ? 'bg-rose-500/90 text-white'
-                            : p.stock <= p.minStock
-                            ? 'bg-amber-500/90 text-white'
-                            : 'bg-slate-900/80 text-white'
-                        }`}
-                      >
-                        Tồn: {p.stock}
-                      </span>
-                    </div>
-                  </div>
-                  <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 line-clamp-2 leading-snug">
-                    {p.name}
-                  </h4>
-                  <span className="text-[10px] text-slate-400 block mt-0.5">{p.sku}</span>
-                </div>
+        {/* Product Cards Grid (Bỏ hẳn ảnh để tối ưu tốc độ & không bao giờ bị vỡ khung) */}
+        <div className="flex-1 overflow-y-auto p-4">
+          {filteredProducts.length === 0 ? (
+            <div className="h-full flex flex-col items-center justify-center p-8 text-center text-slate-400">
+              <Package className="w-12 h-12 stroke-[1.2] mb-3 opacity-40 text-slate-400" />
+              <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">
+                Không tìm thấy sản phẩm nào
+              </p>
+              <p className="text-xs text-slate-400 mt-1">
+                Vui lòng thử tìm kiếm với từ khóa khác hoặc chọn nhóm hàng khác
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
+                {filteredProducts.slice(0, displayCount).map((p) => {
+                  const isOutOfStock = p.stock <= 0;
+                  return (
+                    <div
+                      key={p.id}
+                      onClick={() => !isOutOfStock && addToCart(p)}
+                      className={`group relative p-3.5 rounded-2xl border transition-all flex flex-col justify-between select-none ${
+                        isOutOfStock
+                          ? 'border-slate-200 dark:border-slate-800 opacity-50 cursor-not-allowed bg-slate-50 dark:bg-slate-900/50'
+                          : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-850 hover:border-indigo-500 hover:shadow-md cursor-pointer active:scale-95'
+                      }`}
+                    >
+                      <div>
+                        <div className="flex items-center justify-between gap-1.5 mb-2.5">
+                          <span className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 truncate max-w-[130px]">
+                            {p.category || 'Khác'}
+                          </span>
+                          <span
+                            className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md shrink-0 ${
+                              p.stock <= 0
+                                ? 'bg-rose-100 text-rose-600 dark:bg-rose-950/60 dark:text-rose-400'
+                                : p.stock <= p.minStock
+                                ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-400'
+                                : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400'
+                            }`}
+                          >
+                            Tồn: {p.stock}
+                          </span>
+                        </div>
 
-                <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
-                  <span className="text-xs font-extrabold text-indigo-600 dark:text-indigo-400">
-                    {formatCurrency(p.salePrice)}
-                  </span>
-                  <div className="w-6 h-6 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center group-hover:bg-indigo-600 group-hover:text-white transition-colors">
-                    <Plus className="w-3.5 h-3.5" />
-                  </div>
-                </div>
+                        <h4 className="text-xs font-bold text-slate-800 dark:text-slate-100 line-clamp-2 leading-snug group-hover:text-indigo-600 transition-colors">
+                          {p.name}
+                        </h4>
+                        <div className="flex items-center gap-1.5 mt-1.5">
+                          <span className="text-[10px] font-mono text-slate-400">{p.sku}</span>
+                          {p.unit && (
+                            <span className="text-[10px] text-slate-400">· {p.unit}</span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
+                        <span className="text-sm font-black text-indigo-600 dark:text-indigo-400">
+                          {formatCurrency(p.salePrice)}
+                        </span>
+                        <div className="w-7 h-7 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center group-hover:bg-indigo-600 group-hover:text-white transition-all shadow-sm">
+                          <Plus className="w-4 h-4" />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-            );
-          })}
+
+              {filteredProducts.length > displayCount && (
+                <div className="pt-2 pb-4 flex justify-center">
+                  <button
+                    onClick={() => setDisplayCount((prev) => prev + 60)}
+                    className="px-5 py-2 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/50 dark:hover:bg-indigo-900/60 text-xs font-bold text-indigo-600 dark:text-indigo-400 rounded-xl transition-all shadow-sm flex items-center gap-2"
+                  >
+                    <span>
+                      Xem thêm {Math.min(60, filteredProducts.length - displayCount)} sản phẩm (Đang hiện {displayCount}/{filteredProducts.length})
+                    </span>
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
       {/* RIGHT SIDE: Cart, Customer & Checkout (40%) */}
       <div className="lg:w-2/5 flex flex-col bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-card overflow-hidden">
-        {/* Customer Header */}
-        <div className="p-3.5 border-b border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-850 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2 flex-1">
-            <User className="w-4 h-4 text-indigo-600 shrink-0" />
-            <select
-              value={selectedCustomerId}
-              onChange={(e) => setSelectedCustomerId(e.target.value)}
-              className="bg-transparent border-none text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-200 focus:outline-none cursor-pointer flex-1 truncate"
-            >
-              {customers.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name} ({c.phone})
-                </option>
-              ))}
-            </select>
+        {/* Customer & Delivery Point Header (SCRUM-437) */}
+        <div className="p-3.5 border-b border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-850 space-y-2">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 flex-1 min-w-0">
+              <User className="w-4 h-4 text-indigo-600 shrink-0" />
+              <select
+                value={selectedCustomerId}
+                onChange={(e) => setSelectedCustomerId(e.target.value)}
+                className="bg-transparent border-none text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-200 focus:outline-none cursor-pointer flex-1 truncate"
+              >
+                {customers.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name} ({c.phone})
+                  </option>
+                ))}
+              </select>
+            </div>
+            <span className="text-xs font-bold text-indigo-600 bg-indigo-50 dark:bg-indigo-950/60 px-2 py-0.5 rounded-full shrink-0">
+              {cart.reduce((s, i) => s + i.quantity, 0)} sp
+            </span>
           </div>
-          <span className="text-xs font-bold text-indigo-600 bg-indigo-50 dark:bg-indigo-950/60 px-2 py-0.5 rounded-full shrink-0">
-            {cart.reduce((s, i) => s + i.quantity, 0)} sp
-          </span>
+
+          {/* Delivery Point Selection (S3-04) */}
+          {deliveryAddresses.length > 0 && (
+            <div className="flex items-center gap-2 pt-2 border-t border-slate-200/60 dark:border-slate-800/60">
+              <MapPin className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <select
+                  value={selectedDeliveryAddressId ?? ''}
+                  onChange={(e) => setSelectedDeliveryAddressId(e.target.value ? Number(e.target.value) : undefined)}
+                  className="w-full bg-transparent border-none text-xs font-medium text-slate-700 dark:text-slate-300 focus:outline-none cursor-pointer truncate"
+                  title="Chọn điểm giao hàng / kho bãi nhận hàng"
+                >
+                  {deliveryAddresses.map((addr) => (
+                    <option key={addr.id} value={addr.id}>
+                      {addr.isDefault ? '⭐ ' : '📍 '}{addr.name} - {addr.receiverName} ({addr.phone})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
+
+          {/* Cảnh báo công nợ màu cam khi tạo đơn */}
+          {creditProfile && creditProfile.creditLimit === 0 && total > 0 && (
+            <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 flex items-start gap-2 text-xs text-amber-800 dark:text-amber-200">
+              <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600 mt-0.5" />
+              <div>
+                <span className="font-bold">Chưa cấp hạn mức nợ:</span> Đại lý chưa được cấp hạn mức công nợ. Bắt buộc thu đủ 100% tiền hàng ({formatCurrency(total)}) trước khi xuất kho!
+              </div>
+            </div>
+          )}
+
+          {creditProfile && creditProfile.creditLimit > 0 && (creditProfile.currentDebt + total > creditProfile.creditLimit) && (
+            <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 flex items-start gap-2 text-xs text-amber-800 dark:text-amber-200">
+              <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600 mt-0.5" />
+              <div>
+                <span className="font-bold">Cảnh báo vượt hạn mức công nợ:</span> Đơn hàng này ({formatCurrency(total)}) sẽ khiến tổng dư nợ ({formatCurrency(creditProfile.currentDebt + total)}) vượt quá hạn mức được cấp ({formatCurrency(creditProfile.creditLimit)}). Cần thu đủ tiền trước khi xuất kho!
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Cart Items List */}
@@ -363,11 +502,9 @@ export const POS: React.FC = () => {
                 className="p-2.5 flex items-center justify-between gap-3 hover:bg-slate-50 dark:hover:bg-slate-800/40 rounded-xl transition-colors"
               >
                 <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                  <img
-                    src={item.image}
-                    alt={item.name}
-                    className="w-10 h-10 rounded-lg object-cover shrink-0 bg-slate-100"
-                  />
+                  <div className="w-9 h-9 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
+                    <Package className="w-4 h-4" />
+                  </div>
                   <div className="truncate">
                     <p className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate">
                       {item.name}

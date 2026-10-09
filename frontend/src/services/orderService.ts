@@ -35,6 +35,11 @@ function mapApiOrder(o: any): Order {
     staffId: o.staffId || o.staff_id || '',
     staffName: o.staffName || o.staff_name || '',
     note: o.note || undefined,
+    deliveryAddressId: o.deliveryAddressId ?? o.delivery_address_id ?? undefined,
+    deliveryReceiverName: o.deliveryReceiverName ?? o.delivery_receiver_name ?? undefined,
+    deliveryPhone: o.deliveryPhone ?? o.delivery_phone ?? undefined,
+    deliveryAddress: o.deliveryAddress ?? o.delivery_address ?? undefined,
+    deliveryNotes: o.deliveryNotes ?? o.delivery_notes ?? undefined,
     createdAt: o.createdAt || (o.created_at ? o.created_at.replace('T', ' ').slice(0, 16) : new Date().toISOString().replace('T', ' ').slice(0, 16)),
     updatedAt: o.updatedAt || (o.updated_at ? o.updated_at.replace('T', ' ').slice(0, 16) : new Date().toISOString().replace('T', ' ').slice(0, 16)),
   };
@@ -94,6 +99,11 @@ export const orderService = {
         staff_id: orderData.staffId,
         staff_name: orderData.staffName,
         note: orderData.note,
+        delivery_address_id: orderData.deliveryAddressId,
+        delivery_receiver_name: orderData.deliveryReceiverName,
+        delivery_phone: orderData.deliveryPhone,
+        delivery_address: orderData.deliveryAddress,
+        delivery_notes: orderData.deliveryNotes,
       };
 
       const res = await apiClient.post('/orders', payload);

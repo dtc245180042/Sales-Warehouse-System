@@ -23,6 +23,10 @@ import { Profile } from '../pages/profile/Profile';
 import { PriceListManagement } from '../pages/sales/PriceListManagement';
 import { CategoryManagement } from '../pages/categories/CategoryManagement';
 
+// Customer & Partner Management Pages
+import { CustomerList } from '../pages/customers/CustomerList';
+import { CustomerDetail } from '../pages/customers/CustomerDetail';
+
 // Supplier Management Pages (SCRUM-217)
 import { SupplierList } from '../pages/suppliers/SupplierList';
 import { SupplierDetail } from '../pages/suppliers/SupplierDetail';
@@ -162,6 +166,24 @@ export const AppRoutes: React.FC = () => {
               <ErrorBoundary>
                 <CategoryManagement />
               </ErrorBoundary>
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Quản lý Đại lý & Khách hàng */}
+        <Route
+          path="/customers"
+          element={
+            <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
+              <CustomerList />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/customers/:id"
+          element={
+            <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
+              <CustomerDetail />
             </ProtectedRoute>
           }
         />

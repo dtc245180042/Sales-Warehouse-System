@@ -36,7 +36,12 @@ class ProductService:
         return user_role in allowed_roles
 
     @classmethod
-    def serialize_product(cls, product: Product, current_user: Optional[User] = None) -> ProductResponse:
+    def serialize_product(
+        cls,
+        product: Product,
+        current_user: Optional[User] = None,
+        stock_profile: Optional[ProductStockProfile] = None,
+    ) -> ProductResponse:
         """Chuyển đổi Product model sang ProductResponse với phân quyền giá vốn (SCRUM-378).
         Nếu người dùng không phải Quản lý kinh doanh/Admin, ẩn trường giá vốn (`cost_price = None`).
         """
@@ -45,16 +50,20 @@ class ProductService:
         stock_val = 100
         min_stock_val = 10
 
-        db_state = getattr(product, "_sa_instance_state", None)
-        sess = getattr(db_state, "session", None) if db_state else None
-        if sess is not None:
-            try:
-                sp = sess.query(ProductStockProfile).filter(ProductStockProfile.product_id == product.id).first()
-                if sp:
-                    stock_val = sp.stock
-                    min_stock_val = sp.min_stock
-            except Exception:
-                pass
+        if stock_profile is not None:
+            stock_val = stock_profile.stock
+            min_stock_val = stock_profile.min_stock
+        else:
+            db_state = getattr(product, "_sa_instance_state", None)
+            sess = getattr(db_state, "session", None) if db_state else None
+            if sess is not None:
+                try:
+                    sp = sess.query(ProductStockProfile).filter(ProductStockProfile.product_id == product.id).first()
+                    if sp:
+                        stock_val = sp.stock
+                        min_stock_val = sp.min_stock
+                except Exception:
+                    pass
 
         return ProductResponse(
             id=product.id,
@@ -304,7 +313,18 @@ class ProductService:
         offset = (page - 1) * page_size
         items = query.order_by(Product.id.desc()).offset(offset).limit(page_size).all()
 
-        serialized_items = [cls.serialize_product(p, current_user) for p in items]
+        stock_profiles = {}
+        p_ids = [p.id for p in items]
+        if p_ids:
+            try:
+                sps = db.query(ProductStockProfile).filter(ProductStockProfile.product_id.in_(p_ids)).all()
+                stock_profiles = {sp.product_id: sp for sp in sps}
+            except Exception:
+                pass
+
+        serialized_items = [
+            cls.serialize_product(p, current_user, stock_profiles.get(p.id)) for p in items
+        ]
 
         return ProductListResponse(
             items=serialized_items,

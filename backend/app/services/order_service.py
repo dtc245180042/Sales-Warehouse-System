@@ -8,6 +8,7 @@ from app.models.customer import Customer
 from app.models.price_list import PriceList
 from app.models.product_stock_profile import ProductStockProfile
 from app.models.auth import User, UserRole
+from app.models.customer_assignment import CustomerAssignment
 from app.schemas.order import OrderCreate, OrderStatusUpdate
 from app.services.product_service import ensure_seed_products
 from app.services.customer_service import ensure_seed_customers
@@ -130,9 +131,19 @@ def get_all_orders(
     search: Optional[str] = None,
     status_filter: Optional[str] = None,
     customer_id: Optional[str] = None,
+    current_user: Optional[User] = None,
 ) -> List[Order]:
     ensure_seed_orders(db)
     query = db.query(Order)
+
+    # Scope Guard: Sales Rep chỉ thấy các đơn hàng thuộc đại lý mình phụ trách
+    if current_user and current_user.role == UserRole.SALES_REP.value:
+        query = query.join(
+            CustomerAssignment, Order.customer_id == CustomerAssignment.customer_id
+        ).filter(
+            CustomerAssignment.assigned_staff_id == current_user.id
+        )
+
     if search:
         s = f"%{search.strip()}%"
         query = query.filter(
@@ -142,10 +153,35 @@ def get_all_orders(
         query = query.filter(Order.status == status_filter)
     if customer_id:
         query = query.filter(Order.customer_id == customer_id)
-    return query.order_by(Order.created_at.desc()).all()
+    orders = query.order_by(Order.created_at.desc()).all()
+    for o in orders:
+        _attach_delivery_profile(o, db)
+    return orders
 
 
-def get_order_by_id(db: Session, order_id: str) -> Order:
+def _attach_delivery_profile(order: Optional[Order], db: Session) -> Optional[Order]:
+    if not order:
+        return None
+    from app.models.order_delivery_profile import OrderDeliveryProfile
+    prof = db.query(OrderDeliveryProfile).filter(OrderDeliveryProfile.order_id == order.id).first()
+    if prof:
+        order.delivery_address_id = prof.delivery_address_id
+        order.delivery_address_name = getattr(prof, "delivery_address_name", None)
+        order.delivery_receiver_name = prof.delivery_receiver_name
+        order.delivery_phone = prof.delivery_phone
+        order.delivery_address = prof.delivery_address
+        order.delivery_notes = prof.delivery_notes
+    else:
+        order.delivery_address_id = None
+        order.delivery_address_name = None
+        order.delivery_receiver_name = None
+        order.delivery_phone = None
+        order.delivery_address = None
+        order.delivery_notes = None
+    return order
+
+
+def get_order_by_id(db: Session, order_id: str, current_user: Optional[User] = None) -> Order:
     ensure_seed_orders(db)
     order = db.query(Order).filter(
         (Order.id == order_id) | (Order.code == order_id)
@@ -155,7 +191,20 @@ def get_order_by_id(db: Session, order_id: str) -> Order:
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Không tìm thấy đơn hàng '{order_id}'."
         )
-    return order
+
+    # Scope Guard: Sales Rep truy cập đơn của đại lý ngoài phạm vi phụ trách -> trả 404 (chống IDOR)
+    if current_user and current_user.role == UserRole.SALES_REP.value:
+        assignment = db.query(CustomerAssignment).filter(
+            CustomerAssignment.customer_id == order.customer_id,
+            CustomerAssignment.assigned_staff_id == current_user.id
+        ).first()
+        if not assignment:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Không tìm thấy đơn hàng '{order_id}'."
+            )
+
+    return _attach_delivery_profile(order, db)
 
 
 def create_order(db: Session, order_in: OrderCreate, current_user: Optional[User] = None) -> Order:
@@ -163,8 +212,15 @@ def create_order(db: Session, order_in: OrderCreate, current_user: Optional[User
 
     # Scope Guard: Sales Rep tạo đơn cho đại lý ngoài phạm vi phụ trách -> trả 404 (chống IDOR)
     if current_user and current_user.role == UserRole.SALES_REP.value:
-        from app.services.customer_service import check_sales_rep_scope
-        check_sales_rep_scope(db, order_in.customer_id, current_user)
+        assignment = db.query(CustomerAssignment).filter(
+            CustomerAssignment.customer_id == order_in.customer_id,
+            CustomerAssignment.assigned_staff_id == current_user.id
+        ).first()
+        if not assignment:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Không tìm thấy thông tin đại lý '{order_in.customer_id}' trong phạm vi phụ trách của bạn."
+            )
 
     count = db.query(Order).count() + 1
     order_id = f"ORD-{str(count).zfill(3)}"
@@ -199,8 +255,10 @@ def create_order(db: Session, order_in: OrderCreate, current_user: Optional[User
             elif stock_profile.stock <= stock_profile.min_stock:
                 prod.status = "low_stock"
 
-    # 2. Tạo đơn hàng và Snapshot chiết khấu sản lượng
-    order_data = order_in.model_dump(exclude={"items"})
+    # 2. Tạo đơn hàng (Chỉ ghi các trường thuộc bảng Order gốc)
+    valid_order_cols = {c.name for c in Order.__table__.columns}
+    order_dict = order_in.model_dump(exclude={"items"})
+    order_data = {k: v for k, v in order_dict.items() if k in valid_order_cols}
     order_data["id"] = order_id
     order_data["code"] = order_code
     if not order_data.get("total") or order_data.get("total") == 0.0:
@@ -239,6 +297,42 @@ def create_order(db: Session, order_in: OrderCreate, current_user: Optional[User
 
     db.add(new_order)
 
+    # Xử lý & Lưu Profile điểm giao hàng đại lý (S3-04, SCRUM-441)
+    if order_in.delivery_address_id or order_in.delivery_address:
+        from app.services.customer_delivery_address_service import validate_delivery_address_for_customer
+        from app.models.order_delivery_profile import OrderDeliveryProfile
+        
+        del_addr_id = order_in.delivery_address_id
+        del_name = getattr(order_in, "delivery_address_name", None)
+        rec_name = order_in.delivery_receiver_name
+        rec_phone = order_in.delivery_phone
+        rec_addr = order_in.delivery_address
+        rec_notes = order_in.delivery_notes
+
+        if del_addr_id:
+            delivery_addr = validate_delivery_address_for_customer(db, order_in.customer_id, del_addr_id)
+            if not del_name:
+                del_name = delivery_addr.name
+            if not rec_name:
+                rec_name = delivery_addr.receiver_name
+            if not rec_phone:
+                rec_phone = delivery_addr.phone
+            if not rec_addr:
+                rec_addr = delivery_addr.address
+            if not rec_notes:
+                rec_notes = delivery_addr.directions_note
+
+        delivery_profile = OrderDeliveryProfile(
+            order_id=order_id,
+            delivery_address_id=del_addr_id,
+            delivery_address_name=del_name,
+            delivery_receiver_name=rec_name,
+            delivery_phone=rec_phone,
+            delivery_address=rec_addr,
+            delivery_notes=rec_notes,
+        )
+        db.add(delivery_profile)
+
     # 3. Khóa bảng giá nếu có liên kết (SCRUM-416)
     if order_in.price_list_id:
         pl = db.query(PriceList).filter(PriceList.id == order_in.price_list_id).first()
@@ -255,12 +349,37 @@ def create_order(db: Session, order_in: OrderCreate, current_user: Optional[User
 
     db.commit()
     db.refresh(new_order)
-    return new_order
+    return _attach_delivery_profile(new_order, db)
 
 
 def update_order_status(db: Session, order_id: str, new_status: str) -> Order:
     order = get_order_by_id(db, order_id)
     old_status = order.status
+
+    # Nghiệp vụ kiểm tra hạn mức công nợ khi XUẤT HÀNG (Hàng rời kho: status -> shipping hoặc completed)
+    if new_status in ["shipping", "completed"] and old_status not in ["shipping", "completed"]:
+        unpaid = max(0.0, float(order.total or 0.0) - float(order.paid_amount or 0.0))
+        if unpaid > 0 and order.customer_id:
+            from app.services.customer_credit_service import get_or_create_credit_profile, check_credit_for_dispatch
+            # Khóa dòng bi quan (Pessimistic Lock) giữ khóa đến hết transaction để chống Race Condition khi xuất kho đồng thời
+            cred_prof = get_or_create_credit_profile(db=db, customer_id=order.customer_id, for_update=True)
+            chk = check_credit_for_dispatch(db=db, customer_id=order.customer_id, unpaid_amount=unpaid, order_id=order.id)
+            if not chk["allowed"]:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=chk["error_message"]
+                )
+            # Cập nhật ngay dư nợ đã xuất trên dòng đang khóa để luồng kế tiếp đọc được ngay qua Current Read
+            cred_prof.current_debt = int(cred_prof.current_debt or 0) + int(round(unpaid))
+
+        # Ghi nhận thời điểm xuất kho thực tế dispatched_at
+        from app.models.order_delivery_profile import OrderDeliveryProfile
+        prof = db.query(OrderDeliveryProfile).filter(OrderDeliveryProfile.order_id == order.id).first()
+        if not prof:
+            prof = OrderDeliveryProfile(order_id=order.id, dispatched_at=datetime.now(timezone.utc))
+            db.add(prof)
+        elif not getattr(prof, "dispatched_at", None):
+            prof.dispatched_at = datetime.now(timezone.utc)
 
     # Nếu chuyển sang hủy từ trạng thái chưa hủy, hoàn lại tồn kho
     if new_status == "cancelled" and old_status != "cancelled":
@@ -281,9 +400,20 @@ def update_order_status(db: Session, order_id: str, new_status: str) -> Order:
                     prod.status = "low_stock"
 
     order.status = new_status
+    db.flush()
+
+    # SCRUM-452: Đồng bộ cache dư nợ của đại lý (current_debt) ngay trong transaction
+    if order.customer_id:
+        try:
+            from app.services.customer_credit_service import get_or_create_credit_profile, calculate_actual_customer_debt
+            cred_prof = get_or_create_credit_profile(db, order.customer_id, for_update=True)
+            cred_prof.current_debt = calculate_actual_customer_debt(db, order.customer_id)
+        except Exception:
+            pass
+
     db.commit()
     db.refresh(order)
-    return order
+    return _attach_delivery_profile(order, db)
 
 
 def cancel_order(db: Session, order_id: str) -> Order:

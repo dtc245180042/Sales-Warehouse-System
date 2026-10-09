@@ -7,6 +7,7 @@ from app.models.product import Product
 from app.models.customer import Customer
 from app.models.price_list import PriceList
 from app.models.product_stock_profile import ProductStockProfile
+from app.models.auth import User, UserRole
 from app.schemas.order import OrderCreate, OrderStatusUpdate
 from app.services.product_service import ensure_seed_products
 from app.services.customer_service import ensure_seed_customers
@@ -157,11 +158,24 @@ def get_order_by_id(db: Session, order_id: str) -> Order:
     return order
 
 
-def create_order(db: Session, order_in: OrderCreate) -> Order:
+def create_order(db: Session, order_in: OrderCreate, current_user: Optional[User] = None) -> Order:
     ensure_seed_orders(db)
+
+    # Scope Guard: Sales Rep tạo đơn cho đại lý ngoài phạm vi phụ trách -> trả 404 (chống IDOR)
+    if current_user and current_user.role == UserRole.SALES_REP.value:
+        from app.services.customer_service import check_sales_rep_scope
+        check_sales_rep_scope(db, order_in.customer_id, current_user)
+
     count = db.query(Order).count() + 1
     order_id = f"ORD-{str(count).zfill(3)}"
+    while db.query(Order).filter(Order.id == order_id).first():
+        count += 1
+        order_id = f"ORD-{str(count).zfill(3)}"
+
     order_code = f"DH-2026-{str(count).zfill(3)}"
+    while db.query(Order).filter(Order.code == order_code).first():
+        count += 1
+        order_code = f"DH-2026-{str(count).zfill(3)}"
 
     # 1. Trừ tồn kho và kiểm tra tính hợp lệ
     for item in order_in.items:
@@ -185,15 +199,42 @@ def create_order(db: Session, order_in: OrderCreate) -> Order:
             elif stock_profile.stock <= stock_profile.min_stock:
                 prod.status = "low_stock"
 
-    # 2. Tạo đơn hàng
+    # 2. Tạo đơn hàng và Snapshot chiết khấu sản lượng
     order_data = order_in.model_dump(exclude={"items"})
     order_data["id"] = order_id
     order_data["code"] = order_code
+    if not order_data.get("total") or order_data.get("total") == 0.0:
+        computed_total = sum(item.subtotal for item in order_in.items)
+        order_data["total"] = computed_total
+        order_data["subtotal"] = computed_total
 
     new_order = Order(**order_data)
+    from app.services.volume_discount_service import calculate_volume_discount
+    from app.models.volume_discount import VolumeDiscountPolicy
+
     for itm in order_in.items:
         itm_dict = itm.model_dump()
         itm_dict["product_id"] = str(itm_dict["product_id"])
+
+        # Tính toán chiết khấu sản lượng tự động
+        calc = calculate_volume_discount(
+            db=db,
+            product_id=itm_dict["product_id"],
+            quantity=itm.quantity,
+            customer_id=order_in.customer_id,
+            current_user=current_user
+        )
+        if calc.applied_policy_id:
+            itm_dict["applied_discount_policy_id"] = calc.applied_policy_id
+            itm_dict["applied_discount_policy_name"] = calc.applied_discount_policy_name
+            itm_dict["discount_rate"] = calc.discount_rate
+            itm_dict["discount_amount"] = calc.total_discount
+
+            # Tăng số lần áp dụng chính sách để bảo vệ cấm xóa cứng
+            disc_policy = db.query(VolumeDiscountPolicy).filter(VolumeDiscountPolicy.id == calc.applied_policy_id).first()
+            if disc_policy:
+                disc_policy.applied_count += 1
+
         new_order.items.append(OrderItem(**itm_dict))
 
     db.add(new_order)

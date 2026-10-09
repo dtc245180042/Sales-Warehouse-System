@@ -60,7 +60,7 @@ class ProductService:
             id=product.id,
             sku=product.sku,
             name=product.name,
-            category=product.category,
+            category=product.category or "",
             category_id=getattr(product, "category_id", None),
             unit=product.unit,
             packaging_spec=product.packaging_spec,
@@ -215,7 +215,24 @@ class ProductService:
         if img_update is not None:
             product.image_url = img_update.strip() if isinstance(img_update, str) and img_update.strip() else None
         if getattr(data, "price", None) is not None or getattr(data, "sale_price", None) is not None:
-            product.price = float(data.price if data.price is not None else data.sale_price)
+            new_p = float(data.price if data.price is not None else data.sale_price)
+            if product.price is not None and int(product.price) != int(new_p):
+                from app.services.price_history_service import record_price_change
+                from app.models.product_price_history import PriceTypeEnum
+                reason = getattr(data, "reason", None) or "Điều chỉnh giá bán niêm yết sản phẩm"
+                record_price_change(
+                    db=db,
+                    product_id=str(product.id),
+                    product_sku=product.sku,
+                    product_name=product.name,
+                    price_type=PriceTypeEnum.LISTED_PRICE,
+                    old_price=int(product.price),
+                    new_price=int(new_p),
+                    reason=reason,
+                    effective_from=datetime.now(timezone.utc),
+                    changed_by=current_user
+                )
+            product.price = new_p
         if getattr(data, "description", None) is not None:
             product.description = data.description.strip() if data.description else None
 

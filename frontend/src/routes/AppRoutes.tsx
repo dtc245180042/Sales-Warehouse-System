@@ -27,6 +27,15 @@ import { CategoryManagement } from '../pages/categories/CategoryManagement';
 import { SupplierList } from '../pages/suppliers/SupplierList';
 import { SupplierDetail } from '../pages/suppliers/SupplierDetail';
 
+// Customer & Agency Pages (Sprint 3: SC-224, SC-228, SC-229)
+import { CustomerList } from '../pages/customers/CustomerList';
+import { CustomerDetail } from '../pages/customers/CustomerDetail';
+
+// Sales & Order Pages (SC-228, SC-230)
+import { POS } from '../pages/sales/POS';
+import { Orders } from '../pages/sales/Orders';
+import { OrderDetail } from '../pages/sales/OrderDetail';
+
 // Sprint 2 Pages - Activity Log (SCRUM-212)
 import ActivityLogPage from '../pages/activitylog/ActivityLogPage';
 
@@ -46,9 +55,6 @@ import { InventoryReport } from '../pages/reports/InventoryReport';
 // Agent & Sales Pages (SCRUM-229, SCRUM-230, SCRUM-347)
 import { AgentList } from '../pages/agents/AgentList';
 import { AgentOrderCreate } from '../pages/agents/AgentOrderCreate';
-import { POS } from '../pages/sales/POS';
-import { Orders } from '../pages/sales/Orders';
-import { OrderDetail } from '../pages/sales/OrderDetail';
 
 // All 7 business roles allowed in Sprint 1 & 2 backoffice
 const ALL_BACKOFFICE_ROLES: UserRole[] = [
@@ -187,6 +193,50 @@ export const AppRoutes: React.FC = () => {
           element={
             <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
               <SupplierDetail />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Quản lý Khách hàng & Đại lý (SC-224, SC-228, SC-229) */}
+        <Route
+          path="/customers"
+          element={
+            <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
+              <CustomerList />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/customers/:id"
+          element={
+            <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
+              <CustomerDetail />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Bán hàng POS & Quản lý Đơn hàng (SC-228, SC-230) */}
+        <Route
+          path="/sales/pos"
+          element={
+            <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
+              <POS />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/orders"
+          element={
+            <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
+              <Orders />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/orders/:id"
+          element={
+            <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
+              <OrderDetail />
             </ProtectedRoute>
           }
         />

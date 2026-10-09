@@ -21,6 +21,7 @@ import {
   Store,
   Receipt,
   PlusCircle,
+  ShoppingCart,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { UserRole } from '../../types/User';
@@ -193,10 +194,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
             'Admin',
             'SalesManager',
             'SalesStaff',
+            'WarehouseManager',
+            'WarehouseStaff',
             'Accountant',
             'Director',
             'Manager',
             'Staff',
+            'User',
           ],
         },
       ],

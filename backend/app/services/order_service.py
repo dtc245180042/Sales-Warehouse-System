@@ -181,6 +181,26 @@ def _attach_delivery_profile(order: Optional[Order], db: Session) -> Optional[Or
     return order
 
 
+def _enrich_order_lock_warning(db: Session, order: Order) -> Order:
+    """Gắn cảnh báo khóa giao dịch vào response đơn hàng (SC-228)."""
+    from app.models.customer_lock import CustomerLockProfile
+    from app.models.customer import Customer
+    cus = db.query(Customer).filter(Customer.id == order.customer_id).first()
+    lock_prof = db.query(CustomerLockProfile).filter(CustomerLockProfile.customer_id == order.customer_id).first()
+    is_locked = bool(lock_prof and lock_prof.is_locked) or (cus and cus.status == "locked")
+    if is_locked:
+        reason = (lock_prof.lock_reason if lock_prof else None) or "Mất khả năng thanh toán/Quá hạn nợ"
+        order.customer_is_locked = True
+        order.customer_lock_warning = (
+            f"Cảnh báo: Đại lý '{order.customer_name}' đang bị khoá giao dịch (Lý do: {reason}). "
+            "Đơn hàng đang dở vẫn được phép tiếp tục xử lý theo quy định."
+        )
+    else:
+        order.customer_is_locked = False
+        order.customer_lock_warning = None
+    return order
+
+
 def get_order_by_id(db: Session, order_id: str, current_user: Optional[User] = None) -> Order:
     ensure_seed_orders(db)
     order = db.query(Order).filter(
@@ -204,7 +224,8 @@ def get_order_by_id(db: Session, order_id: str, current_user: Optional[User] = N
                 detail=f"Không tìm thấy đơn hàng '{order_id}'."
             )
 
-    return _attach_delivery_profile(order, db)
+    order = _attach_delivery_profile(order, db)
+    return _enrich_order_lock_warning(db, order)
 
 
 def create_order(db: Session, order_in: OrderCreate, current_user: Optional[User] = None) -> Order:
@@ -221,6 +242,15 @@ def create_order(db: Session, order_in: OrderCreate, current_user: Optional[User
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Không tìm thấy thông tin đại lý '{order_in.customer_id}' trong phạm vi phụ trách của bạn."
             )
+
+    # 0. Kiểm tra trạng thái khoá giao dịch của đại lý (SC-228)
+    from app.services.customer_lock_service import check_customer_order_allowed
+    allowed, lock_msg = check_customer_order_allowed(order_in.customer_id, db)
+    if not allowed:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=lock_msg
+        )
 
     count = db.query(Order).count() + 1
     order_id = f"ORD-{str(count).zfill(3)}"
@@ -413,7 +443,8 @@ def update_order_status(db: Session, order_id: str, new_status: str) -> Order:
 
     db.commit()
     db.refresh(order)
-    return _attach_delivery_profile(order, db)
+    order = _attach_delivery_profile(order, db)
+    return _enrich_order_lock_warning(db, order)
 
 
 def cancel_order(db: Session, order_id: str) -> Order:

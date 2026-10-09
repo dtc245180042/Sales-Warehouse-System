@@ -32,6 +32,8 @@ export interface Order {
   staffId: string;
   staffName: string;
   note?: string;
+  customerIsLocked?: boolean;
+  customerLockWarning?: string;
   createdAt: string;
   updatedAt: string;
 }

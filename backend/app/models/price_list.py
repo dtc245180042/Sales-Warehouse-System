@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from sqlalchemy import (
     Column,
     Integer,
@@ -99,7 +99,8 @@ class PriceList(Base):
         val_from = self.valid_from
         if val_from.tzinfo is None:
             val_from = val_from.replace(tzinfo=timezone.utc)
-        if now_utc < val_from:
+        tolerance = timedelta(seconds=5)
+        if now_utc < val_from - tolerance:
             return False
         if self.valid_to:
             val_to = self.valid_to

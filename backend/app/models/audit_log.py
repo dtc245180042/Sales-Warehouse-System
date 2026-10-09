@@ -65,3 +65,21 @@ class AuditLog(Base):
         index=True
     )
 
+
+# Đảm bảo các cột device và status tự động tồn tại trong CSDL SQLite hiện hữu
+try:
+    from app.core.database import engine
+    from sqlalchemy import text
+    with engine.connect() as _conn:
+        _res = _conn.execute(text("PRAGMA table_info(audit_logs)")).fetchall()
+        _cols = [r[1] for r in _res]
+        if _cols:
+            if "device" not in _cols:
+                _conn.execute(text("ALTER TABLE audit_logs ADD COLUMN device VARCHAR(255)"))
+            if "status" not in _cols:
+                _conn.execute(text("ALTER TABLE audit_logs ADD COLUMN status VARCHAR(50) DEFAULT 'success'"))
+            _conn.commit()
+except Exception:
+    pass
+
+

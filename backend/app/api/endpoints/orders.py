@@ -12,10 +12,14 @@ from app.schemas.order import (
     OrderCalculateRequest,
     OrderCalculateResponse,
     ProductSearchForOrderResponse,
+    PurchaseHistorySuggestionResponse,
+    MergeItemsRequest,
+    MergeItemsResponse,
 )
 from app.services import order_service
 
 router = APIRouter(prefix="/orders", tags=["Đơn hàng"])
+
 
 
 @router.post("/calculate", response_model=OrderCalculateResponse)
@@ -50,6 +54,47 @@ def search_products_for_order(
 ):
     """Tìm kiếm sản phẩm hỗ trợ tạo đơn hàng kèm quy cách/đơn vị tính (S3-09, SCRUM-230)."""
     return order_service.search_products_for_order(db=db, query_str=q)
+
+
+@router.get("/suggestions/{customer_id}", response_model=PurchaseHistorySuggestionResponse)
+def get_customer_purchase_suggestions(
+    customer_id: str,
+    window_days: int = Query(90, ge=1, le=365, description="Số ngày tính lịch sử mua hàng"),
+    db: Session = Depends(lay_phien_db),
+    current_user: Optional[User] = Depends(lay_nguoi_dung_tuy_chon),
+):
+    """
+    Lấy gợi ý mặt hàng từ lịch sử mua hàng 3 tháng gần nhất của đại lý kèm số lượng bình quân (S4-04, SCRUM-236).
+    Chặn 403 nếu Sales Rep không được phân công quản lý đại lý.
+    """
+    return order_service.get_purchase_history_suggestions(
+        db=db,
+        customer_id=customer_id,
+        current_user=current_user,
+        window_days=window_days,
+    )
+
+
+@router.post("/suggestions/merge-items", response_model=MergeItemsResponse)
+def merge_suggestion_items(
+    req: MergeItemsRequest,
+):
+    """
+    Hợp nhất sản phẩm/nhóm hàng từ gợi ý vào danh sách đơn hiện tại, áp dụng quy tắc chống trùng dòng (S4-04, SCRUM-236).
+    """
+    merged_items = order_service.merge_items_anti_duplicate(
+        current_items=req.current_items,
+        items_to_add=req.items_to_add,
+        strategy=req.strategy,
+    )
+    existing_pids = {str(i.product_id) for i in req.current_items}
+    added = [i for i in req.items_to_add if str(i.product_id) not in existing_pids]
+    merged = [i for i in req.items_to_add if str(i.product_id) in existing_pids]
+    return MergeItemsResponse(
+        items=merged_items,
+        merged_count=len(merged),
+        added_count=len(added),
+    )
 
 
 @router.get("", response_model=List[OrderResponse])

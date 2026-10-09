@@ -1,7 +1,14 @@
 import threading
 import uuid
 import sys
+import os
+from pathlib import Path
+
 sys.stdout.reconfigure(encoding="utf-8")
+backend_dir = str(Path(__file__).resolve().parent.parent)
+if backend_dir not in sys.path:
+    sys.path.insert(0, backend_dir)
+
 from app.core.database import SessionLocal, engine
 from app.models.customer import Customer
 from sqlalchemy import text
@@ -32,7 +39,7 @@ def demo_race_condition():
             results.append(("SUCCESS", thread_id))
         except Exception as e:
             db.rollback()
-            print(f"  [-] Thread {thread_id}: BỊ CHẶN BỞI RÀNG BUỘC MYSQL ({type(e).__name__}) -> Rollback.")
+            print(f"  [-] Thread {thread_id}: BỊ CHẶN BỞI RÀNG BUỘC MYSQL ({type(e).__name__}): {e} -> Rollback.")
             results.append(("BLOCKED", type(e).__name__))
         finally:
             db.close()

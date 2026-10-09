@@ -42,6 +42,7 @@ export interface ActivityLog {
   target: string; // e.g. "Sản phẩm #SP-001", "Người dùng: Nguyễn Văn A"
   detail: string; // Human-readable description
   ipAddress: string;
+  device?: string; // Tên thiết bị / hệ điều hành / trình duyệt (Ví dụ: Windows 11 · Chrome)
   status: ActivityStatus;
   metadata?: Record<string, string | number | boolean>;
 }

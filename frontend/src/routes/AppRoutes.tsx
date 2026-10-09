@@ -23,6 +23,9 @@ import { Profile } from '../pages/profile/Profile';
 import { PriceListManagement } from '../pages/sales/PriceListManagement';
 import { CategoryManagement } from '../pages/categories/CategoryManagement';
 
+// Orders & Field Sales (SCRUM-230, S3-09)
+import { CreateOrder } from '../pages/orders/CreateOrder';
+
 // Supplier Management Pages (SCRUM-217)
 import { SupplierList } from '../pages/suppliers/SupplierList';
 import { SupplierDetail } from '../pages/suppliers/SupplierDetail';
@@ -45,11 +48,16 @@ import { ProductDetail } from '../pages/products/ProductDetail';
 import { ProductCreate } from '../pages/products/ProductCreate';
 import { ProductEdit } from '../pages/products/ProductEdit';
 import { ProductUnitPage } from '../pages/products/ProductUnitPage';
+import { ProductImportPage } from '../pages/products/ProductImportPage';
 
 // Report Pages (Báo cáo bán hàng theo ngành hàng & Doanh thu)
 import { SalesReport } from '../pages/reports/SalesReport';
 import { RevenueReport } from '../pages/reports/RevenueReport';
 import { InventoryReport } from '../pages/reports/InventoryReport';
+
+// Agent & Sales Pages (SCRUM-229, SCRUM-230, SCRUM-347)
+import { AgentList } from '../pages/agents/AgentList';
+import { AgentOrderCreate } from '../pages/agents/AgentOrderCreate';
 
 // All 7 business roles allowed in Sprint 1 & 2 backoffice
 const ALL_BACKOFFICE_ROLES: UserRole[] = [
@@ -210,7 +218,15 @@ export const AppRoutes: React.FC = () => {
           }
         />
 
-        {/* Bán hàng POS & Quản lý Đơn hàng (SC-228, SC-230) */}
+        {/* Tạo đơn hiện trường Mobile 360px (SCRUM-230, S3-09) */}
+        <Route
+          path="/orders/create"
+          element={
+            <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
+              <CreateOrder />
+            </ProtectedRoute>
+          }
+        />
         <Route
           path="/sales/pos"
           element={
@@ -302,6 +318,14 @@ export const AppRoutes: React.FC = () => {
           }
         />
         <Route
+          path="/products/import"
+          element={
+            <ProtectedRoute allowedRoles={['Admin', 'SalesManager', 'Director', 'Manager']}>
+              <ProductImportPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/products/:id"
           element={
             <ProtectedRoute allowedRoles={['Admin', 'SalesManager', 'SalesStaff', 'WarehouseManager', 'WarehouseStaff', 'Director', 'Manager', 'Staff']}>
@@ -342,6 +366,78 @@ export const AppRoutes: React.FC = () => {
           element={
             <ProtectedRoute allowedRoles={['Admin', 'WarehouseManager', 'WarehouseStaff', 'Director', 'Manager']}>
               <InventoryReport />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* ============================================================ */}
+        {/* KÊNH ĐẠI LÝ & TẠO ĐƠN (SCRUM-229, SCRUM-230, SCRUM-347)       */}
+        {/* ============================================================ */}
+        <Route
+          path="/agents"
+          element={
+            <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
+              <AgentList />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/agents/orders/new"
+          element={
+            <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
+              <AgentOrderCreate />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* ============================================================ */}
+        {/* BÁN HÀNG & POS (SCRUM-347 / SCRUM-486)                       */}
+        {/* ============================================================ */}
+        <Route
+          path="/sales/pos"
+          element={
+            <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
+              <POS />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/pos"
+          element={
+            <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
+              <POS />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/sales/orders"
+          element={
+            <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
+              <Orders />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/orders"
+          element={
+            <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
+              <Orders />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/sales/orders/:id"
+          element={
+            <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
+              <OrderDetail />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/orders/:id"
+          element={
+            <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
+              <OrderDetail />
             </ProtectedRoute>
           }
         />

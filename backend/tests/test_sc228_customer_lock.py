@@ -13,12 +13,14 @@ def _get_headers_for_role(role: str, username: str = None, user_id: int = None):
     db = SessionLocal()
     try:
         user = None
-        if user_id:
-            user = db.query(User).filter(User.id == user_id).first()
-        if not user and username:
-            user = db.query(User).filter(User.username == username).first()
+        if username:
+            user = db.query(User).filter(User.username == username, User.role == role).first()
+        if not user and user_id:
+            user = db.query(User).filter(User.id == user_id, User.role == role).first()
         if not user:
             user = db.query(User).filter(User.role == role).first()
+        if not user:
+            user = db.query(User).first()
         
         uid = user.id if user else (user_id or 1)
         uname = user.username if user else (username or "admin")

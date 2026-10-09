@@ -43,3 +43,23 @@ export const formatDateOnly = (dateString: string): string => {
 export const generateId = (prefix: string = 'ID'): string => {
   return `${prefix}-${Math.floor(100000 + Math.random() * 900000)}`;
 };
+
+/**
+ * Định dạng số thành chuỗi phân cách hàng nghìn bằng dấu chấm khi nhập tiền (VD: 1000000 -> "1.000.000")
+ */
+export const formatCurrencyInput = (value: number | string | undefined | null): string => {
+  if (value === undefined || value === null || value === '') return '';
+  const clean = value.toString().replace(/\D/g, '');
+  if (!clean) return '';
+  return clean.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+};
+
+/**
+ * Chuyển chuỗi tiền có dấu chấm phân cách hàng nghìn thành số nguyên (VD: "1.000.000" -> 1000000)
+ */
+export const parseCurrencyInput = (formattedValue: string | undefined | null): number => {
+  if (!formattedValue) return 0;
+  const clean = formattedValue.toString().replace(/\D/g, '');
+  return clean ? parseInt(clean, 10) : 0;
+};
+

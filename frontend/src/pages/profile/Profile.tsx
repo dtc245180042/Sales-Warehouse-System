@@ -221,10 +221,23 @@ export const Profile: React.FC = () => {
     normalizeVNPhoneNumber(phone) !== normalizeVNPhoneNumber(user?.phone || '') ||
     avatarUrl.trim() !== (user?.avatar || '');
 
+  const formatLastLoginTime = (ts?: string) => {
+    if (!ts) return 'Vừa mới';
+    try {
+      const d = new Date(ts);
+      if (isNaN(d.getTime())) return ts;
+      const time = d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+      const date = d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+      return `${time} ${date}`;
+    } catch {
+      return 'Vừa mới';
+    }
+  };
+
   return (
     <PageContainer
       title="Hồ Sơ Cá Nhân"
-      subtitle="Xem và cập nhật thông tin liên hệ của bạn để phối hợp điều phối đơn hàng và liên lạc kho (SCRUM-210)"
+      subtitle="Xem và cập nhật thông tin liên hệ của bạn để phối hợp điều phối đơn hàng và liên lạc kho."
     >
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left Column: Profile Card & Read-only System Identity */}
@@ -295,13 +308,13 @@ export const Profile: React.FC = () => {
                   Đăng nhập gần nhất
                 </div>
                 <div className="text-xs font-medium text-slate-800 dark:text-slate-200 mt-1 truncate" title={user?.lastLogin}>
-                  {user?.lastLogin ? user.lastLogin.split(' ')[0] : 'Vừa mới'}
+                  {formatLastLoginTime(user?.lastLogin)}
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Readonly Identity Notice (SCRUM-210: Không tự đổi tài khoản, vai trò, kho, địa bàn) */}
+          {/* Readonly Identity Notice */}
           <div className="p-5 rounded-3xl bg-slate-50/90 dark:bg-slate-850/50 border border-slate-200 dark:border-slate-800 space-y-4">
             <div className="flex items-center gap-2">
               <Lock className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
@@ -311,7 +324,7 @@ export const Profile: React.FC = () => {
             </div>
 
             <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-              Theo quy định phân quyền hệ thống (SCRUM-210 / SCRUM-360), người dùng không thể tự ý thay đổi tài khoản, quyền hạn, kho và địa bàn phụ trách.
+              Theo quy định phân quyền hệ thống, người dùng không thể tự ý thay đổi tài khoản, quyền hạn, kho và địa bàn phụ trách.
             </p>
 
             <div className="space-y-2.5 text-xs">

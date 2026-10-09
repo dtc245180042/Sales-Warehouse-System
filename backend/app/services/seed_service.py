@@ -388,7 +388,7 @@ def seed_default_admin(db: Session) -> Dict[str, Any]:
             username="admin",
             email="admin@warehouse.local",
             full_name="Trần Quản Trị Hệ Thống",
-            hashed_password=get_password_hash("Admin@1234"),
+            hashed_password=get_password_hash("123456"),
             role="Admin",
             is_active=True
         )
@@ -400,6 +400,10 @@ def seed_default_admin(db: Session) -> Dict[str, Any]:
         return {"created": True, "username": admin_user.username, "email": admin_user.email}
     else:
         # Đảm bảo admin có role ADMIN và thông tin chuẩn
+        admin_user.hashed_password = get_password_hash("123456")
+        admin_user.failed_login_attempts = 0
+        admin_user.locked_until = None
+        admin_user.is_active = True
         if admin_role and admin_role not in admin_user.roles:
             admin_user.roles.append(admin_role)
         if admin_user.role != "Admin":
@@ -416,6 +420,14 @@ def seed_all(db: Session) -> Dict[str, Any]:
     role_stats = seed_roles(db)
     mapping_stats = assign_default_permissions_to_roles(db)
     admin_stats = seed_default_admin(db)
+
+    try:
+        from app.services.customer_service import ensure_seed_customers
+        ensure_seed_customers(db)
+        from app.services.customer_assignment_service import ensure_seed_assignments
+        ensure_seed_assignments(db)
+    except Exception as e:
+        logger.warning("Error seeding customer assignments: %s", e)
 
     return {
         "status": "success",

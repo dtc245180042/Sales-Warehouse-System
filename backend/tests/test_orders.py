@@ -7,12 +7,18 @@ client = TestClient(app)
 
 
 def _get_auth_headers():
+    from app.core.database import SessionLocal
+    from app.models.auth import User
+    db = SessionLocal()
+    admin = db.query(User).filter_by(username="admin").first()
+    tv = admin.token_version if admin else 1
+    db.close()
     token = tao_token_truy_cap({
         "sub": "admin",
         "user_id": 1,
         "username": "admin",
         "role": "Admin",
-        "token_version": 1
+        "token_version": tv
     })
     return {"Authorization": f"Bearer {token}"}
 

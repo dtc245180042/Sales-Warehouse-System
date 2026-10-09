@@ -51,14 +51,35 @@ class AuditLog(Base):
     # Địa chỉ IP hoặc nguồn gọi
     ip_address = Column(String(100), nullable=True)
     
+    # Thiết bị / Trình duyệt thao tác (Ví dụ: "Windows 11 · Chrome (Máy tính)")
+    device = Column(String(255), nullable=True)
+    
     # Trạng thái kết quả thao tác: "success", "failed", "warning"
     status = Column(String(50), nullable=True, default="success")
 
     # Thời điểm phát sinh
     created_at = Column(
-        DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        DateTime,
+        default=datetime.now,
         nullable=False,
         index=True
     )
+
+
+# Đảm bảo các cột device và status tự động tồn tại trong CSDL SQLite hiện hữu
+try:
+    from app.core.database import engine
+    from sqlalchemy import text
+    with engine.connect() as _conn:
+        _res = _conn.execute(text("PRAGMA table_info(audit_logs)")).fetchall()
+        _cols = [r[1] for r in _res]
+        if _cols:
+            if "device" not in _cols:
+                _conn.execute(text("ALTER TABLE audit_logs ADD COLUMN device VARCHAR(255)"))
+            if "status" not in _cols:
+                _conn.execute(text("ALTER TABLE audit_logs ADD COLUMN status VARCHAR(50) DEFAULT 'success'"))
+            _conn.commit()
+except Exception:
+    pass
+
 

@@ -172,12 +172,18 @@ export const InventoryOverview: React.FC = () => {
       className: 'min-w-[200px]',
       render: (item) => (
         <div className="flex items-center gap-2.5">
-          <img
-            src={item.image}
-            alt={item.name}
-            className="w-9 h-9 rounded-lg object-cover bg-slate-100 dark:bg-slate-800 shrink-0"
-            onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = "/images/product-placeholder.jpg"; }}
-          />
+          {item.image ? (
+            <img
+              src={item.image}
+              alt={item.name}
+              className="w-9 h-9 rounded-lg object-cover bg-slate-100 dark:bg-slate-800 shrink-0"
+              onError={(e) => { e.currentTarget.style.display = 'none'; }}
+            />
+          ) : (
+            <div className="w-9 h-9 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 flex items-center justify-center shrink-0">
+              <Package className="w-4 h-4" />
+            </div>
+          )}
           <div className="truncate">
             <Link
               to={`/products/${item.productId}`}

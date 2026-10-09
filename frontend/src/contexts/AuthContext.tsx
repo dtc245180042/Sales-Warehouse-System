@@ -119,7 +119,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const updateProfile = async (data: { name: string; phone: string; avatar?: string }): Promise<User> => {
     setIsLoading(true);
     try {
-      const updated = await authService.updateProfile(data);
+      const avatarToKeep = data.avatar || user?.avatar;
+      const updated = await authService.updateProfile({
+        ...data,
+        avatar: avatarToKeep,
+      });
       setUser(updated);
       return updated;
     } finally {

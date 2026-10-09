@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ShoppingCart, Check, AlertTriangle, XCircle } from 'lucide-react';
+import { ShoppingCart, Check, AlertTriangle, XCircle, Package } from 'lucide-react';
 import { ProductItem } from '../../data/mockData';
 import { useUserCart } from '../../contexts/UserCartContext';
 import { useToast } from '../../contexts/ToastContext';
@@ -48,12 +48,19 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
     <div className="group bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-soft hover:shadow-xl hover:border-indigo-300 dark:hover:border-indigo-700 transition-all duration-300 flex flex-col overflow-hidden relative">
       {/* Top Image & Badges */}
       <Link to={`/user/products/${product.id}`} className="relative block overflow-hidden bg-slate-100 dark:bg-slate-800 aspect-4/3">
-        <img
-          src={product.image}
-          alt={product.name}
-          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-          loading="lazy"
-        />
+        {product.image ? (
+          <img
+            src={product.image}
+            alt={product.name}
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+            loading="lazy"
+            onError={(e) => { e.currentTarget.style.display = 'none'; }}
+          />
+        ) : (
+          <div className="w-full h-full flex flex-col items-center justify-center text-slate-300 dark:text-slate-600 bg-slate-50 dark:bg-slate-800">
+            <Package className="w-12 h-12 stroke-[1.2]" />
+          </div>
+        )}
 
         {/* Stock Badge */}
         <div className="absolute top-3 left-3 flex flex-col gap-1.5">

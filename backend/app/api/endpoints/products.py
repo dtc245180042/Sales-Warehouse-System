@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, 
 from sqlalchemy.orm import Session
 
 from app.core.database import lay_phien_db
-from app.core.dependencies import lay_nguoi_dung_hien_tai
+from app.core.dependencies import lay_nguoi_dung_hien_tai, lay_nguoi_dung_tuy_chon
 from app.models.auth import User
 from app.schemas.product import (
     ProductCreateRequest,
@@ -27,14 +27,18 @@ router = APIRouter(prefix="/products", tags=["Quản lý danh mục sản phẩm
 )
 def lay_danh_sach_san_pham(
     page: int = Query(1, ge=1, description="Số trang hiển thị"),
-    page_size: int = Query(20, ge=1, le=100, description="Số sản phẩm mỗi trang"),
+    page_size: int = Query(20, ge=1, le=10000, description="Số sản phẩm mỗi trang (tối đa 10000 để hỗ trợ tải toàn bộ danh mục)"),
+    all_products: bool = Query(False, description="Tải toàn bộ danh sách sản phẩm không phân trang"),
     search: Optional[str] = Query(None, description="Tìm kiếm theo mã SKU hoặc Tên sản phẩm"),
     category: Optional[str] = Query(None, description="Lọc theo nhóm hàng"),
     status: Optional[str] = Query(None, description="Lọc theo trạng thái: ACTIVE hoặc INACTIVE"),
-    current_user: User = Depends(lay_nguoi_dung_hien_tai),
+    current_user: Optional[User] = Depends(lay_nguoi_dung_tuy_chon),
     db: Session = Depends(lay_phien_db),
 ):
-    """Lấy danh sách sản phẩm có tìm kiếm, lọc và phân trang (SCRUM-376)."""
+    """Lấy danh sách sản phẩm có tìm kiếm, lọc và phân trang (SCRUM-376). Hỗ trợ tải toàn bộ khi import 5000+ sản phẩm."""
+    if all_products:
+        page_size = 10000
+        page = 1
     return ProductService.list_products(
         db=db,
         current_user=current_user,

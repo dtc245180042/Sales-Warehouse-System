@@ -6,8 +6,20 @@ import { apiClient } from '../api/client';
 const STORAGE_KEY = 'kv_products';
 
 function mapApiProduct(p: any): Product {
+  const rawStatus = String(p.status || 'active').toLowerCase();
+  let normalizedStatus: 'active' | 'out_of_stock' | 'low_stock' | 'inactive' = 'active';
+  if (rawStatus === 'inactive' || rawStatus.includes('ngừng') || rawStatus.includes('ngung')) {
+    normalizedStatus = 'inactive';
+  } else if (rawStatus === 'out_of_stock' || Number(p.stock ?? 0) <= 0) {
+    normalizedStatus = 'out_of_stock';
+  } else if (rawStatus === 'low_stock' || Number(p.stock ?? 0) <= Number(p.minStock ?? p.min_stock ?? 5)) {
+    normalizedStatus = 'low_stock';
+  } else {
+    normalizedStatus = 'active';
+  }
+
   return {
-    id: p.id,
+    id: String(p.id),
     sku: p.sku || '',
     barcode: p.barcode || '',
     name: p.name || '',
@@ -16,14 +28,14 @@ function mapApiProduct(p: any): Product {
     supplierId: p.supplierId || p.supplier_id || '',
     supplierName: p.supplierName || p.supplier_name || '',
     costPrice: Number(p.costPrice ?? p.cost_price ?? 0),
-    salePrice: Number(p.salePrice ?? p.sale_price ?? 0),
-    stock: Number(p.stock ?? 0),
+    salePrice: Number(p.salePrice ?? p.sale_price ?? p.price ?? 0),
+    stock: Number(p.stock ?? 100),
     minStock: Number(p.minStock ?? p.min_stock ?? 5),
     unit: p.unit || 'Chiếc',
     packagingSpecification: p.packagingSpecification || p.packaging_specification || '1 chiếc/hộp',
-    image: p.image || p.image_url || p.imageUrl || '/images/products/placeholder.jpg',
+    image: (p.image && !p.image.includes('/images/products/') && !p.image.includes('placeholder')) ? (p.image || p.image_url || p.imageUrl || '') : '',
     description: p.description || '',
-    status: p.status || 'active',
+    status: normalizedStatus,
     hasTransactions: Boolean(p.hasTransactions ?? p.has_transactions ?? false),
     createdAt: p.createdAt || (p.created_at ? p.created_at.split('T')[0] : new Date().toISOString().split('T')[0]),
     updatedAt: p.updatedAt || (p.updated_at ? p.updated_at.split('T')[0] : new Date().toISOString().split('T')[0]),
@@ -31,21 +43,35 @@ function mapApiProduct(p: any): Product {
 }
 
 export const productService = {
-  getAll: async (): Promise<Product[]> => {
+  getAll: async (forceRefresh: boolean = false): Promise<Product[]> => {
     try {
-      const res = await apiClient.get('/products');
+      // Hỗ trợ lấy toàn bộ danh mục sản phẩm từ CSDL MySQL (lên tới 10.000 sản phẩm)
+      const res = await apiClient.get('/products', {
+        params: { all_products: true, page_size: 10000 },
+      });
       const rawList = Array.isArray(res.data)
         ? res.data
         : (Array.isArray(res.data?.items) ? res.data.items : null);
       if (rawList && rawList.length > 0) {
         const list = rawList.map(mapApiProduct);
-        setStorageItem(STORAGE_KEY, list);
+        // Tránh lỗi QuotaExceededError khi danh mục có 5000+ sản phẩm
+        if (list.length <= 500) {
+          try {
+            setStorageItem(STORAGE_KEY, list);
+          } catch {
+            // Quota limit
+          }
+        }
         return list;
       }
     } catch (err) {
       console.warn('[productService] Backend API offline hoặc lỗi, sử dụng bộ nhớ cục bộ:', err);
     }
-    return getStorageItem<Product[]>(STORAGE_KEY, initialProducts);
+    const stored = getStorageItem<Product[]>(STORAGE_KEY, initialProducts);
+    return stored.map((p) => ({
+      ...p,
+      image: (p.image && !p.image.includes('/images/products/') && !p.image.includes('placeholder')) ? p.image : '',
+    }));
   },
 
   getById: async (id: string): Promise<Product | undefined> => {
@@ -59,9 +85,14 @@ export const productService = {
       // Dự phòng từ cache nếu lỗi mạng
     }
     const products = getStorageItem<Product[]>(STORAGE_KEY, initialProducts);
-    return products.find(
+    const found = products.find(
       (p) => String(p.id).trim() === strId || p.sku.trim().toUpperCase() === strId.toUpperCase()
     );
+    if (!found) return undefined;
+    return {
+      ...found,
+      image: (found.image && !found.image.includes('/images/products/') && !found.image.includes('placeholder')) ? found.image : '',
+    };
   },
 
   create: async (data: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>): Promise<Product> => {

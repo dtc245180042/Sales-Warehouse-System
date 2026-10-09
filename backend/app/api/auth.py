@@ -1,6 +1,8 @@
+import math
 import secrets
+from typing import Optional, Any, Dict
 from datetime import datetime, timedelta, timezone
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -8,6 +10,13 @@ from app.core.database import lay_phien_db
 from app.core.security import kiem_tra_mat_khau, bam_mat_khau, tao_token_truy_cap
 from app.core.dependencies import lay_nguoi_dung_hien_tai, yeu_cau_vai_tro
 from app.models.user import User, UserRole
+from app.services.audit_service import log_login_activity, log_logout_activity
+from app.services.device_lockout_service import (
+    kiem_tra_thiet_bi_bi_khoa,
+    khoa_thiet_bi,
+    ghi_nhan_that_bai_thiet_bi,
+    reset_thiet_bi,
+)
 from app.schemas.auth import (
     LoginRequest,
     TokenResponse,
@@ -28,6 +37,7 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 )
 def dang_nhap(
     du_lieu_yeu_cau: LoginRequest,
+    request: Request,
     phien_db: Session = Depends(lay_phien_db)
 ):
     """Xác thực đăng nhập bằng username hoặc email và password.
@@ -45,6 +55,32 @@ def dang_nhap(
     thoi_gian_hien_tai = datetime.now(timezone.utc)
     dinh_danh = du_lieu_yeu_cau.username.strip()
 
+    def tinh_phut_con_lai(locked_until_dt: Optional[datetime]) -> int:
+        if not locked_until_dt:
+            return 15
+        dt = locked_until_dt
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        delta_sec = (dt - thoi_gian_hien_tai).total_seconds()
+        return max(1, math.ceil(delta_sec / 60))
+
+    # 0. Kiểm tra trạng thái khóa của thiết bị
+    thiet_bi_bi_khoa = kiem_tra_thiet_bi_bi_khoa(phien_db, request)
+    if thiet_bi_bi_khoa:
+        phut_con_lai = tinh_phut_con_lai(thiet_bi_bi_khoa.locked_until)
+        log_login_activity(
+            db=phien_db,
+            request=request,
+            user=None,
+            status="failed",
+            reason="Thiết bị đang bị tạm khóa 15 phút do nhập sai nhiều lần",
+            username_attempt=dinh_danh
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Thiết bị này đã bị tạm khóa do nhập sai mật khẩu quá 5 lần để tránh mất và lộ thông tin. Vui lòng thử lại sau {phut_con_lai} phút."
+        )
+
     # Tìm kiếm theo username hoặc email
     nguoi_dung = phien_db.query(User).filter(
         (User.username == dinh_danh) | (User.email == dinh_danh)
@@ -54,19 +90,35 @@ def dang_nhap(
     if nguoi_dung:
         # 1. Kiểm tra trạng thái khóa tạm thời
         if nguoi_dung.da_bi_khoa():
+            phut_con_lai = tinh_phut_con_lai(nguoi_dung.locked_until)
+            log_login_activity(
+                db=phien_db,
+                request=request,
+                user=nguoi_dung,
+                status="failed",
+                reason=f"Tài khoản tạm thời bị khóa trong 15 phút do nhập sai nhiều lần (còn {phut_con_lai} phút)"
+            )
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Tài khoản tạm thời bị khóa trong 15 phút do nhập sai nhiều lần."
+                detail=f"Tài khoản tạm thời bị khóa trong 15 phút do nhập sai nhiều lần. Vui lòng thử lại sau {phut_con_lai} phút."
             )
         
         # Nếu đã qua thời gian khóa thì tự động mở lại
         if nguoi_dung.locked_until and not nguoi_dung.da_bi_khoa():
             nguoi_dung.locked_until = None
             nguoi_dung.failed_login_attempts = 0
+            nguoi_dung.lock_reason = None
             phien_db.commit()
 
         # 2. Kiểm tra tài khoản có bị vô hiệu hóa bởi quản trị viên không
         if not nguoi_dung.is_active:
+            log_login_activity(
+                db=phien_db,
+                request=request,
+                user=nguoi_dung,
+                status="failed",
+                reason="Tài khoản đã bị vô hiệu hóa bởi quản trị viên"
+            )
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Tài khoản đã bị vô hiệu hóa. Vui lòng liên hệ quản trị viên."
@@ -75,26 +127,69 @@ def dang_nhap(
         # 3. Xác thực mật khẩu
         if not kiem_tra_mat_khau(du_lieu_yeu_cau.password, nguoi_dung.hashed_password):
             nguoi_dung.failed_login_attempts += 1
+            ghi_nhan_that_bai_thiet_bi(
+                phien_db,
+                request,
+                max_attempts=settings.MAX_FAILED_LOGIN_ATTEMPTS,
+                lock_minutes=settings.ACCOUNT_LOCK_MINUTES
+            )
 
             if nguoi_dung.failed_login_attempts >= settings.MAX_FAILED_LOGIN_ATTEMPTS:
                 nguoi_dung.locked_until = thoi_gian_hien_tai + timedelta(minutes=settings.ACCOUNT_LOCK_MINUTES)
+                nguoi_dung.lock_reason = "Tài khoản và thiết bị tạm thời bị khóa trong 15 phút do nhập sai 5 lần liên tiếp"
+                # Khóa cả thiết bị
+                khoa_thiet_bi(
+                    phien_db,
+                    request,
+                    lock_minutes=settings.ACCOUNT_LOCK_MINUTES,
+                    reason=nguoi_dung.lock_reason
+                )
                 phien_db.commit()
+                log_login_activity(
+                    db=phien_db,
+                    request=request,
+                    user=nguoi_dung,
+                    status="failed",
+                    reason="Tài khoản và thiết bị tạm thời bị khóa trong 15 phút do nhập sai 5 lần liên tiếp"
+                )
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Tài khoản tạm thời bị khóa trong 15 phút do nhập sai nhiều lần."
+                    detail="Tài khoản tạm thời bị khóa trong 15 phút do nhập sai nhiều lần. Thiết bị này cũng đã bị tạm khóa 15 phút để bảo vệ thông tin."
                 )
 
+            # Tính số lần còn lại để báo cho người dùng
+            so_lan_con_lai = settings.MAX_FAILED_LOGIN_ATTEMPTS - nguoi_dung.failed_login_attempts
             phien_db.commit()
+            log_login_activity(
+                db=phien_db,
+                request=request,
+                user=nguoi_dung,
+                status="failed",
+                reason=f"Mật khẩu không chính xác (sai {nguoi_dung.failed_login_attempts}/{settings.MAX_FAILED_LOGIN_ATTEMPTS} lần, còn {so_lan_con_lai} lần)"
+            )
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Tên đăng nhập hoặc mật khẩu không chính xác."
+                detail=f"Tên đăng nhập hoặc mật khẩu không chính xác. Bạn còn {so_lan_con_lai} lần thử trước khi tài khoản và thiết bị bị tạm khóa 15 phút."
             )
 
-        # 4. Đăng nhập thành công -> Reset trạng thái sai mật khẩu
+        # 4. Đăng nhập thành công -> Reset trạng thái sai mật khẩu của tài khoản và thiết bị
         nguoi_dung.failed_login_attempts = 0
         nguoi_dung.locked_until = None
+        nguoi_dung.lock_reason = None
+        reset_thiet_bi(phien_db, request)
         phien_db.commit()
         phien_db.refresh(nguoi_dung)
+
+        # Ghi nhật ký đăng nhập thành công
+        try:
+            log_login_activity(
+                db=phien_db,
+                request=request,
+                user=nguoi_dung,
+                status="success"
+            )
+        except Exception:
+            pass
 
         # 5. Tạo JWT Access Token
         tai_trong_token = {
@@ -112,7 +207,31 @@ def dang_nhap(
             user=UserResponse.model_validate(nguoi_dung)
         )
 
-    # Nếu tài khoản không tồn tại, trả về thông báo chung tránh enumeration attack
+    # Nếu tài khoản không tồn tại, ghi nhận thất bại cho thiết bị và trả về 401
+    _, da_khoa_thiet_bi = ghi_nhan_that_bai_thiet_bi(
+        phien_db,
+        request,
+        max_attempts=settings.MAX_FAILED_LOGIN_ATTEMPTS,
+        lock_minutes=settings.ACCOUNT_LOCK_MINUTES
+    )
+    try:
+        log_login_activity(
+            db=phien_db,
+            request=request,
+            user=None,
+            status="failed",
+            reason="Tài khoản không tồn tại trong hệ thống",
+            username_attempt=dinh_danh
+        )
+    except Exception:
+        pass
+
+    if da_khoa_thiet_bi:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Thiết bị này đã bị tạm khóa 15 phút do nhập sai thông tin quá 5 lần để tránh bị lộ thông tin."
+        )
+
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Tên đăng nhập hoặc mật khẩu không chính xác."
@@ -168,12 +287,24 @@ def doi_mat_khau(
     summary="Đăng xuất & Vô hiệu hóa phiên lập tức phía máy chủ (SCRUM-199)"
 )
 def dang_xuat(
+    request: Request,
     nguoi_dung_hien_tai: User = Depends(lay_nguoi_dung_hien_tai),
     phien_db: Session = Depends(lay_phien_db)
 ):
     """Đăng xuất an toàn: Tăng token_version để vô hiệu hóa token hiện tại phía server ngay lập tức."""
     nguoi_dung_hien_tai.token_version += 1
     phien_db.commit()
+
+    # Ghi nhận nhật ký thao tác đăng xuất chi tiết kèm thiết bị và thời gian
+    try:
+        log_logout_activity(
+            db=phien_db,
+            request=request,
+            user=nguoi_dung_hien_tai,
+        )
+    except Exception:
+        pass
+
     return MessageResponse(message="Đăng xuất thành công. Phiên đăng nhập đã bị vô hiệu hóa phía máy chủ.")
 
 

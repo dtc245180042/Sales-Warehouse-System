@@ -159,7 +159,7 @@ def get_customer_lock_history(customer_id: str, db: Session) -> List[CustomerLoc
     customer = get_customer_or_404(customer_id, db)
     records = db.query(CustomerLockHistory).filter(
         CustomerLockHistory.customer_id == customer.id
-    ).order_by(CustomerLockHistory.created_at.desc()).all()
+    ).order_by(CustomerLockHistory.id.desc()).all()
 
     return [
         CustomerLockHistoryItem(

@@ -9,18 +9,21 @@ import {
   Banknote,
   QrCode,
   Printer,
-  CheckCircle2,
   ShoppingCart,
   User,
   X,
   Sparkles,
+  TrendingDown,
+  Layers,
+  Info,
+  Package,
   ArrowRight,
   ShieldAlert,
   Lock,
 } from 'lucide-react';
 import { Button } from '../../components/common/Button';
 import { Modal } from '../../components/common/Modal';
-import { Badge } from '../../components/common/Badge';
+import { CurrencyInput } from '../../components/common/CurrencyInput';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import { productService } from '../../services/productService';
 import { orderService } from '../../services/orderService';
@@ -31,10 +34,16 @@ import { OrderItem, PaymentMethod } from '../../types/Order';
 import { productCategories } from '../../mock/products';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
+import { VOLUME_DISCOUNT_TIERS, getVolumeDiscountInfo } from '../agents/AgentOrderCreate';
+import { VolumeDiscountPolicyModal } from '../../components/sales/VolumeDiscountPolicyModal';
 
 interface CartItem extends OrderItem {
   image: string;
   stock: number;
+  discountPct: number;
+  discountAmt: number;
+  neededForNext: number;
+  nextTierPct: number;
 }
 
 export const POS: React.FC = () => {
@@ -50,10 +59,13 @@ export const POS: React.FC = () => {
 
   // Cart
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [discount, setDiscount] = useState<number>(0);
+  const [manualDiscount, setManualDiscount] = useState<number>(0);
   const [taxRate, setTaxRate] = useState<number>(0); // 0% or 8% or 10%
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
   const [cashGiven, setCashGiven] = useState<number>(0);
+
+  // Modal Bậc chiết khấu
+  const [showTierModal, setShowTierModal] = useState(false);
 
   // Completed order receipt modal
   const [completedOrder, setCompletedOrder] = useState<any | null>(null);
@@ -77,6 +89,30 @@ export const POS: React.FC = () => {
     });
   }, [products, categoryFilter, search]);
 
+  // Helper tính dòng giỏ hàng kèm chiết khấu theo số lượng (SCRUM-486)
+  const buildCartItem = (product: Product, quantity: number): CartItem => {
+    const { discountPct, nextTier, neededForNext } = getVolumeDiscountInfo(quantity);
+    const rawTotal = product.salePrice * quantity;
+    const discountAmt = Math.round((rawTotal * discountPct) / 100);
+    const subtotal = rawTotal - discountAmt;
+
+    return {
+      productId: product.id,
+      sku: product.sku,
+      name: product.name,
+      price: product.salePrice,
+      quantity,
+      discount: discountAmt,
+      discountPct,
+      discountAmt,
+      subtotal,
+      image: product.image,
+      stock: product.stock,
+      neededForNext,
+      nextTierPct: nextTier ? nextTier.discountPct : discountPct,
+    };
+  };
+
   const selectedCustomer = useMemo(() => {
     return customers.find((c) => c.id === selectedCustomerId);
   }, [customers, selectedCustomerId]);
@@ -96,35 +132,20 @@ export const POS: React.FC = () => {
           showToast(`Chỉ còn ${product.stock} sản phẩm khả dụng trong kho`, 'warning');
           return prev;
         }
+        const newQty = existing.quantity + 1;
         return prev.map((item) =>
-          item.productId === product.id
-            ? {
-                ...item,
-                quantity: item.quantity + 1,
-                subtotal: (item.quantity + 1) * item.price,
-              }
-            : item
+          item.productId === product.id ? buildCartItem(product, newQty) : item
         );
       } else {
-        return [
-          ...prev,
-          {
-            productId: product.id,
-            sku: product.sku,
-            name: product.name,
-            price: product.salePrice,
-            quantity: 1,
-            discount: 0,
-            subtotal: product.salePrice,
-            image: product.image,
-            stock: product.stock,
-          },
-        ];
+        return [...prev, buildCartItem(product, 1)];
       }
     });
   };
 
   const handleUpdateQty = (productId: string, delta: number) => {
+    const product = products.find((p) => p.id === productId);
+    if (!product) return;
+
     setCart((prev) =>
       prev
         .map((item) => {
@@ -134,11 +155,8 @@ export const POS: React.FC = () => {
               showToast(`Đã đạt giới hạn tồn kho (${item.stock})`, 'warning');
               return item;
             }
-            return {
-              ...item,
-              quantity: newQty,
-              subtotal: newQty * item.price,
-            };
+            if (newQty <= 0) return { ...item, quantity: 0 };
+            return buildCartItem(product, newQty);
           }
           return item;
         })
@@ -161,10 +179,13 @@ export const POS: React.FC = () => {
     }
   };
 
-  // Calculations
-  const subtotal = cart.reduce((sum, item) => sum + item.subtotal, 0);
-  const taxAmount = Math.round((subtotal - discount) * (taxRate / 100));
-  const total = Math.max(0, subtotal - discount + taxAmount);
+  // Calculations theo thời gian thực (SCRUM-480 + SCRUM-486)
+  const rawSubtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const volumeDiscountTotal = cart.reduce((sum, item) => sum + item.discountAmt, 0);
+  const afterVolumeDiscount = rawSubtotal - volumeDiscountTotal;
+  const totalDiscount = volumeDiscountTotal + (manualDiscount || 0);
+  const taxAmount = Math.round(Math.max(0, afterVolumeDiscount - manualDiscount) * (taxRate / 100));
+  const total = Math.max(0, afterVolumeDiscount - manualDiscount + taxAmount);
   const changeAmount = Math.max(0, (cashGiven || 0) - total);
 
   // Set default cash given to exact total whenever total changes if cashGiven was 0
@@ -197,9 +218,9 @@ export const POS: React.FC = () => {
         customerId: customer?.id || 'CUS-010',
         customerName: customer?.name || 'Khách Lẻ Tại Quầy',
         customerPhone: customer?.phone || '0900000000',
-        items: cart.map(({ image, stock, ...rest }) => rest),
-        subtotal,
-        discount,
+        items: cart.map(({ image, stock, discountPct, discountAmt, neededForNext, nextTierPct, ...rest }) => rest),
+        subtotal: rawSubtotal,
+        discount: totalDiscount,
         tax: taxAmount,
         total,
         paidAmount: paymentMethod === 'cash' ? cashGiven : total,
@@ -209,20 +230,21 @@ export const POS: React.FC = () => {
         status: 'completed',
         staffId: user?.id || 'USR-003',
         staffName: user?.name || 'Thu Ngân',
-        note: 'Đơn hàng POS bán tại quầy',
+        note: `Đơn hàng POS bán tại quầy${volumeDiscountTotal > 0 ? ` (Chiết khấu SL: ${formatCurrency(volumeDiscountTotal)})` : ''}`,
       });
 
-      // Update local product stock
-      const updatedProducts = await productService.getAll();
-      setProducts(updatedProducts);
-
-      setCompletedOrder(newOrder);
+      setCompletedOrder({
+        ...newOrder,
+        volumeDiscountTotal,
+        items: [...cart],
+      });
       setIsReceiptModalOpen(true);
       setCart([]);
-      setDiscount(0);
+      setManualDiscount(0);
       showToast(`Thanh toán thành công! Mã đơn: ${newOrder.code}`, 'success');
-    } catch (err: any) {
-      showToast(err.message || 'Lỗi thanh toán đơn hàng', 'error');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Lỗi thanh toán đơn hàng';
+      showToast(msg, 'error');
     } finally {
       setIsPaying(false);
     }
@@ -259,6 +281,17 @@ export const POS: React.FC = () => {
               className="w-full pl-9 pr-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs sm:text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
             />
           </form>
+
+          {/* Nút xem chính sách chiết khấu số lượng */}
+          <button
+            type="button"
+            onClick={() => setShowTierModal(true)}
+            className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-indigo-600 bg-indigo-50 dark:bg-indigo-950/40 rounded-xl hover:bg-indigo-100 transition shrink-0"
+            title="Xem chính sách chiết khấu số lượng"
+          >
+            <Layers className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Bậc CK</span>
+          </button>
         </div>
 
         {/* Category Pills */}
@@ -296,45 +329,50 @@ export const POS: React.FC = () => {
               <div
                 key={p.id}
                 onClick={() => !isOutOfStock && addToCart(p)}
-                className={`group relative p-3 rounded-2xl border transition-all flex flex-col justify-between select-none ${
+                className={`group relative p-3 rounded-2xl border transition-all flex flex-col justify-between select-none aspect-square ${
                   isOutOfStock
                     ? 'border-slate-200 dark:border-slate-800 opacity-50 cursor-not-allowed bg-slate-50 dark:bg-slate-900/50'
                     : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-850 hover:border-indigo-500 hover:shadow-md cursor-pointer active:scale-95'
                 }`}
               >
-                <div>
-                  <div className="relative aspect-square w-full rounded-xl overflow-hidden mb-2 bg-slate-100 dark:bg-slate-800">
-                    <img
-                      src={p.image}
-                      alt={p.name}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                    />
-                    <div className="absolute top-1.5 right-1.5">
-                      <span
-                        className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md backdrop-blur-md ${
-                          p.stock <= 0
-                            ? 'bg-rose-500/90 text-white'
-                            : p.stock <= p.minStock
-                            ? 'bg-amber-500/90 text-white'
-                            : 'bg-slate-900/80 text-white'
-                        }`}
-                      >
-                        Tồn: {p.stock}
-                      </span>
-                    </div>
-                  </div>
+                {/* Phần trên: Tên sản phẩm & SKU */}
+                <div className="min-w-0">
                   <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 line-clamp-2 leading-snug">
                     {p.name}
                   </h4>
-                  <span className="text-[10px] text-slate-400 block mt-0.5">{p.sku}</span>
+                  <span className="text-[10px] text-slate-400 block mt-1 font-mono truncate">
+                    {p.sku}
+                  </span>
                 </div>
 
-                <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
-                  <span className="text-xs font-extrabold text-indigo-600 dark:text-indigo-400">
-                    {formatCurrency(p.salePrice)}
-                  </span>
-                  <div className="w-6 h-6 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center group-hover:bg-indigo-600 group-hover:text-white transition-colors">
-                    <Plus className="w-3.5 h-3.5" />
+                {/* Phần dưới: Tồn kho & CK số lượng, kèm Giá & Nút thêm */}
+                <div className="space-y-2 mt-auto">
+                  {/* Badges: Tồn kho & Chiết khấu số lượng */}
+                  <div className="flex items-center justify-between gap-1 flex-wrap">
+                    <span
+                      className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${
+                        p.stock <= 0
+                          ? 'bg-rose-500 text-white'
+                          : p.stock <= p.minStock
+                          ? 'bg-amber-500 text-white'
+                          : 'bg-slate-800 text-white dark:bg-slate-700'
+                      }`}
+                    >
+                      Tồn: {p.stock}
+                    </span>
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-indigo-50 text-indigo-600 dark:bg-indigo-950/60 dark:text-indigo-400">
+                      CK SL đến 15%
+                    </span>
+                  </div>
+
+                  {/* Giá bán & Nút thêm */}
+                  <div className="pt-2 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
+                    <span className="text-xs font-extrabold text-indigo-600 dark:text-indigo-400 truncate">
+                      {formatCurrency(p.salePrice)}
+                    </span>
+                    <div className="w-6 h-6 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center group-hover:bg-indigo-600 group-hover:text-white transition-colors shrink-0">
+                      <Plus className="w-3.5 h-3.5" />
+                    </div>
                   </div>
                 </div>
               </div>
@@ -352,7 +390,7 @@ export const POS: React.FC = () => {
             <select
               value={selectedCustomerId}
               onChange={(e) => setSelectedCustomerId(e.target.value)}
-              className="bg-transparent border-none text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-200 focus:outline-none cursor-pointer flex-1 truncate"
+              className="flex-1 bg-transparent border-0 text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-200 focus:outline-none cursor-pointer"
             >
               {customers.map((c) => (
                 <option key={c.id} value={c.id}>
@@ -366,7 +404,7 @@ export const POS: React.FC = () => {
           </span>
         </div>
 
-        {/* Banner cảnh báo đại lý bị khoá trên POS (SC-228 Subtask 6 & 8) */}
+        {/* Banner cảnh báo đại lý bị khoá trên POS (SC-228) */}
         {isCustomerLocked && (
           <div
             id="pos-customer-locked-alert"
@@ -384,60 +422,101 @@ export const POS: React.FC = () => {
           </div>
         )}
 
-        {/* Cart Items List */}
+        {/* Cart Items List với chiết khấu dự kiến theo số lượng (SCRUM-486) */}
         <div className="flex-1 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800 p-2">
           {cart.length > 0 ? (
             cart.map((item) => (
               <div
                 key={item.productId}
-                className="p-2.5 flex items-center justify-between gap-3 hover:bg-slate-50 dark:hover:bg-slate-800/40 rounded-xl transition-colors"
+                className="p-2.5 flex flex-col gap-1.5 hover:bg-slate-50 dark:hover:bg-slate-800/40 rounded-xl transition-colors"
               >
-                <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                  <img
-                    src={item.image}
-                    alt={item.name}
-                    className="w-10 h-10 rounded-lg object-cover shrink-0 bg-slate-100"
-                  />
-                  <div className="truncate">
-                    <p className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate">
-                      {item.name}
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                    {item.image ? (
+                      <img
+                        src={item.image}
+                        alt={item.name}
+                        className="w-10 h-10 rounded-lg object-cover shrink-0 bg-slate-100"
+                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                      />
+                    ) : (
+                      <div className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
+                        <Package className="w-4 h-4" />
+                      </div>
+                    )}
+                    <div className="truncate flex-1">
+                      <p className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate">
+                        {item.name}
+                      </p>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {item.discountPct > 0 ? (
+                          <>
+                            <span className="text-[10px] line-through text-slate-400">
+                              {formatCurrency(item.price)}
+                            </span>
+                            <span className="text-[11px] font-bold text-slate-900 dark:text-white">
+                              {formatCurrency(Math.round(item.price * (1 - item.discountPct / 100)))}
+                            </span>
+                            <span className="inline-flex items-center text-[9px] font-bold px-1 py-0.2 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
+                              CK {item.discountPct}%
+                            </span>
+                          </>
+                        ) : (
+                          <span className="text-[11px] font-semibold text-slate-700 dark:text-slate-300">
+                            {formatCurrency(item.price)}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Quantity Controls */}
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      onClick={() => handleUpdateQty(item.productId, -1)}
+                      className="w-6 h-6 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center justify-center hover:bg-slate-200"
+                    >
+                      <Minus className="w-3 h-3" />
+                    </button>
+                    <span className="w-6 text-center text-xs font-bold text-slate-900 dark:text-white">
+                      {item.quantity}
+                    </span>
+                    <button
+                      onClick={() => handleUpdateQty(item.productId, 1)}
+                      className="w-6 h-6 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center justify-center hover:bg-slate-200"
+                    >
+                      <Plus className="w-3 h-3" />
+                    </button>
+                  </div>
+
+                  <div className="text-right shrink-0 min-w-[70px]">
+                    <p className="text-xs font-bold text-slate-900 dark:text-white">
+                      {formatCurrency(item.subtotal)}
                     </p>
-                    <p className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400">
-                      {formatCurrency(item.price)}
-                    </p>
+                    <button
+                      onClick={() => handleUpdateQty(item.productId, -item.quantity)}
+                      className="text-[10px] text-slate-400 hover:text-rose-500"
+                    >
+                      Xóa
+                    </button>
                   </div>
                 </div>
 
-                {/* Quantity Controls */}
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <button
-                    onClick={() => handleUpdateQty(item.productId, -1)}
-                    className="w-6 h-6 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center justify-center hover:bg-slate-200"
-                  >
-                    <Minus className="w-3 h-3" />
-                  </button>
-                  <span className="w-6 text-center text-xs font-bold text-slate-900 dark:text-white">
-                    {item.quantity}
-                  </span>
-                  <button
-                    onClick={() => handleUpdateQty(item.productId, 1)}
-                    className="w-6 h-6 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center justify-center hover:bg-slate-200"
-                  >
-                    <Plus className="w-3 h-3" />
-                  </button>
-                </div>
-
-                <div className="text-right shrink-0 min-w-[70px]">
-                  <p className="text-xs font-bold text-slate-900 dark:text-white">
-                    {formatCurrency(item.subtotal)}
-                  </p>
-                  <button
-                    onClick={() => handleUpdateQty(item.productId, -item.quantity)}
-                    className="text-[10px] text-slate-400 hover:text-rose-500"
-                  >
-                    Xóa
-                  </button>
-                </div>
+                {/* Gợi ý bậc chiết khấu tiếp theo (SCRUM-486) */}
+                {item.neededForNext > 0 && item.nextTierPct > item.discountPct && (
+                  <div className="text-[10px] text-indigo-600 dark:text-indigo-400 bg-indigo-50/70 dark:bg-indigo-950/30 px-2 py-0.5 rounded-md flex items-center justify-between">
+                    <span>
+                      Thêm <strong>{item.neededForNext} sp</strong> để hưởng mức <strong>CK {item.nextTierPct}%</strong>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleUpdateQty(item.productId, item.neededForNext)}
+                      className="font-bold underline hover:no-underline"
+                    >
+                      +{item.neededForNext}
+                    </button>
+                  </div>
+                )}
               </div>
             ))
           ) : (
@@ -451,18 +530,36 @@ export const POS: React.FC = () => {
           )}
         </div>
 
-        {/* Payment Summary Footer */}
-        <div className="border-t border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-850 p-4 space-y-3">
-          {/* Discount & Tax Row */}
+        {/* Payment Summary Footer với chiết khấu số lượng thời gian thực (SCRUM-480) */}
+        <div className="border-t border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-850 p-4 space-y-2.5">
+          {/* Discount details */}
+          <div className="space-y-1 text-xs">
+            <div className="flex justify-between text-slate-500 dark:text-slate-400">
+              <span>Tạm tính (giá gốc):</span>
+              <span className="font-semibold text-slate-700 dark:text-slate-300">{formatCurrency(rawSubtotal)}</span>
+            </div>
+
+            {volumeDiscountTotal > 0 && (
+              <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-semibold">
+                <span className="flex items-center gap-1">
+                  <TrendingDown className="w-3 h-3" />
+                  Chiết khấu theo số lượng:
+                </span>
+                <span>-{formatCurrency(volumeDiscountTotal)}</span>
+              </div>
+            )}
+          </div>
+
+          {/* Manual Discount & Tax Row */}
           <div className="grid grid-cols-2 gap-2 text-xs">
             <div>
-              <span className="text-slate-500 dark:text-slate-400">Giảm giá (VNĐ):</span>
+              <span className="text-slate-500 dark:text-slate-400">Giảm giá thêm (VNĐ):</span>
               <input
                 type="number"
                 min={0}
                 step={10000}
-                value={discount || ''}
-                onChange={(e) => setDiscount(Number(e.target.value))}
+                value={manualDiscount || ''}
+                onChange={(e) => setManualDiscount(Number(e.target.value))}
                 placeholder="0"
                 className="w-full mt-1 px-2.5 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs focus:ring-1 focus:ring-indigo-500"
               />
@@ -483,8 +580,8 @@ export const POS: React.FC = () => {
 
           {/* Payment Method Selector */}
           <div>
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1.5">
-              Phương thức thanh toán
+            <span className="text-xs text-slate-500 dark:text-slate-400 block mb-1">
+              Phương thức thanh toán:
             </span>
             <div className="grid grid-cols-3 gap-2">
               <button
@@ -531,11 +628,11 @@ export const POS: React.FC = () => {
             <div className="space-y-1.5 pt-1 text-xs">
               <div className="flex items-center justify-between">
                 <span className="text-slate-500">Khách đưa (VNĐ):</span>
-                <input
-                  type="number"
-                  value={cashGiven || ''}
-                  onChange={(e) => setCashGiven(Number(e.target.value))}
-                  className="w-32 px-2 py-1 text-right bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg font-bold text-slate-900 dark:text-white"
+                <CurrencyInput
+                  value={cashGiven}
+                  onChange={(val) => setCashGiven(val)}
+                  placeholder="0"
+                  className="w-36 px-2.5 py-1 text-right bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
                 />
               </div>
               <div className="flex items-center justify-between">
@@ -573,6 +670,28 @@ export const POS: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Modal Bậc Chiết Khấu Số Lượng (SCRUM-486 / SCRUM-487) */}
+      <VolumeDiscountPolicyModal
+        isOpen={showTierModal}
+        onClose={() => setShowTierModal(false)}
+        onPolicyUpdated={() => {
+          setCart((prev) =>
+            prev.map((it) => {
+              const { discountPct, nextTier, neededForNext } = getVolumeDiscountInfo(it.quantity);
+              const discountAmt = Math.round((it.price * it.quantity * discountPct) / 100);
+              return {
+                ...it,
+                discountPct,
+                discountAmt,
+                subtotal: it.price * it.quantity - discountAmt,
+                neededForNext,
+                nextTierPct: nextTier ? nextTier.discountPct : discountPct,
+              };
+            })
+          );
+        }}
+      />
 
       {/* POS Receipt Modal after Checkout */}
       {completedOrder && (
@@ -632,6 +751,7 @@ export const POS: React.FC = () => {
                     <p className="font-semibold">{it.name}</p>
                     <p className="text-[10px] text-slate-500">
                       {it.quantity} x {formatCurrency(it.price)}
+                      {it.discountAmt > 0 && ` (-${formatCurrency(it.discountAmt)})`}
                     </p>
                   </div>
                   <span className="font-bold shrink-0">{formatCurrency(it.subtotal)}</span>
@@ -647,7 +767,7 @@ export const POS: React.FC = () => {
               </div>
               {completedOrder.discount > 0 && (
                 <div className="flex justify-between text-rose-600">
-                  <span>Giảm giá:</span>
+                  <span>Tổng giảm giá:</span>
                   <span>-{formatCurrency(completedOrder.discount)}</span>
                 </div>
               )}
@@ -689,3 +809,5 @@ export const POS: React.FC = () => {
     </div>
   );
 };
+
+export default POS;

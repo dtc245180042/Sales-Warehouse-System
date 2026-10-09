@@ -16,6 +16,12 @@ import {
   Wifi,
   ChevronDown,
   Loader2,
+  Laptop,
+  Smartphone,
+  Tablet,
+  LogIn,
+  LogOut,
+  ShieldAlert,
 } from 'lucide-react';
 import { Badge } from '../../components/common/Badge';
 import {
@@ -158,6 +164,22 @@ const ModuleBadge: React.FC<ModuleBadgeProps> = ({ module }) => {
   );
 };
 
+interface DeviceIconProps {
+  device?: string;
+  className?: string;
+}
+
+const DeviceIcon: React.FC<DeviceIconProps> = ({ device, className = 'w-3.5 h-3.5' }) => {
+  const d = (device || '').toLowerCase();
+  if (d.includes('điện thoại') || d.includes('mobile') || d.includes('iphone') || d.includes('android')) {
+    return <Smartphone className={`${className} text-indigo-500 shrink-0`} />;
+  }
+  if (d.includes('máy tính bảng') || d.includes('tablet') || d.includes('ipad')) {
+    return <Tablet className={`${className} text-indigo-500 shrink-0`} />;
+  }
+  return <Laptop className={`${className} text-indigo-500 shrink-0`} />;
+};
+
 interface DetailDrawerProps {
   log: ActivityLog | null;
   onClose: () => void;
@@ -167,11 +189,26 @@ const DetailDrawer: React.FC<DetailDrawerProps> = ({ log, onClose }) => {
   if (!log) return null;
 
   const formatDateTime = (ts: string) => {
+    if (log?.metadata?.['Thời điểm đăng nhập']) {
+      return String(log.metadata['Thời điểm đăng nhập']);
+    }
+    if (log?.metadata?.['Thời điểm đăng xuất']) {
+      return String(log.metadata['Thời điểm đăng xuất']);
+    }
+    if (!ts) return '';
     const d = new Date(ts);
-    return d.toLocaleString('vi-VN', {
-      day: '2-digit', month: '2-digit', year: 'numeric',
-      hour: '2-digit', minute: '2-digit', second: '2-digit',
+    if (isNaN(d.getTime())) return ts;
+    const time = d.toLocaleTimeString('vi-VN', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
     });
+    const date = d.toLocaleDateString('vi-VN', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    });
+    return `${time} ngày ${date}`;
   };
 
   return (
@@ -225,6 +262,11 @@ const DetailDrawer: React.FC<DetailDrawerProps> = ({ log, onClose }) => {
           {/* Fields */}
           <div className="space-y-3">
             <DrawerField icon={<Clock className="w-4 h-4" />} label="Thời gian" value={formatDateTime(log.timestamp)} />
+            <DrawerField
+              icon={<DeviceIcon device={log.device} className="w-4 h-4" />}
+              label="Thiết bị thao tác"
+              value={log.device || 'Trình duyệt Web'}
+            />
             <DrawerField icon={<Wifi className="w-4 h-4" />} label="Địa chỉ IP" value={log.ipAddress} mono />
             <DrawerField icon={<History className="w-4 h-4" />} label="Đối tượng tác động" value={log.target} />
           </div>
@@ -414,8 +456,21 @@ const ActivityLogPage: React.FC = () => {
     setCurrentPage(1);
   };
 
-  const formatDateTime = (ts: string) => {
+  const formatDateTime = (ts: string, logItem?: ActivityLog) => {
+    if (logItem?.metadata?.['Thời điểm đăng nhập']) {
+      const parts = String(logItem.metadata['Thời điểm đăng nhập']).split(' ngày ');
+      if (parts.length === 2) {
+        return { time: parts[0], date: parts[1] };
+      }
+    }
+    if (logItem?.metadata?.['Thời điểm đăng xuất']) {
+      const parts = String(logItem.metadata['Thời điểm đăng xuất']).split(' ngày ');
+      if (parts.length === 2) {
+        return { time: parts[0], date: parts[1] };
+      }
+    }
     const d = new Date(ts);
+    if (isNaN(d.getTime())) return { date: ts, time: '' };
     return {
       date: d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }),
       time: d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
@@ -508,7 +563,7 @@ const ActivityLogPage: React.FC = () => {
           </div>
 
           {/* Quick status filter pills */}
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 flex-wrap">
             {(['', 'success', 'failed', 'warning'] as const).map((s) => (
               <button
                 key={s || 'all'}
@@ -520,9 +575,30 @@ const ActivityLogPage: React.FC = () => {
                     : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700'
                 }`}
               >
-                {s === '' ? 'Tất cả' : s === 'success' ? '✓ Thành công' : s === 'failed' ? '✗ Thất bại' : '⚠ Cảnh báo'}
+                {s === '' ? 'Tất cả trạng thái' : s === 'success' ? '✓ Thành công' : s === 'failed' ? '✗ Thất bại' : '⚠ Cảnh báo'}
               </button>
             ))}
+
+            {/* Quick Auth Filter (Đăng nhập / Đăng xuất) */}
+            <button
+              id="filter-quick-auth"
+              onClick={() => {
+                if (filterModule === 'AUTH') {
+                  setFilterModule('');
+                } else {
+                  setFilterModule('AUTH');
+                }
+                setCurrentPage(1);
+              }}
+              className={`px-3 py-2 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                filterModule === 'AUTH'
+                  ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/25'
+                  : 'text-indigo-600 dark:text-indigo-400 bg-indigo-50/60 dark:bg-indigo-950/40 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 border border-indigo-200 dark:border-indigo-800'
+              }`}
+            >
+              <LogIn className="w-3.5 h-3.5" />
+              Đăng nhập / Đăng xuất
+            </button>
           </div>
 
           {/* Advanced filter toggle */}
@@ -687,7 +763,7 @@ const ActivityLogPage: React.FC = () => {
                 <th className="px-4 py-3.5 whitespace-nowrap">Hành động</th>
                 <th className="px-4 py-3.5 whitespace-nowrap">Module</th>
                 <th className="px-4 py-3.5 whitespace-nowrap">Đối tượng / Mô tả</th>
-                <th className="px-4 py-3.5 whitespace-nowrap">IP</th>
+                <th className="px-4 py-3.5 whitespace-nowrap">Thiết bị & IP</th>
                 <th className="px-4 py-3.5 whitespace-nowrap">Kết quả</th>
               </tr>
             </thead>
@@ -720,7 +796,8 @@ const ActivityLogPage: React.FC = () => {
                       <div className="h-3 bg-slate-100 dark:bg-slate-800 rounded w-56" />
                     </td>
                     <td className="px-4 py-3.5 whitespace-nowrap">
-                      <div className="h-3.5 bg-slate-200 dark:bg-slate-700 rounded w-20" />
+                      <div className="h-3.5 bg-slate-200 dark:bg-slate-700 rounded w-24 mb-1" />
+                      <div className="h-3 bg-slate-100 dark:bg-slate-800 rounded w-16" />
                     </td>
                     <td className="px-4 py-3.5 whitespace-nowrap">
                       <div className="h-5 bg-slate-200 dark:bg-slate-700 rounded-full w-20" />
@@ -729,7 +806,7 @@ const ActivityLogPage: React.FC = () => {
                 ))
               ) : logs.length > 0 ? (
                 logs.map((log) => {
-                  const { date, time } = formatDateTime(log.timestamp);
+                  const { date, time } = formatDateTime(log.timestamp, log);
                   return (
                     <tr
                       key={log.id}
@@ -781,9 +858,15 @@ const ActivityLogPage: React.FC = () => {
                         </p>
                       </td>
 
-                      {/* IP */}
-                      <td className="px-4 py-3.5 whitespace-nowrap font-mono text-xs text-slate-500 dark:text-slate-400">
-                        {log.ipAddress}
+                      {/* Device & IP */}
+                      <td className="px-4 py-3.5 whitespace-nowrap">
+                        <div className="flex items-center gap-1.5 text-xs text-slate-700 dark:text-slate-300 font-medium">
+                          <DeviceIcon device={log.device} />
+                          <span className="max-w-[150px] truncate" title={log.device || 'Trình duyệt Web'}>
+                            {log.device || 'Trình duyệt Web'}
+                          </span>
+                        </div>
+                        <p className="font-mono text-[11px] text-slate-400 mt-0.5 pl-5">{log.ipAddress}</p>
                       </td>
 
                       {/* Status */}

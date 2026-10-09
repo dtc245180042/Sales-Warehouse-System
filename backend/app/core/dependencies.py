@@ -69,6 +69,35 @@ def lay_nguoi_dung_hien_tai(
     return nguoi_dung
 
 
+def lay_nguoi_dung_tuy_chon(
+    chung_thuc_bearer: HTTPAuthorizationCredentials | None = Depends(co_che_bearer),
+    phien_db: Session = Depends(lay_phien_db)
+) -> User | None:
+    """Xác thực người dùng tùy chọn (Optional Auth).
+    Nếu có token hợp lệ: trả về đối tượng User.
+    Nếu không có token hoặc token hết hạn: trả về None thay vì quăng lỗi 401.
+    Giúp giao diện luôn tải được danh mục sản phẩm từ CSDL mà không bị màn hình trắng/dữ liệu rỗng.
+    """
+    if not chung_thuc_bearer or not chung_thuc_bearer.credentials:
+        return None
+    try:
+        chuoi_token = chung_thuc_bearer.credentials
+        tai_trong = giai_ma_token_truy_cap(chuoi_token)
+        if not tai_trong:
+            return None
+        id_nguoi_dung_tho = tai_trong.get("user_id") or tai_trong.get("sub")
+        phien_ban_token = tai_trong.get("token_version")
+        if id_nguoi_dung_tho is None or phien_ban_token is None:
+            return None
+        id_nguoi_dung = int(id_nguoi_dung_tho)
+        nguoi_dung = phien_db.query(User).filter(User.id == id_nguoi_dung).first()
+        if not nguoi_dung or not nguoi_dung.is_active or nguoi_dung.token_version != phien_ban_token:
+            return None
+        return nguoi_dung
+    except Exception:
+        return None
+
+
 def yeu_cau_vai_tro(*cac_vai_tro_cho_phep: str | UserRole) -> Callable[[User], User]:
     """Dependency factory tạo Guard kiểm tra vai trò người dùng (SCRUM-310).
     

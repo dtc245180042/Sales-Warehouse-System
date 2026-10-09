@@ -19,13 +19,14 @@ router = APIRouter(prefix="/profile", tags=["Hồ sơ cá nhân (SCRUM-210)"])
     summary="Lấy thông tin hồ sơ của người dùng hiện tại (SCRUM-357 / SCRUM-210)"
 )
 def lay_ho_so_ca_nhan(
-    nguoi_dung_hien_tai: User = Depends(lay_nguoi_dung_hien_tai)
+    nguoi_dung_hien_tai: User = Depends(lay_nguoi_dung_hien_tai),
+    phien_db: Session = Depends(lay_phien_db)
 ):
     """Lấy thông tin hồ sơ cá nhân của tài khoản đang đăng nhập qua Bearer Token:
     - Trả về họ tên, số điện thoại, tài khoản, email, vai trò, kho và địa bàn được phân công.
     - Bảo mật tuyệt đối: Chỉ xem được thông tin của chính mình.
     """
-    return ProfileService.get_profile(nguoi_dung_hien_tai)
+    return ProfileService.get_profile(nguoi_dung_hien_tai, phien_db)
 
 
 @router.put(

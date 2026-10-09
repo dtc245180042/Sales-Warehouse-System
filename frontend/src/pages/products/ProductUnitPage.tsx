@@ -16,6 +16,7 @@ import {
   CheckCircle2,
   AlertCircle,
   Search,
+  Package,
 } from 'lucide-react';
 import { PageContainer } from '../../components/layout/PageContainer';
 import { Button } from '../../components/common/Button';
@@ -23,6 +24,7 @@ import { Badge } from '../../components/common/Badge';
 import { Modal } from '../../components/common/Modal';
 import { Loading } from '../../components/common/Loading';
 import { EmptyState } from '../../components/common/EmptyState';
+import { CurrencyInput } from '../../components/common/CurrencyInput';
 import { productService } from '../../services/productService';
 import { unitConfigService } from '../../mock/unitConversions';
 import { Product, ProductUnitConfig, UnitConversion } from '../../types/Product';
@@ -474,14 +476,13 @@ const UnitForm: React.FC<UnitFormProps> = ({ initial, baseUnitName, onSave, onCa
         <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5" htmlFor="unit-form-price">
           Giá bán theo đơn vị này (tùy chọn)
         </label>
-        <input
+        <CurrencyInput
           id="unit-form-price"
-          type="number"
-          min="0"
-          placeholder="Để trống nếu dùng giá bán gốc"
-          value={form.salePrice ?? ''}
-          onChange={(e) => setForm({ ...form, salePrice: e.target.value ? Number(e.target.value) : undefined })}
-          className="w-full text-sm bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-xl px-3.5 py-2.5 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition text-slate-900 dark:text-white"
+          placeholder="Để trống nếu dùng giá bán gốc (VD: 1.000.000)"
+          value={form.salePrice ?? null}
+          onChange={(val) => setForm((prev) => ({ ...prev, salePrice: val > 0 ? val : undefined }))}
+          suffix="VNĐ"
+          className="w-full text-sm bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-xl px-3.5 py-2.5 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition text-slate-900 dark:text-white font-medium"
         />
       </div>
 
@@ -530,27 +531,21 @@ interface ProductRowProps {
 const ProductRow: React.FC<ProductRowProps> = ({ product, hasConfig, isSelected, onSelect }) => (
   <button
     onClick={() => onSelect(product)}
-    className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors rounded-xl ${
+    className={`w-full flex items-center justify-between gap-3 px-3.5 py-2.5 text-left transition-colors rounded-xl ${
       isSelected
-        ? 'bg-indigo-600 text-white'
+        ? 'bg-indigo-600 text-white shadow-sm'
         : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'
     }`}
   >
-    <img
-      src={product.image}
-      alt={product.name}
-      className="w-9 h-9 rounded-lg object-cover shrink-0 border border-slate-200 dark:border-slate-700"
-      onError={(e) => { e.currentTarget.src = '/images/product-placeholder.jpg'; }}
-    />
     <div className="flex-1 min-w-0">
-      <p className={`text-xs font-bold truncate ${isSelected ? 'text-white' : 'text-slate-900 dark:text-white'}`}>
+      <p className={`text-xs font-semibold truncate ${isSelected ? 'text-white' : 'text-slate-900 dark:text-white'}`}>
         {product.name}
       </p>
-      <p className={`text-[10px] truncate ${isSelected ? 'text-indigo-200' : 'text-slate-400'}`}>
-        {product.sku} · {product.unit}
+      <p className={`text-[11px] truncate mt-0.5 ${isSelected ? 'text-indigo-200' : 'text-slate-400'}`}>
+        <span className="font-mono">{product.sku}</span> · <span>{product.unit}</span>
       </p>
     </div>
-    <div className="flex items-center gap-1.5 shrink-0">
+    <div className="flex items-center gap-1.5 shrink-0 ml-2">
       {hasConfig && (
         <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
           isSelected ? 'bg-indigo-500 text-white' : 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400'
@@ -785,16 +780,13 @@ export const ProductUnitPage: React.FC = () => {
             <div className="space-y-6">
               {/* Product Header */}
               <div className="flex items-center gap-4 p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-sm">
-                <img
-                  src={selectedProduct.image}
-                  alt={selectedProduct.name}
-                  className="w-14 h-14 rounded-xl object-cover border border-slate-200 dark:border-slate-700"
-                  onError={(e) => { e.currentTarget.src = '/images/product-placeholder.jpg'; }}
-                />
+                <div className="w-12 h-12 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/50 flex items-center justify-center text-indigo-600 dark:text-indigo-400 shrink-0">
+                  <Package className="w-6 h-6" />
+                </div>
                 <div className="flex-1 min-w-0">
                   <h3 className="font-bold text-slate-900 dark:text-white truncate">{selectedProduct.name}</h3>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    SKU: <strong>{selectedProduct.sku}</strong> · Đơn vị mặc định: <strong>{selectedProduct.unit}</strong>
+                    SKU: <strong className="font-mono">{selectedProduct.sku}</strong> · Đơn vị mặc định: <strong>{selectedProduct.unit}</strong>
                   </p>
                 </div>
                 <Badge

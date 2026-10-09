@@ -28,7 +28,7 @@ import { Badge } from '../../components/common/Badge';
 import { Modal } from '../../components/common/Modal';
 import { ConfirmDialog } from '../../components/common/ConfirmDialog';
 import { userService } from '../../services/userService';
-import { authService } from '../../services/authService';
+import { authService, mapBackendRoleNameToFrontend } from '../../services/authService';
 import { TerritorySelector } from '../../components/common/TerritorySelector';
 import { User, UserRole, UserStatus, UserCanDeleteResponse } from '../../types/User';
 import { useToast } from '../../contexts/ToastContext';
@@ -146,13 +146,15 @@ export const UserManagement: React.FC = () => {
   const handleOpenEdit = (u: User) => {
     setEditingUser(u);
     setPhoneError(null);
-    const assignedRoles = u.roles && u.roles.length > 0 ? u.roles : [u.role];
+    const rawRoles = u.roles && u.roles.length > 0 ? u.roles : [u.role];
+    const assignedRoles = Array.from(new Set(rawRoles.map((r: any) => mapBackendRoleNameToFrontend(r))));
+    const primaryRole = assignedRoles[0] || u.role;
     setFormData({
       name: u.name,
       email: u.email,
       phone: u.phone || '',
       department: u.department || '',
-      role: u.role,
+      role: primaryRole,
       roles: assignedRoles,
       warehouse: u.warehouse || '',
       territory: u.territory || '',

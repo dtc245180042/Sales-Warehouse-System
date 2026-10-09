@@ -3,7 +3,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Mail, Lock, Eye, EyeOff, LogIn, Warehouse, Shield, CheckCircle, AlertTriangle } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, LogIn, Warehouse, Shield, CheckCircle, AlertTriangle, ShieldAlert } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { Button } from '../../components/common/Button';
@@ -24,6 +24,7 @@ export const Login: React.FC = () => {
   const location = useLocation();
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [loginError, setLoginError] = useState<string | null>(null);
   const isExpired = new URLSearchParams(location.search).get('expired') === '1';
 
   const {
@@ -41,13 +42,19 @@ export const Login: React.FC = () => {
 
   const onSubmit = async (data: LoginFormData) => {
     setIsLoading(true);
+    setLoginError(null);
     try {
       const user = await login(data.email, data.password, data.rememberMe);
       showToast(`Chào mừng ${user.name} đã quay trở lại hệ thống!`, 'success', 'Đăng nhập thành công');
       const targetPath = getHomePathForRole(user.role);
       navigate(targetPath);
     } catch (error: any) {
-      showToast(error.message || 'Email hoặc mật khẩu không chính xác', 'error', 'Đăng nhập thất bại');
+      const errorMsg =
+        error.response?.data?.detail ||
+        error.message ||
+        'Tên đăng nhập hoặc mật khẩu không chính xác';
+      setLoginError(errorMsg);
+      showToast(errorMsg, 'error', 'Đăng nhập thất bại');
     } finally {
       setIsLoading(false);
     }
@@ -70,6 +77,30 @@ export const Login: React.FC = () => {
           <div className="text-xs sm:text-sm">
             <span className="font-semibold block mb-0.5">Phiên làm việc đã hết hạn</span>
             Phiên đăng nhập đã tự động kết thúc do không có tương tác để bảo đảm an toàn. Vui lòng đăng nhập lại.
+          </div>
+        </div>
+      )}
+
+      {loginError && (
+        <div
+          className={`mb-6 p-4 rounded-2xl border flex items-start gap-3 transition-all animate-shake ${
+            loginError.toLowerCase().includes('khóa')
+              ? 'bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-200'
+              : 'bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200'
+          }`}
+        >
+          {loginError.toLowerCase().includes('khóa') ? (
+            <ShieldAlert className="w-5 h-5 shrink-0 text-rose-500 mt-0.5" />
+          ) : (
+            <AlertTriangle className="w-5 h-5 shrink-0 text-amber-500 mt-0.5" />
+          )}
+          <div className="text-xs sm:text-sm">
+            <span className="font-semibold block mb-0.5">
+              {loginError.toLowerCase().includes('khóa')
+                ? 'Tài khoản hoặc thiết bị bị tạm khóa 15 phút'
+                : 'Thông báo đăng nhập'}
+            </span>
+            {loginError}
           </div>
         </div>
       )}

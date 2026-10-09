@@ -126,6 +126,11 @@ class CustomerResponse(CustomerBase):
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
+    assigned_staff_id: Optional[str] = None
+    assigned_staff_name: Optional[str] = None
+    assigned_staff_phone: Optional[str] = None
+    assigned_at: Optional[str] = None
+
     model_config = ConfigDict(from_attributes=True)
 
     @computed_field
@@ -152,6 +157,22 @@ class CustomerResponse(CustomerBase):
     def customerGroup(self) -> str:
         return self.customer_group
 
+    @computed_field
+    def assignedStaffId(self) -> Optional[str]:
+        return self.assigned_staff_id
+
+    @computed_field
+    def assignedStaffName(self) -> Optional[str]:
+        return self.assigned_staff_name
+
+    @computed_field
+    def assignedStaffPhone(self) -> Optional[str]:
+        return self.assigned_staff_phone
+
+    @computed_field
+    def assignedAt(self) -> Optional[str]:
+        return self.assigned_at
+
 
 class CustomerPaginationResponse(BaseModel):
     """Schema danh sách đại lý phân trang theo chuẩn SCRUM-229."""
@@ -168,3 +189,4 @@ class CustomerFilterOptions(BaseModel):
     customer_groups: List[str]
     sales_reps: List[str]
     statuses: List[str]
+

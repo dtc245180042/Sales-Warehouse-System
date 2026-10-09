@@ -51,14 +51,19 @@ export const OrderDetail: React.FC = () => {
     loadOrder();
   }, [id]);
 
+  const [statusError, setStatusError] = useState<string | null>(null);
+
   const handleUpdateStatus = async (nextStatus: OrderStatus) => {
     if (!order) return;
+    setStatusError(null);
     try {
       const updated = await orderService.updateStatus(order.id, nextStatus);
       setOrder(updated);
       showToast(`Đã chuyển trạng thái đơn hàng sang "${nextStatus}"`, 'success');
-    } catch {
-      showToast('Lỗi cập nhật trạng thái', 'error');
+    } catch (err: any) {
+      const msg = err?.response?.data?.detail || err?.message || 'Lỗi cập nhật trạng thái';
+      setStatusError(msg);
+      showToast(msg, 'error', 'Cảnh Báo Chặn Xuất Kho', 7000);
     }
   };
 
@@ -176,6 +181,19 @@ export const OrderDetail: React.FC = () => {
             })}
           </div>
 
+          {/* Cảnh báo lỗi chặn xuất kho do vi phạm công nợ */}
+          {statusError && (
+            <div className="mt-4 p-4 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-300 dark:border-rose-800 flex items-start gap-3 text-rose-700 dark:text-rose-300 text-sm">
+              <AlertCircle className="w-5 h-5 shrink-0 text-rose-600 mt-0.5" />
+              <div className="flex-1">
+                <div className="font-bold text-rose-800 dark:text-rose-200">
+                  Hệ thống chặn xuất kho!
+                </div>
+                <div className="mt-0.5 font-medium">{statusError}</div>
+              </div>
+            </div>
+          )}
+
           {/* Quick status change buttons */}
           <div className="flex items-center justify-center gap-3 mt-6 pt-4 border-t border-slate-100 dark:border-slate-800">
             {order.status === 'pending' && (
@@ -193,7 +211,7 @@ export const OrderDetail: React.FC = () => {
                 size="sm"
                 onClick={() => handleUpdateStatus('shipping')}
               >
-                Bắt đầu giao hàng
+                Điều phối / Phê duyệt xuất kho
               </Button>
             )}
             {order.status === 'shipping' && (
@@ -286,23 +304,33 @@ export const OrderDetail: React.FC = () => {
             </div>
           </div>
 
-          {/* Customer info */}
+          {/* Customer & Delivery point info */}
           <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-card space-y-3">
             <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
               <User className="w-4 h-4 text-indigo-500" />
-              Thông Tin Khách Hàng
+              Thông Tin Khách Hàng & Điểm Giao Hàng
             </h3>
             <div>
               <p className="text-sm font-bold text-slate-900 dark:text-white">{order.customerName}</p>
-              <div className="mt-2 space-y-1 text-xs text-slate-500 dark:text-slate-400">
+              <div className="mt-2 space-y-1.5 text-xs text-slate-500 dark:text-slate-400">
                 <p className="flex items-center gap-2">
                   <Phone className="w-3.5 h-3.5 text-slate-400" />
                   <span>{order.customerPhone}</span>
                 </p>
                 <p className="flex items-start gap-2">
                   <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
-                  <span>{order.customerAddress || 'Nhận tại quầy'}</span>
+                  <span>{order.deliveryAddress || order.customerAddress || 'Nhận tại quầy'}</span>
                 </p>
+                {order.deliveryReceiverName && (
+                  <p className="text-indigo-600 dark:text-indigo-400 font-semibold pt-1">
+                    Người nhận tại kho: {order.deliveryReceiverName} {order.deliveryPhone ? `(${order.deliveryPhone})` : ''}
+                  </p>
+                )}
+                {order.deliveryNotes && (
+                  <p className="text-amber-600 dark:text-amber-400 text-[11px] bg-amber-50 dark:bg-amber-950/30 p-2 rounded-lg">
+                    Chỉ dẫn: {order.deliveryNotes}
+                  </p>
+                )}
               </div>
             </div>
           </div>

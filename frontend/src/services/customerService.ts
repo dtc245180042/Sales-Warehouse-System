@@ -1,4 +1,12 @@
-import { Customer, CustomerFilterParams, CustomerPaginatedResponse, CustomerFilterOptions } from '../types/Customer';
+import {
+  Customer,
+  CustomerFilterParams,
+  CustomerPaginatedResponse,
+  CustomerFilterOptions,
+  SalesRep,
+  CustomerAssignmentBrief,
+  CustomerAssignmentHistory
+} from '../types/Customer';
 import { initialCustomers } from '../mock/customers';
 import { getStorageItem, setStorageItem } from './storage';
 import { apiClient } from '../api/client';
@@ -15,6 +23,8 @@ function mapApiCustomer(c: any): Customer {
     address: c.address || '',
     customer_group: c.customer_group || c.customerGroup || 'RETAIL',
     customerGroup: c.customer_group || c.customerGroup || 'RETAIL',
+    tax_code: c.tax_code || c.taxCode || '',
+    taxCode: c.tax_code || c.taxCode || '',
     region: c.region || '',
     assigned_sales_rep: c.assigned_sales_rep || c.assignedSalesRep || '',
     assignedSalesRep: c.assigned_sales_rep || c.assignedSalesRep || '',
@@ -23,6 +33,10 @@ function mapApiCustomer(c: any): Customer {
     lastOrderDate: c.lastOrderDate || c.last_order_date || undefined,
     createdAt: c.createdAt || (c.created_at ? c.created_at.split('T')[0] : new Date().toISOString().split('T')[0]),
     status: c.status || 'active',
+    assignedStaffId: c.assignedStaffId || (c.assigned_staff_id ? String(c.assigned_staff_id) : undefined),
+    assignedStaffName: c.assignedStaffName || c.assigned_staff_name || undefined,
+    assignedStaffPhone: c.assignedStaffPhone || c.assigned_staff_phone || undefined,
+    assignedAt: c.assignedAt || c.assigned_at || undefined,
   };
 }
 
@@ -107,12 +121,16 @@ export const customerService = {
     };
   },
 
-  getAll: async (): Promise<Customer[]> => {
+  getAll: async (params?: { assigned_staff_id?: string; region?: string; customer_group?: string; search?: string; status?: string }): Promise<Customer[]> => {
     try {
-      const res = await apiClient.get('/customers');
-      if (Array.isArray(res.data) && res.data.length > 0) {
+      const res = await apiClient.get('/customers', { params });
+      if (Array.isArray(res.data)) {
         const list = res.data.map(mapApiCustomer);
         setStorageItem(STORAGE_KEY, list);
+        return list;
+      }
+      if (res.data && Array.isArray(res.data.items)) {
+        const list = res.data.items.map(mapApiCustomer);
         return list;
       }
     } catch (err) {
@@ -170,13 +188,14 @@ export const customerService = {
     } catch (err) {
       console.warn('[customerService] Backend error, fallback to local update:', err);
       const customers = getStorageItem<Customer[]>(STORAGE_KEY, initialCustomers);
-      const index = customers.findIndex((c) => c.id === id);
-      if (index === -1) throw new Error('Không tìm thấy khách hàng');
-
-      const updatedCustomer = { ...customers[index], ...data };
-      customers[index] = updatedCustomer;
-      setStorageItem(STORAGE_KEY, [...customers]);
-      return updatedCustomer;
+      const idx = customers.findIndex((c) => c.id === id);
+      if (idx !== -1) {
+        const updated = { ...customers[idx], ...data };
+        customers[idx] = updated;
+        setStorageItem(STORAGE_KEY, [...customers]);
+        return updated;
+      }
+      throw new Error('Customer not found');
     }
   },
 
@@ -190,5 +209,86 @@ export const customerService = {
     const filtered = customers.filter((c) => c.id !== id);
     setStorageItem(STORAGE_KEY, filtered);
     return true;
+  },
+
+  getSalesReps: async (): Promise<SalesRep[]> => {
+    try {
+      const res = await apiClient.get('/sales-reps');
+      if (Array.isArray(res.data)) {
+        return res.data.map((r: any) => ({
+          id: String(r.id),
+          username: r.username,
+          fullName: r.fullName || r.full_name || r.username,
+          email: r.email,
+          phoneNumber: r.phoneNumber || r.phone_number,
+          isActive: r.isActive ?? r.is_active ?? true,
+          assignedCustomerCount: Number(r.assignedCustomerCount ?? r.assigned_customer_count ?? 0),
+        }));
+      }
+    } catch (err) {
+      console.warn('[customerService] Error fetching sales-reps:', err);
+    }
+    return [];
+  },
+
+  assignCustomer: async (customerId: string, assignedStaffId: string, reason: string): Promise<CustomerAssignmentBrief> => {
+    const res = await apiClient.post(`/customers/${encodeURIComponent(customerId)}/assign`, {
+      assigned_staff_id: assignedStaffId,
+      reason,
+    });
+    return res.data;
+  },
+
+  unassignCustomer: async (customerId: string, reason: string): Promise<CustomerAssignmentBrief> => {
+    const res = await apiClient.post(`/customers/${encodeURIComponent(customerId)}/unassign`, {
+      reason,
+    });
+    return res.data;
+  },
+
+  bulkTransfer: async (payload: {
+    from_staff_id: string;
+    to_staff_id: string;
+    transfer_all: boolean;
+    customer_ids: string[];
+    reason: string;
+  }): Promise<any> => {
+    const res = await apiClient.post('/customers/assignments/bulk-transfer', payload);
+    return res.data;
+  },
+
+  getAssignmentHistory: async (customerId: string): Promise<CustomerAssignmentHistory[]> => {
+    try {
+      const res = await apiClient.get(`/customers/${encodeURIComponent(customerId)}/assignment-history`);
+      if (Array.isArray(res.data)) {
+        return res.data.map((h: any) => ({
+          id: h.id,
+          batchId: h.batchId || h.batch_id,
+          customerId: h.customerId || h.customer_id,
+          customerName: h.customerName || h.customer_name,
+          fromStaffId: h.fromStaffId || h.from_staff_id,
+          fromStaffName: h.fromStaffName || h.from_staff_name,
+          toStaffId: h.toStaffId || h.to_staff_id,
+          toStaffName: h.toStaffName || h.to_staff_name,
+          actionType: h.actionType || h.action_type,
+          reason: h.reason,
+          performedBy: h.performedBy || h.performed_by,
+          createdAt: h.createdAt || h.created_at,
+        }));
+      }
+    } catch (err) {
+      console.warn('[customerService] Error fetching assignment history:', err);
+    }
+    return [];
+  },
+
+  getAssignment: async (customerId: string): Promise<CustomerAssignmentBrief | null> => {
+    try {
+      const res = await apiClient.get(`/customers/${encodeURIComponent(customerId)}/assignment`);
+      return res.data;
+    } catch (err) {
+      console.warn('[customerService] Error fetching assignment:', err);
+      return null;
+    }
   }
 };

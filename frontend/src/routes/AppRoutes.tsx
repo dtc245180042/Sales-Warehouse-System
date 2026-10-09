@@ -23,13 +23,13 @@ import { Profile } from '../pages/profile/Profile';
 import { PriceListManagement } from '../pages/sales/PriceListManagement';
 import { CategoryManagement } from '../pages/categories/CategoryManagement';
 
+// Customer & Partner Management Pages
+import { CustomerList } from '../pages/customers/CustomerList';
+import { CustomerDetail } from '../pages/customers/CustomerDetail';
+
 // Supplier Management Pages (SCRUM-217)
 import { SupplierList } from '../pages/suppliers/SupplierList';
 import { SupplierDetail } from '../pages/suppliers/SupplierDetail';
-
-// Customer & Agent Management Pages (SCRUM-224, SCRUM-229)
-import { CustomerList } from '../pages/customers/CustomerList';
-import { CustomerDetail } from '../pages/customers/CustomerDetail';
 
 // Sprint 2 Pages - Activity Log (SCRUM-212)
 import ActivityLogPage from '../pages/activitylog/ActivityLogPage';
@@ -170,6 +170,24 @@ export const AppRoutes: React.FC = () => {
           }
         />
 
+        {/* Quản lý Đại lý & Khách hàng */}
+        <Route
+          path="/customers"
+          element={
+            <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
+              <CustomerList />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/customers/:id"
+          element={
+            <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
+              <CustomerDetail />
+            </ProtectedRoute>
+          }
+        />
+
         {/* Quản lý Nhà cung cấp (SCRUM-217) */}
         <Route
           path="/suppliers"
@@ -184,24 +202,6 @@ export const AppRoutes: React.FC = () => {
           element={
             <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
               <SupplierDetail />
-            </ProtectedRoute>
-          }
-        />
-
-        {/* Quản lý Khách hàng & Đại lý (SCRUM-224, SCRUM-229) */}
-        <Route
-          path="/customers"
-          element={
-            <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
-              <CustomerList />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/customers/:id"
-          element={
-            <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
-              <CustomerDetail />
             </ProtectedRoute>
           }
         />

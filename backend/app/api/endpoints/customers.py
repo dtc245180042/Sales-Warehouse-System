@@ -2,8 +2,8 @@ from typing import List, Optional, Union
 from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.orm import Session
 from app.core.database import lay_phien_db
+from app.core.dependencies import lay_nguoi_dung_tuy_chon
 from app.models.auth import User
-from app.core.dependencies import lay_nguoi_dung_hien_tai, lay_nguoi_dung_tuy_chon
 from app.schemas.customer import (
     CustomerCreate,
     CustomerUpdate,
@@ -33,6 +33,7 @@ def get_customers(
     response: Response,
     search: Optional[str] = Query(None, description="Tìm nhanh theo mã, tên, MST hoặc số điện thoại"),
     customer_group: Optional[str] = Query(None, description="Lọc theo nhóm: TIER_1, TIER_2, WHOLESALE, VIP, RETAIL"),
+    assigned_staff_id: Optional[str] = Query(None, description="Lọc theo nhân viên phụ trách hoặc 'unassigned'"),
     region: Optional[str] = Query(None, description="Lọc theo khu vực: Miền Bắc, Miền Trung, Miền Nam, Tây Nguyên"),
     assigned_sales_rep: Optional[str] = Query(None, description="Lọc theo người phụ trách"),
     status: Optional[str] = Query(None, description="Lọc theo trạng thái: active, inactive, locked"),
@@ -42,8 +43,8 @@ def get_customers(
     db: Session = Depends(lay_phien_db),
 ):
     """
-    Lấy danh sách khách hàng và đại lý (SCRUM-229):
-    - Tìm kiếm nhanh theo mã đại lý, tên hoặc số điện thoại.
+    Lấy danh sách khách hàng và đại lý (SCRUM-229 & S3-03/S3-06):
+    - Tìm kiếm nhanh theo mã đại lý, tên, MST hoặc số điện thoại.
     - Lọc theo khu vực địa bàn, nhóm khách hàng, nhân viên kinh doanh phụ trách, trạng thái.
     - Phân quyền phạm vi phụ trách cho Sales Rep.
     - Hỗ trợ phân trang khi truyền tham số `page` và `page_size`.
@@ -52,6 +53,7 @@ def get_customers(
         db=db,
         search=search,
         customer_group=customer_group,
+        assigned_staff_id=assigned_staff_id,
         region=region,
         assigned_sales_rep=assigned_sales_rep,
         status=status,
@@ -72,11 +74,14 @@ def get_customer_detail(
     current_user: Optional[User] = Depends(lay_nguoi_dung_tuy_chon),
     db: Session = Depends(lay_phien_db),
 ):
-    """Lấy thông tin chi tiết một đại lý/khách hàng."""
+    """
+    Lấy thông tin chi tiết một khách hàng / đại lý.
+    - Sales Rep truy cập đại lý ngoài phạm vi phụ trách: trả 404 (chống IDOR).
+    """
     return customer_service.get_customer_by_id(
         db=db,
         customer_id=customer_id,
-        current_user=current_user
+        current_user=current_user,
     )
 
 
@@ -90,7 +95,7 @@ def get_customer_applied_price_list(
     return customer_service.get_applied_price_list_for_customer(
         db=db,
         customer_id=customer_id,
-        current_user=current_user
+        current_user=current_user,
     )
 
 
@@ -101,11 +106,15 @@ def create_customer(
     current_user: Optional[User] = Depends(lay_nguoi_dung_tuy_chon),
     db: Session = Depends(lay_phien_db),
 ):
-    """Thêm mới một đại lý hoặc khách hàng (Tự động khởi tạo hồ sơ công nợ và phân công)."""
+    """
+    Thêm mới một khách hàng hoặc đại lý.
+    - Tự động khởi tạo hồ sơ công nợ và phân công.
+    - Nếu Sales Rep tạo: Tự động gán cho chính họ trong cùng transaction.
+    """
     return customer_service.create_customer(
         db=db,
         customer_in=customer_in,
-        current_user=current_user
+        current_user=current_user,
     )
 
 
@@ -116,12 +125,12 @@ def update_customer(
     current_user: Optional[User] = Depends(lay_nguoi_dung_tuy_chon),
     db: Session = Depends(lay_phien_db),
 ):
-    """Cập nhật thông tin hồ sơ đại lý."""
+    """Cập nhật thông tin khách hàng / đại lý."""
     return customer_service.update_customer(
         db=db,
         customer_id=customer_id,
         customer_in=customer_in,
-        current_user=current_user
+        current_user=current_user,
     )
 
 
@@ -137,7 +146,7 @@ def update_customer_status(
         db=db,
         customer_id=customer_id,
         status_in=status_in,
-        current_user=current_user
+        current_user=current_user,
     )
 
 
@@ -151,6 +160,6 @@ def delete_customer(
     customer_service.delete_customer(
         db=db,
         customer_id=customer_id,
-        current_user=current_user
+        current_user=current_user,
     )
     return {"message": f"Đã xóa đại lý '{customer_id}' thành công."}

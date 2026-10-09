@@ -1,3 +1,4 @@
+import uuid
 from datetime import datetime, timezone
 from sqlalchemy import (
     Column,
@@ -14,7 +15,7 @@ class Customer(Base):
     """Bảng quản lý khách hàng & đại lý (Additive Model)."""
     __tablename__ = "customers"
 
-    id = Column(String(50), primary_key=True, index=True)
+    id = Column(String(50), primary_key=True, index=True, default=lambda: f"CUS-{uuid.uuid4().hex[:8].upper()}")
     code = Column(String(50), unique=True, nullable=False, index=True)
     name = Column(String(255), nullable=False, index=True)
     phone = Column(String(50), nullable=True, index=True)
@@ -23,13 +24,10 @@ class Customer(Base):
     
     # Nhóm khách hàng (TIER_1, TIER_2, WHOLESALE, VIP, RETAIL)
     customer_group = Column(String(50), default="RETAIL", nullable=False, index=True)
-    
-    # Khu vực địa bàn (SCRUM-229: Miền Bắc, Miền Trung, Miền Nam, Tây Nguyên...)
+    # Mã số thuế & Khu vực (S3-03) & Người phụ trách (S3-08)
+    tax_code = Column(String(50), unique=True, nullable=True, index=True)
     region = Column(String(100), nullable=True, index=True)
-
-    # Người phụ trách (SCRUM-229: Tên hoặc username của NVKD phụ trách)
     assigned_sales_rep = Column(String(100), nullable=True, index=True)
-
     total_orders = Column(Integer, default=0, nullable=False)
     total_spent = Column(Float, default=0.0, nullable=False)
     last_order_date = Column(String(50), nullable=True)
@@ -56,6 +54,8 @@ try:
         _res = _conn.execute(text("PRAGMA table_info(customers)")).fetchall()
         _cols = [r[1] for r in _res]
         if _cols:
+            if "tax_code" not in _cols:
+                _conn.execute(text("ALTER TABLE customers ADD COLUMN tax_code VARCHAR(50)"))
             if "region" not in _cols:
                 _conn.execute(text("ALTER TABLE customers ADD COLUMN region VARCHAR(100)"))
             if "assigned_sales_rep" not in _cols:

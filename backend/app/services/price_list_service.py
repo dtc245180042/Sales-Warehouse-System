@@ -1138,7 +1138,27 @@ def update_price_list_item(
     if data.floor_price is not None:
         item.floor_price = data.floor_price
     if data.sale_price is not None:
-        item.sale_price = data.sale_price
+        new_sale = data.sale_price
+        if int(item.sale_price) != int(new_sale):
+            from app.services.price_history_service import record_price_change
+            from app.models.product_price_history import PriceTypeEnum
+            reason = getattr(data, "reason", None) or getattr(data, "note", None) or f"Cập nhật giá bán theo bảng giá '{price_list.name}'"
+            record_price_change(
+                db=db,
+                product_id=str(item.product_id),
+                product_sku=item.product_sku,
+                product_name=item.product_name,
+                price_type=PriceTypeEnum.SALE_PRICE,
+                old_price=int(item.sale_price),
+                new_price=int(new_sale),
+                reason=reason,
+                effective_from=price_list.valid_from or datetime.now(timezone.utc),
+                changed_by=user,
+                price_list_id=price_list.id,
+                price_list_name=price_list.name,
+                customer_group=price_list.customer_group
+            )
+        item.sale_price = new_sale
     if data.note is not None:
         item.note = data.note
 

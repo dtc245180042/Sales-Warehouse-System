@@ -1,3 +1,4 @@
+import uuid
 from datetime import datetime, timezone
 from sqlalchemy import (
     Column,
@@ -14,7 +15,7 @@ class Customer(Base):
     """Bảng quản lý khách hàng & đại lý (Additive Model)."""
     __tablename__ = "customers"
 
-    id = Column(String(50), primary_key=True, index=True)
+    id = Column(String(50), primary_key=True, index=True, default=lambda: f"CUS-{uuid.uuid4().hex[:8].upper()}")
     code = Column(String(50), unique=True, nullable=False, index=True)
     name = Column(String(255), nullable=False, index=True)
     phone = Column(String(50), nullable=True, index=True)
@@ -23,6 +24,10 @@ class Customer(Base):
     
     # Nhóm khách hàng (TIER_1, TIER_2, WHOLESALE, VIP, RETAIL)
     customer_group = Column(String(50), default="RETAIL", nullable=False, index=True)
+    
+    # Mã số thuế & Khu vực (S3-03)
+    tax_code = Column(String(50), unique=True, nullable=True, index=True)
+    region = Column(String(100), nullable=True, index=True)
     
     total_orders = Column(Integer, default=0, nullable=False)
     total_spent = Column(Float, default=0.0, nullable=False)

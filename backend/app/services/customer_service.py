@@ -1,13 +1,25 @@
-from typing import List, Optional, Dict, Any
+import re
+import uuid
+from typing import List, Optional, Tuple, Dict, Any
 from datetime import datetime, timezone
 from sqlalchemy.orm import Session
-from sqlalchemy import or_
+from sqlalchemy import func, or_
+from sqlalchemy.exc import IntegrityError
 from fastapi import HTTPException, status
+
 from app.models.customer import Customer
+from app.models.order import Order
 from app.models.auth import User, UserRole
 from app.models.customer_assignment import CustomerAssignment, CustomerAssignmentHistory
-from app.schemas.customer import CustomerCreate, CustomerUpdate, CustomerResponse
-from app.services.audit_service import log_activity
+from app.models.customer_credit_profile import CustomerCreditProfile
+from app.models.price_list import PriceList
+from app.models.audit_log import AuditLog
+from app.schemas.customer import (
+    CustomerCreate,
+    CustomerUpdate,
+    CustomerResponse,
+    CustomerStatusUpdate,
+)
 
 SEED_CUSTOMERS = [
     {
@@ -18,9 +30,8 @@ SEED_CUSTOMERS = [
         "email": "cuong.nguyen@gmail.com",
         "address": "128 Đường Lê Lợi, Phường Bến Nghé, Quận 1, TP. HCM",
         "customer_group": "RETAIL",
-        "total_orders": 18,
-        "total_spent": 145800000.0,
-        "last_order_date": "2026-09-28",
+        "tax_code": None,
+        "region": "Miền Nam",
         "status": "active"
     },
     {
@@ -31,9 +42,8 @@ SEED_CUSTOMERS = [
         "email": "phuong.tran@vietcombank.com.vn",
         "address": "45 Phố Tràng Tiền, Quận Hoàn Kiếm, Hà Nội",
         "customer_group": "VIP",
-        "total_orders": 12,
-        "total_spent": 98500000.0,
-        "last_order_date": "2026-09-25",
+        "tax_code": None,
+        "region": "Miền Bắc",
         "status": "active"
     },
     {
@@ -44,9 +54,8 @@ SEED_CUSTOMERS = [
         "email": "procurement@f-soft.vn",
         "address": "Tòa nhà FPT, Khu Công nghệ cao, TP. Thủ Đức, TP. HCM",
         "customer_group": "TIER_1",
-        "total_orders": 34,
-        "total_spent": 420000000.0,
-        "last_order_date": "2026-10-01",
+        "tax_code": "0301234567",
+        "region": "Miền Nam",
         "status": "active"
     },
     {
@@ -57,9 +66,8 @@ SEED_CUSTOMERS = [
         "email": "customer@warehouse.local",
         "address": "88 Đường 3/2, Quận 10, TP. HCM",
         "customer_group": "TIER_1",
-        "total_orders": 25,
-        "total_spent": 310000000.0,
-        "last_order_date": "2026-09-30",
+        "tax_code": "0307890123",
+        "region": "Miền Nam",
         "status": "active"
     },
     {
@@ -70,9 +78,8 @@ SEED_CUSTOMERS = [
         "email": "order@techzone.vn",
         "address": "12 Nguyễn Văn Linh, Quận Hải Châu, Đà Nẵng",
         "customer_group": "TIER_2",
-        "total_orders": 16,
-        "total_spent": 195000000.0,
-        "last_order_date": "2026-09-22",
+        "tax_code": "0401122334",
+        "region": "Miền Trung",
         "status": "active"
     }
 ]
@@ -81,25 +88,107 @@ SEED_CUSTOMERS = [
 def ensure_seed_customers(db: Session):
     if db.query(Customer).count() == 0:
         for c in SEED_CUSTOMERS:
-            db.add(Customer(**c))
+            cust = Customer(**c)
+            db.add(cust)
+            db.flush()
+            # Khởi tạo hồ sơ công nợ mặc định
+            if not db.query(CustomerCreditProfile).filter(CustomerCreditProfile.customer_id == cust.id).first():
+                db.add(CustomerCreditProfile(customer_id=cust.id, credit_limit=0, max_debt_days=0, current_debt=0))
+            # Khởi tạo hồ sơ phân công mặc định
+            if not db.query(CustomerAssignment).filter(CustomerAssignment.customer_id == cust.id).first():
+                db.add(CustomerAssignment(customer_id=cust.id))
         db.commit()
 
 
-def enrich_customer_with_assignment(db: Session, customer: Customer) -> CustomerResponse:
-    """Gắn kèm thông tin nhân viên phụ trách cho đại lý."""
-    resp = CustomerResponse.model_validate(customer)
-    assignment = db.query(CustomerAssignment).filter(
-        CustomerAssignment.customer_id == customer.id
-    ).first()
+def _get_dynamic_customer_stats(db: Session, customer_id: str) -> Tuple[int, float, Optional[str]]:
+    """Tính toán động số đơn và tổng tiền từ bảng orders thật (không tin cậy cột lưu cứng)."""
+    orders_count = db.query(func.count(Order.id)).filter(Order.customer_id == customer_id).scalar() or 0
+    total_spent = db.query(func.coalesce(func.sum(Order.total), 0.0)).filter(
+        Order.customer_id == customer_id,
+        Order.status != "cancelled"
+    ).scalar() or 0.0
+    
+    last_order = db.query(Order).filter(Order.customer_id == customer_id).order_by(Order.created_at.desc()).first()
+    last_order_date = last_order.created_at.strftime("%Y-%m-%d") if last_order and last_order.created_at else None
+    
+    return int(orders_count), float(total_spent), last_order_date
+
+
+def _enrich_customer_response(db: Session, customer: Customer) -> CustomerResponse:
+    """Bổ sung dữ liệu người phụ trách, hạn mức công nợ và số liệu đơn hàng động."""
+    orders_count, total_spent, last_order_date = _get_dynamic_customer_stats(db, customer.id)
+    
+    # Đọc người phụ trách từ bảng phụ customer_assignments
+    assigned_staff_id = None
+    assigned_staff_name = None
+    assigned_staff_phone = None
+    assigned_at = None
+    assignment = db.query(CustomerAssignment).filter(CustomerAssignment.customer_id == customer.id).first()
     if assignment and assignment.assigned_staff_id:
-        staff = db.query(User).filter(User.id == assignment.assigned_staff_id).first()
-        resp.assigned_staff_id = str(assignment.assigned_staff_id)
-        if staff:
-            resp.assigned_staff_name = staff.full_name or staff.username
-            resp.assigned_staff_phone = staff.phone_number
+        assigned_staff_id = str(assignment.assigned_staff_id)
+        if assignment.staff:
+            assigned_staff_name = assignment.staff.full_name or assignment.staff.username
+            assigned_staff_phone = assignment.staff.phone_number
+        else:
+            staff = db.query(User).filter(User.id == assignment.assigned_staff_id).first()
+            if staff:
+                assigned_staff_name = staff.full_name or staff.username
+                assigned_staff_phone = staff.phone_number
         if assignment.assigned_at:
-            resp.assigned_at = assignment.assigned_at.strftime("%Y-%m-%d %H:%M:%S")
-    return resp
+            assigned_at = assignment.assigned_at.strftime("%Y-%m-%d %H:%M:%S")
+
+    # Đọc hạn mức công nợ từ bảng phụ customer_credit_profiles
+    credit_limit = None
+    max_debt_days = None
+    current_debt = None
+    credit_profile = db.query(CustomerCreditProfile).filter(CustomerCreditProfile.customer_id == customer.id).first()
+    if credit_profile:
+        credit_limit = credit_profile.credit_limit
+        max_debt_days = credit_profile.max_debt_days
+        current_debt = credit_profile.current_debt
+
+    return CustomerResponse(
+        id=customer.id,
+        code=customer.code,
+        name=customer.name,
+        phone=customer.phone,
+        email=customer.email,
+        address=customer.address,
+        customer_group=customer.customer_group,
+        tax_code=customer.tax_code,
+        region=customer.region,
+        status=customer.status,
+        total_orders=orders_count,
+        total_spent=total_spent,
+        last_order_date=last_order_date,
+        assigned_staff_id=assigned_staff_id,
+        assigned_staff_name=assigned_staff_name,
+        assigned_staff_phone=assigned_staff_phone,
+        assigned_at=assigned_at,
+        credit_limit=credit_limit,
+        max_debt_days=max_debt_days,
+        current_debt=current_debt,
+        created_at=customer.created_at,
+        updated_at=customer.updated_at
+    )
+
+
+# Alias để tương thích cả hai nhánh
+enrich_customer_with_assignment = _enrich_customer_response
+
+
+def check_sales_rep_scope(db: Session, customer_id: str, current_user: Optional[User]):
+    """Guard kiểm tra phạm vi phụ trách: Sales Rep truy cập ngoài phạm vi -> trả 404 (chống IDOR)."""
+    if current_user and current_user.role == UserRole.SALES_REP.value:
+        assignment = db.query(CustomerAssignment).filter(
+            CustomerAssignment.customer_id == customer_id,
+            CustomerAssignment.assigned_staff_id == current_user.id
+        ).first()
+        if not assignment:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Không tìm thấy thông tin đại lý '{customer_id}' trong phạm vi phụ trách của bạn."
+            )
 
 
 def get_all_customers(
@@ -108,14 +197,14 @@ def get_all_customers(
     customer_group: Optional[str] = None,
     assigned_staff_id: Optional[str] = None,
     region: Optional[str] = None,
+    status_filter: Optional[str] = None,
     current_user: Optional[User] = None,
 ) -> List[CustomerResponse]:
     ensure_seed_customers(db)
     query = db.query(Customer)
 
     # Phạm vi phân quyền (Scope Guard):
-    # Nếu người dùng là Sales Rep -> Chỉ được xem đại lý mình phụ trách (assigned_staff_id == user.id)
-    # Đại lý chưa gán hoặc thuộc Sales Rep khác sẽ bị ẩn hoàn toàn (lọc ở tầng query)
+    # Sales Rep: Chỉ được xem đại lý mình phụ trách (assigned_staff_id == user.id)
     if current_user and current_user.role == UserRole.SALES_REP.value:
         query = query.join(
             CustomerAssignment, Customer.id == CustomerAssignment.customer_id
@@ -123,10 +212,9 @@ def get_all_customers(
             CustomerAssignment.assigned_staff_id == current_user.id
         )
     else:
-        # Nếu là Manager / Admin / Accountant / v.v. -> Xem được 100% và có thể dùng bộ lọc
+        # Manager / Admin: Xem được 100% và hỗ trợ lọc theo nhân viên
         if assigned_staff_id:
             if assigned_staff_id == "unassigned":
-                # Lọc đại lý chưa phân công
                 query = query.outerjoin(
                     CustomerAssignment, Customer.id == CustomerAssignment.customer_id
                 ).filter(
@@ -146,24 +234,38 @@ def get_all_customers(
                 except ValueError:
                     pass
 
-    # Bộ lọc khu vực (Region Filter) dựa trên địa chỉ sẵn có của đại lý
-    if region and region.strip() and region != "all":
-        reg = f"%{region.strip()}%"
-        query = query.filter(Customer.address.ilike(reg))
-
     # Bộ lọc tìm kiếm
     if search:
         s = f"%{search.strip()}%"
         query = query.filter(
-            (Customer.name.ilike(s)) | (Customer.code.ilike(s)) | (Customer.phone.ilike(s))
+            or_(
+                Customer.name.ilike(s),
+                Customer.code.ilike(s),
+                Customer.phone.ilike(s),
+                Customer.tax_code.ilike(s)
+            )
         )
 
     # Bộ lọc nhóm khách hàng
-    if customer_group and customer_group != "all":
-        query = query.filter(Customer.customer_group == customer_group)
+    if customer_group and customer_group.upper() != "ALL":
+        query = query.filter(Customer.customer_group == customer_group.upper())
+
+    # Bộ lọc khu vực (Region Filter)
+    if region and region.strip() and region.upper() != "ALL":
+        reg = f"%{region.strip()}%"
+        query = query.filter(
+            or_(
+                Customer.region.ilike(reg),
+                Customer.address.ilike(reg)
+            )
+        )
+
+    # Bộ lọc trạng thái
+    if status_filter and status_filter.lower() != "all":
+        query = query.filter(Customer.status == status_filter.lower())
 
     customers = query.order_by(Customer.code.asc()).all()
-    return [enrich_customer_with_assignment(db, c) for c in customers]
+    return [_enrich_customer_response(db, c) for c in customers]
 
 
 def get_customer_by_id(
@@ -173,7 +275,7 @@ def get_customer_by_id(
 ) -> CustomerResponse:
     ensure_seed_customers(db)
     cus = db.query(Customer).filter(
-        (Customer.id == customer_id) | (Customer.code == customer_id)
+        or_(Customer.id == customer_id, Customer.code == customer_id)
     ).first()
     if not cus:
         raise HTTPException(
@@ -181,20 +283,9 @@ def get_customer_by_id(
             detail=f"Không tìm thấy thông tin đại lý với mã '{customer_id}'."
         )
 
-    # Kiểm tra quyền truy cập phạm vi (Scope Guard chống IDOR):
-    # Sales Rep truy cập đại lý ngoài phạm vi phụ trách -> trả 404 (không trả 403)
-    if current_user and current_user.role == UserRole.SALES_REP.value:
-        assignment = db.query(CustomerAssignment).filter(
-            CustomerAssignment.customer_id == cus.id,
-            CustomerAssignment.assigned_staff_id == current_user.id
-        ).first()
-        if not assignment:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Không tìm thấy thông tin đại lý với mã '{customer_id}'."
-            )
-
-    return enrich_customer_with_assignment(db, cus)
+    # Scope Guard chống IDOR
+    check_sales_rep_scope(db, cus.id, current_user)
+    return _enrich_customer_response(db, cus)
 
 
 def create_customer(
@@ -203,21 +294,71 @@ def create_customer(
     current_user: Optional[User] = None,
 ) -> CustomerResponse:
     ensure_seed_customers(db)
-    count = db.query(Customer).count() + 1
-    cus_id = customer_in.id or f"CUS-{str(count).zfill(3)}"
-    cus_code = customer_in.code or f"KH-{1000 + count}"
-    
+
+    # 1. Kiểm tra mã đại lý: Trim, Case-Insensitive Unique Check
+    code = customer_in.code
+    if not code:
+        count = db.query(Customer).count() + 1
+        code = f"KH-{1000 + count}"
+    code = code.strip().upper()
+
+    existing_code = db.query(Customer).filter(func.lower(Customer.code) == func.lower(code)).first()
+    if existing_code:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Mã đại lý '{code}' đã tồn tại trong hệ thống. Vui lòng sử dụng mã khác."
+        )
+
+    # 2. Kiểm tra Mã số thuế không được trùng lặp
+    tax_code = customer_in.tax_code
+    if tax_code:
+        tax_code = tax_code.strip()
+        existing_tax = db.query(Customer).filter(Customer.tax_code == tax_code).first()
+        if existing_tax:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Mã số thuế '{tax_code}' đã được đăng ký cho đại lý '{existing_tax.name}' ({existing_tax.code})."
+            )
+
+    count_id = db.query(Customer).count() + 1
+    cus_id = customer_in.id or f"CUS-{str(count_id).zfill(3)}"
+    while db.query(Customer).filter(Customer.id == cus_id).first():
+        count_id += 1
+        cus_id = f"CUS-{str(count_id).zfill(3)}"
+
     data = customer_in.model_dump(exclude_unset=True)
     data["id"] = cus_id
-    data["code"] = cus_code
-    
+    data["code"] = code
+    data["tax_code"] = tax_code
+    data["total_orders"] = 0
+    data["total_spent"] = 0.0
+
     customer = Customer(**data)
     db.add(customer)
 
-    # Quy tắc bắt buộc: Nếu Sales Rep tạo đại lý mới -> Tự gán cho chính họ trong CÙNG TRANSACTION!
+    try:
+        db.flush()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Mã đại lý '{code}' đã tồn tại trong hệ thống. Vui lòng sử dụng mã khác."
+        )
+
+    # 3. Tạo hồ sơ công nợ mặc định trong cùng 1 Transaction
+    credit_prof = CustomerCreditProfile(
+        customer_id=customer.id,
+        credit_limit=0,
+        max_debt_days=0,
+        current_debt=0,
+        updated_by=current_user.username if current_user else "Hệ thống"
+    )
+    db.add(credit_prof)
+
+    # 4. Phân công trong cùng 1 Transaction
     if current_user and current_user.role == UserRole.SALES_REP.value:
         assignment = CustomerAssignment(
-            customer_id=cus_id,
+            customer_id=customer.id,
             assigned_staff_id=current_user.id,
             assigned_by=current_user.username,
             assigned_at=datetime.now(timezone.utc),
@@ -227,7 +368,7 @@ def create_customer(
 
         # Ghi nhận lịch sử phân công tự động
         history = CustomerAssignmentHistory(
-            customer_id=cus_id,
+            customer_id=customer.id,
             customer_name=customer.name,
             from_staff_id=None,
             from_staff_name=None,
@@ -240,9 +381,8 @@ def create_customer(
         )
         db.add(history)
     else:
-        # Nếu Admin/Manager tạo -> tạo bản ghi phân công trống
         assignment = CustomerAssignment(
-            customer_id=cus_id,
+            customer_id=customer.id,
             assigned_staff_id=None,
             assigned_by=current_user.username if current_user else "Hệ thống",
             assigned_at=datetime.now(timezone.utc),
@@ -250,9 +390,26 @@ def create_customer(
         )
         db.add(assignment)
 
+    # 5. Ghi AuditLog
+    if current_user:
+        audit = AuditLog(
+            entity_type="CUSTOMER",
+            entity_id=customer.id,
+            entity_name=customer.name,
+            action="CREATE",
+            new_values={"code": customer.code, "name": customer.name, "group": customer.customer_group},
+            change_summary=f"Tạo mới hồ sơ đại lý '{customer.name}' ({customer.code})",
+            user_id=current_user.id,
+            username=current_user.username,
+            user_fullname=current_user.full_name,
+            user_role=current_user.role,
+            reason="Khai báo hồ sơ đại lý mới"
+        )
+        db.add(audit)
+
     db.commit()
     db.refresh(customer)
-    return enrich_customer_with_assignment(db, customer)
+    return _enrich_customer_response(db, customer)
 
 
 def update_customer(
@@ -261,19 +418,134 @@ def update_customer(
     customer_in: CustomerUpdate,
     current_user: Optional[User] = None,
 ) -> CustomerResponse:
-    # Xác thực phạm vi trước khi cho phép cập nhật
-    get_customer_by_id(db, customer_id, current_user)
-    
+    ensure_seed_customers(db)
     customer = db.query(Customer).filter(
-        (Customer.id == customer_id) | (Customer.code == customer_id)
+        or_(Customer.id == customer_id, Customer.code == customer_id)
     ).first()
-    
+    if not customer:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Không tìm thấy thông tin đại lý với mã '{customer_id}'."
+        )
+
+    # Scope Guard
+    check_sales_rep_scope(db, customer.id, current_user)
+
     update_data = customer_in.model_dump(exclude_unset=True)
+
+    # 1. Kiểm tra khóa sửa mã đại lý khi đã phát sinh đơn hàng
+    if "code" in update_data and update_data["code"]:
+        new_code = update_data["code"].strip().upper()
+        if new_code != customer.code:
+            orders_count = db.query(Order).filter(Order.customer_id == customer.id).count()
+            if orders_count > 0:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Đại lý đã phát sinh giao dịch, không được phép thay đổi mã đại lý."
+                )
+            # Kiểm tra trùng lặp với đại lý khác
+            dup = db.query(Customer).filter(
+                func.lower(Customer.code) == func.lower(new_code),
+                Customer.id != customer.id
+            ).first()
+            if dup:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Mã đại lý '{new_code}' đã tồn tại trong hệ thống. Vui lòng sử dụng mã khác."
+                )
+            update_data["code"] = new_code
+
+    # 2. Kiểm tra trùng mã số thuế với đại lý khác
+    if "tax_code" in update_data and update_data["tax_code"]:
+        new_tax = update_data["tax_code"].strip()
+        dup_tax = db.query(Customer).filter(
+            Customer.tax_code == new_tax,
+            Customer.id != customer.id
+        ).first()
+        if dup_tax:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Mã số thuế '{new_tax}' đã được đăng ký cho đại lý '{dup_tax.name}' ({dup_tax.code})."
+            )
+        update_data["tax_code"] = new_tax
+
+    old_snapshot = {"name": customer.name, "customer_group": customer.customer_group, "status": customer.status}
+
     for key, value in update_data.items():
         setattr(customer, key, value)
+
+    # Ghi AuditLog
+    if current_user:
+        audit = AuditLog(
+            entity_type="CUSTOMER",
+            entity_id=customer.id,
+            entity_name=customer.name,
+            action="UPDATE",
+            old_values=old_snapshot,
+            new_values=update_data,
+            change_summary=f"Cập nhật hồ sơ đại lý '{customer.name}'",
+            user_id=current_user.id,
+            username=current_user.username,
+            user_fullname=current_user.full_name,
+            user_role=current_user.role,
+            reason="Cập nhật thông tin đại lý"
+        )
+        db.add(audit)
+
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Dữ liệu cập nhật bị trùng lặp mã đại lý hoặc mã số thuế."
+        )
+
+    db.refresh(customer)
+    return _enrich_customer_response(db, customer)
+
+
+def update_customer_status(
+    db: Session,
+    customer_id: str,
+    status_in: CustomerStatusUpdate,
+    current_user: Optional[User] = None
+) -> CustomerResponse:
+    """Chuyển đổi trạng thái nhanh: active <-> inactive."""
+    customer = db.query(Customer).filter(
+        or_(Customer.id == customer_id, Customer.code == customer_id)
+    ).first()
+    if not customer:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Không tìm thấy thông tin đại lý với mã '{customer_id}'."
+        )
+
+    check_sales_rep_scope(db, customer.id, current_user)
+
+    old_status = customer.status
+    customer.status = status_in.status.lower()
+
+    if current_user:
+        audit = AuditLog(
+            entity_type="CUSTOMER",
+            entity_id=customer.id,
+            entity_name=customer.name,
+            action="STATUS_CHANGE",
+            old_values={"status": old_status},
+            new_values={"status": customer.status},
+            change_summary=f"Đổi trạng thái đại lý '{customer.name}' sang '{customer.status}'",
+            user_id=current_user.id,
+            username=current_user.username,
+            user_fullname=current_user.full_name,
+            user_role=current_user.role,
+            reason="Chuyển trạng thái giao dịch đại lý"
+        )
+        db.add(audit)
+
     db.commit()
     db.refresh(customer)
-    return enrich_customer_with_assignment(db, customer)
+    return _enrich_customer_response(db, customer)
 
 
 def delete_customer(
@@ -281,11 +553,122 @@ def delete_customer(
     customer_id: str,
     current_user: Optional[User] = None,
 ) -> bool:
-    get_customer_by_id(db, customer_id, current_user)
+    """
+    Xóa đại lý: Chặn (400) nếu tồn tại đơn hàng, công nợ hoặc lịch sử phân công (SCRUM-433).
+    """
     customer = db.query(Customer).filter(
-        (Customer.id == customer_id) | (Customer.code == customer_id)
+        or_(Customer.id == customer_id, Customer.code == customer_id)
     ).first()
+    if not customer:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Không tìm thấy thông tin đại lý với mã '{customer_id}'."
+        )
+
+    check_sales_rep_scope(db, customer.id, current_user)
+
+    # 1. Kiểm tra đơn hàng thật trong bảng orders
+    orders_count = db.query(Order).filter(Order.customer_id == customer.id).count()
+    if orders_count > 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Đại lý này đã phát sinh {orders_count} giao dịch/đơn hàng nên không thể xóa. Bạn chỉ có thể chuyển trạng thái sang 'Ngừng giao dịch'."
+        )
+
+    # 2. Kiểm tra dư nợ công nợ
+    credit_profile = db.query(CustomerCreditProfile).filter(CustomerCreditProfile.customer_id == customer.id).first()
+    if credit_profile and credit_profile.current_debt > 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Đại lý đang có khoản nợ {credit_profile.current_debt:,} đ chưa thanh toán nên không thể xóa."
+        )
+
+    # 3. Kiểm tra lịch sử phân công địa bàn
+    histories_count = db.query(CustomerAssignmentHistory).filter(CustomerAssignmentHistory.customer_id == customer.id).count()
+    if histories_count > 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Đại lý đã có lịch sử bàn giao địa bàn trong hệ thống nên không thể xóa. Bạn chỉ có thể chuyển trạng thái sang 'Ngừng giao dịch'."
+        )
+
+    # Cho phép xóa an toàn khi chưa phát sinh giao dịch
+    # Dọn dẹp bảng phụ
+    db.query(CustomerCreditProfile).filter(CustomerCreditProfile.customer_id == customer.id).delete()
     db.query(CustomerAssignment).filter(CustomerAssignment.customer_id == customer.id).delete()
+    
+    cust_name = customer.name
+    cust_code = customer.code
     db.delete(customer)
+
+    if current_user:
+        audit = AuditLog(
+            entity_type="CUSTOMER",
+            entity_id=customer_id,
+            entity_name=cust_name,
+            action="DELETE",
+            change_summary=f"Xóa hồ sơ đại lý '{cust_name}' ({cust_code})",
+            user_id=current_user.id,
+            username=current_user.username,
+            user_fullname=current_user.full_name,
+            user_role=current_user.role,
+            reason="Xóa đại lý chưa phát sinh giao dịch"
+        )
+        db.add(audit)
+
     db.commit()
     return True
+
+
+def get_applied_price_list_for_customer(
+    db: Session,
+    customer_id: str,
+    current_user: Optional[User] = None
+) -> dict:
+    """
+    Liên kết nhóm khách hàng với bảng giá áp dụng cho đại lý (SCRUM-434).
+    Chọn bảng giá hiệu lực (APPROVED, is_active=True, valid_from <= now <= valid_to) 
+    khớp nhóm khách hàng có valid_from mới nhất.
+    """
+    customer = db.query(Customer).filter(
+        or_(Customer.id == customer_id, Customer.code == customer_id)
+    ).first()
+    if not customer:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Không tìm thấy thông tin đại lý với mã '{customer_id}'."
+        )
+
+    check_sales_rep_scope(db, customer.id, current_user)
+
+    target_group = customer.customer_group or "RETAIL"
+    
+    # Tìm bảng giá hiệu lực của nhóm khách hàng này
+    all_lists = db.query(PriceList).filter(
+        PriceList.customer_group == target_group,
+        PriceList.status == "APPROVED",
+        PriceList.is_active == True
+    ).order_by(PriceList.valid_from.desc()).all()
+
+    effective_list = None
+    for pl in all_lists:
+        if pl.is_effective:
+            effective_list = pl
+            break
+
+    if not effective_list:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Chưa có bảng giá phân phối hiệu lực cho nhóm khách hàng '{target_group}' của đại lý này."
+        )
+
+    return {
+        "customer_id": customer.id,
+        "customer_name": customer.name,
+        "customer_group": target_group,
+        "price_list_id": effective_list.id,
+        "price_list_code": effective_list.code,
+        "price_list_name": effective_list.name,
+        "valid_from": effective_list.valid_from,
+        "valid_to": effective_list.valid_to,
+        "items_count": len(effective_list.items)
+    }

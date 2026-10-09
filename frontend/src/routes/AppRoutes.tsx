@@ -23,6 +23,9 @@ import { Profile } from '../pages/profile/Profile';
 import { PriceListManagement } from '../pages/sales/PriceListManagement';
 import { CategoryManagement } from '../pages/categories/CategoryManagement';
 
+// Orders & Field Sales (SCRUM-230, S3-09)
+import { CreateOrder } from '../pages/orders/CreateOrder';
+
 // Supplier Management Pages (SCRUM-217)
 import { SupplierList } from '../pages/suppliers/SupplierList';
 import { SupplierDetail } from '../pages/suppliers/SupplierDetail';
@@ -215,7 +218,15 @@ export const AppRoutes: React.FC = () => {
           }
         />
 
-        {/* Bán hàng POS & Quản lý Đơn hàng (SC-228, SC-230) */}
+        {/* Tạo đơn hiện trường Mobile 360px (SCRUM-230, S3-09) */}
+        <Route
+          path="/orders/create"
+          element={
+            <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
+              <CreateOrder />
+            </ProtectedRoute>
+          }
+        />
         <Route
           path="/sales/pos"
           element={

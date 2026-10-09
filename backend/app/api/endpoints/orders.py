@@ -4,10 +4,52 @@ from sqlalchemy.orm import Session
 from app.core.database import lay_phien_db
 from app.core.dependencies import lay_nguoi_dung_tuy_chon
 from app.models.auth import User
-from app.schemas.order import OrderCreate, OrderStatusUpdate, OrderResponse
+from app.schemas.order import (
+    OrderCreate,
+    OrderStatusUpdate,
+    OrderResponse,
+    OrderDraftUpdate,
+    OrderCalculateRequest,
+    OrderCalculateResponse,
+    ProductSearchForOrderResponse,
+)
 from app.services import order_service
 
 router = APIRouter(prefix="/orders", tags=["Đơn hàng"])
+
+
+@router.post("/calculate", response_model=OrderCalculateResponse)
+def calculate_order_totals(
+    req: OrderCalculateRequest,
+    db: Session = Depends(lay_phien_db),
+    current_user: Optional[User] = Depends(lay_nguoi_dung_tuy_chon),
+):
+    """Tính tạm tính, chiết khấu và tổng tiền đơn hàng theo thời gian thực (S3-09, SCRUM-230)."""
+    return order_service.calculate_order_totals(
+        db=db,
+        customer_id=req.customer_id,
+        items=req.items,
+        price_list_id=req.price_list_id,
+        current_user=current_user,
+    )
+
+
+@router.get("/drafts", response_model=List[OrderResponse])
+def get_draft_orders(
+    db: Session = Depends(lay_phien_db),
+    current_user: Optional[User] = Depends(lay_nguoi_dung_tuy_chon),
+):
+    """Lấy danh sách các đơn hàng nháp đang soạn dở (phạm vi theo Sales Rep) (S3-09, SCRUM-230)."""
+    return order_service.get_draft_orders(db=db, current_user=current_user)
+
+
+@router.get("/products/search", response_model=List[ProductSearchForOrderResponse])
+def search_products_for_order(
+    q: Optional[str] = Query(None, description="Từ khóa SKU hoặc tên sản phẩm"),
+    db: Session = Depends(lay_phien_db),
+):
+    """Tìm kiếm sản phẩm hỗ trợ tạo đơn hàng kèm quy cách/đơn vị tính (S3-09, SCRUM-230)."""
+    return order_service.search_products_for_order(db=db, query_str=q)
 
 
 @router.get("", response_model=List[OrderResponse])
@@ -67,3 +109,33 @@ def cancel_order(
 ):
     """Hủy đơn hàng và hoàn lại số lượng tồn kho sản phẩm."""
     return order_service.cancel_order(db=db, order_id=order_id)
+
+
+@router.put("/{order_id}/draft", response_model=OrderResponse)
+def update_draft_order(
+    order_id: str,
+    draft_in: OrderDraftUpdate,
+    db: Session = Depends(lay_phien_db),
+    current_user: Optional[User] = Depends(lay_nguoi_dung_tuy_chon),
+):
+    """Cập nhật đơn hàng nháp đang soạn dở (S3-09, SCRUM-230)."""
+    return order_service.update_draft_order(
+        db=db,
+        order_id=order_id,
+        draft_in=draft_in,
+        current_user=current_user,
+    )
+
+
+@router.post("/{order_id}/submit", response_model=OrderResponse)
+def submit_draft_order(
+    order_id: str,
+    db: Session = Depends(lay_phien_db),
+    current_user: Optional[User] = Depends(lay_nguoi_dung_tuy_chon),
+):
+    """Chốt đơn hàng nháp thành đơn hàng chính thức (trừ kho và tính doanh số) (S3-09, SCRUM-230)."""
+    return order_service.submit_draft_order(
+        db=db,
+        order_id=order_id,
+        current_user=current_user,
+    )

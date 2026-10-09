@@ -17,7 +17,6 @@ import {
   TrendingUp,
   Package,
   Users,
-  ShoppingBag,
   Store,
   Receipt,
   PlusCircle,
@@ -85,6 +84,45 @@ export const Sidebar: React.FC<SidebarProps> = ({
           title: 'Tổng quan Dashboard',
           path: '/dashboard',
           icon: <LayoutDashboard className="w-5 h-5" />,
+          allowedRoles: [
+            'Admin',
+            'SalesManager',
+            'SalesStaff',
+            'WarehouseManager',
+            'WarehouseStaff',
+            'Accountant',
+            'Director',
+            'Manager',
+            'Staff',
+            'User',
+          ],
+        },
+      ],
+    },
+    {
+      heading: 'BÁN HÀNG & ĐƠN HÀNG',
+      items: [
+        {
+          title: 'Tạo đơn hiện trường',
+          path: '/orders/create',
+          icon: <ShoppingCart className="w-5 h-5" />,
+          allowedRoles: [
+            'Admin',
+            'SalesManager',
+            'SalesStaff',
+            'WarehouseManager',
+            'WarehouseStaff',
+            'Accountant',
+            'Director',
+            'Manager',
+            'Staff',
+            'User',
+          ],
+        },
+        {
+          title: 'Quản lý đơn hàng',
+          path: '/orders',
+          icon: <LayoutList className="w-5 h-5" />,
           allowedRoles: [
             'Admin',
             'SalesManager',
@@ -405,11 +443,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     <div key={itemIdx} className="space-y-1">
                       <button
                         onClick={() => toggleSubmenu(item.title.toLowerCase())}
-                        className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm font-medium transition-colors outline-none focus:outline-none ${
-                          isAnySubActive
+                        className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm font-medium transition-colors outline-none focus:outline-none ${isAnySubActive
                             ? 'text-indigo-600 dark:text-indigo-400 bg-indigo-50/60 dark:bg-indigo-950/30'
                             : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60'
-                        }`}
+                          }`}
                         title={isCollapsed ? item.title : undefined}
                       >
                         <div className="flex items-center gap-3">
@@ -418,9 +455,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         </div>
                         {!isCollapsed && (
                           <ChevronDown
-                            className={`w-4 h-4 transition-transform duration-200 ${
-                              isSubOpen ? 'rotate-180 text-indigo-500' : 'text-slate-400'
-                            }`}
+                            className={`w-4 h-4 transition-transform duration-200 ${isSubOpen ? 'rotate-180 text-indigo-500' : 'text-slate-400'
+                              }`}
                           />
                         )}
                       </button>
@@ -442,11 +478,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
                                   to={sub.path}
                                   end={sub.path === '/products'}
                                   onClick={onMobileClose}
-                                  className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all outline-none focus:outline-none ${
-                                    isActive
+                                  className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all outline-none focus:outline-none ${isActive
                                       ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-200 dark:shadow-none'
                                       : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800/40'
-                                  }`}
+                                    }`}
                                 >
                                   {sub.icon}
                                   <span>{sub.title}</span>
@@ -465,10 +500,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     to={item.path!}
                     onClick={onMobileClose}
                     className={({ isActive }) =>
-                      `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all outline-none focus:outline-none ${
-                        isActive
-                          ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/25'
-                          : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60'
+                      `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all outline-none focus:outline-none ${isActive
+                        ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/25'
+                        : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60'
                       }`
                     }
                     title={isCollapsed ? item.title : undefined}
@@ -503,19 +537,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <div className="flex items-center justify-between text-xs">
             <span className="text-slate-500 dark:text-slate-400">Vai trò:</span>
             <span
-              className={`font-semibold px-2 py-0.5 rounded-full text-[11px] ${
-                role === 'Admin'
+              className={`font-semibold px-2 py-0.5 rounded-full text-[11px] ${role === 'Admin'
                   ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/50 dark:text-purple-300'
                   : role === 'Director'
-                  ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300'
-                  : role === 'SalesManager' || role === 'SalesStaff'
-                  ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300'
-                  : role === 'WarehouseManager' || role === 'WarehouseStaff'
-                  ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300'
-                  : role === 'Accountant'
-                  ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300'
-                  : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
-              }`}
+                    ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300'
+                    : role === 'SalesManager' || role === 'SalesStaff'
+                      ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300'
+                      : role === 'WarehouseManager' || role === 'WarehouseStaff'
+                        ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300'
+                        : role === 'Accountant'
+                          ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300'
+                          : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                }`}
             >
               {getRoleDisplayName(role)}
             </span>
@@ -535,9 +568,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
     <>
       {/* Desktop Sidebar */}
       <aside
-        className={`hidden lg:block shrink-0 h-screen sticky top-0 transition-all duration-300 z-30 ${
-          isCollapsed ? 'w-20' : 'w-64'
-        }`}
+        className={`hidden lg:block shrink-0 h-screen sticky top-0 transition-all duration-300 z-30 ${isCollapsed ? 'w-20' : 'w-64'
+          }`}
       >
         {sidebarContent}
       </aside>

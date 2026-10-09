@@ -355,6 +355,127 @@ def search_products_for_order(db: Session, query_str: Optional[str] = None) -> L
     return results
 
 
+def calculate_order_totals(
+    db: Session,
+    customer_id: str,
+    items: List[Any],
+    price_list_id: Optional[int] = None,
+    current_user: Optional[User] = None
+) -> dict:
+    """Tính toán tạm thời tổng tiền hàng, chiết khấu và tổng phải thu realtime (S3-09, SCRUM-230)."""
+    from app.services.volume_discount_service import calculate_volume_discount
+    from app.models.customer import Customer
+    from app.models.price_list import PriceListItem
+
+    customer = db.query(Customer).filter((Customer.id == customer_id) | (Customer.code == customer_id)).first()
+    if not customer:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Không tìm thấy đại lý '{customer_id}'.")
+
+    subtotal = 0.0
+    total_discount = 0.0
+    item_responses = []
+
+    for item in items:
+        pid = getattr(item, "product_id", None)
+        qty = int(getattr(item, "quantity", 1) or 1)
+        req_price = getattr(item, "price", None)
+        unit = getattr(item, "unit", "cái")
+
+        prod = None
+        str_pid = str(pid).strip()
+        if str_pid.isdigit():
+            prod = db.query(Product).filter(Product.id == int(str_pid)).first()
+        if not prod:
+            prod = db.query(Product).filter((Product.sku == str_pid) | (Product.name == str_pid)).first()
+
+        sku = prod.sku if prod else ""
+        name = prod.name if prod else f"Sản phẩm #{pid}"
+        base_price = float(req_price if req_price is not None and req_price > 0 else (prod.price if prod else 0.0))
+
+        if price_list_id:
+            pli = db.query(PriceListItem).filter(
+                PriceListItem.price_list_id == price_list_id,
+                (PriceListItem.product_id == prod.id if prod else False)
+            ).first()
+            if pli and pli.sale_price:
+                base_price = float(pli.sale_price)
+
+        line_subtotal = base_price * qty
+        subtotal += line_subtotal
+
+        vol_calc = calculate_volume_discount(
+            db=db,
+            product_id=str(prod.id if prod else pid),
+            quantity=qty,
+            customer_id=customer.id,
+            current_user=current_user
+        )
+        line_discount = float(vol_calc.total_discount or 0.0)
+        total_discount += line_discount
+
+        item_responses.append({
+            "product_id": str(prod.id if prod else pid),
+            "sku": sku,
+            "name": name,
+            "unit": unit or (prod.unit if prod else "cái"),
+            "unit_price": base_price,
+            "quantity": qty,
+            "discount_amount": line_discount,
+            "discount_rate": float(vol_calc.discount_rate or 0.0),
+            "subtotal": max(0.0, line_subtotal - line_discount),
+            "applied_discount_name": vol_calc.applied_discount_policy_name
+        })
+
+    final_total = max(0.0, subtotal - total_discount)
+    return {
+        "subtotal": subtotal,
+        "discount": total_discount,
+        "total": final_total,
+        "items": item_responses
+    }
+
+
+def search_products_for_order(db: Session, query_str: Optional[str] = None) -> List[dict]:
+    """Tìm kiếm hàng hoá và trả về các đơn vị tính hợp lệ khi nhập đơn (S3-09, SCRUM-230)."""
+    query = db.query(Product).filter(or_(Product.status.ilike("active"), Product.status.is_(None)))
+    if query_str and query_str.strip():
+        s = f"%{query_str.strip()}%"
+        query = query.filter((Product.sku.ilike(s)) | (Product.name.ilike(s)))
+    products = query.limit(30).all()
+
+    p_ids = [p.id for p in products]
+    stock_map = {}
+    if p_ids:
+        sps = db.query(ProductStockProfile).filter(ProductStockProfile.product_id.in_(p_ids)).all()
+        stock_map = {sp.product_id: sp.stock for sp in sps}
+
+    results = []
+    for p in products:
+        available_units = [p.unit or "cái"]
+        if p.packaging_spec:
+            spec_lower = p.packaging_spec.lower()
+            for u in ["hộp", "thùng", "lon", "gói", "chai", "bộ", "cặp", "kg", "cái"]:
+                if u in spec_lower and u not in available_units:
+                    available_units.append(u)
+        else:
+            for default_u in ["hộp", "thùng"]:
+                if default_u not in available_units:
+                    available_units.append(default_u)
+
+        results.append({
+            "id": p.id,
+            "sku": p.sku,
+            "name": p.name,
+            "price": float(p.price or 0.0),
+            "sale_price": float(p.price or 0.0),
+            "stock": stock_map.get(p.id, 100),
+            "unit": p.unit or "cái",
+            "packaging_spec": p.packaging_spec,
+            "available_units": available_units,
+        })
+    return results
+
+
 def create_order(db: Session, order_in: OrderCreate, current_user: Optional[User] = None) -> Order:
     ensure_seed_orders(db)
 
@@ -378,7 +499,6 @@ def create_order(db: Session, order_in: OrderCreate, current_user: Optional[User
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=lock_msg
         )
-
     is_draft = (order_in.status == "draft")
 
     # Ràng buộc khi tạo đơn chính thức (không phải nháp):

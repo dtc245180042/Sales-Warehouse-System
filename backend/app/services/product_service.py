@@ -36,7 +36,12 @@ class ProductService:
         return user_role in allowed_roles
 
     @classmethod
-    def serialize_product(cls, product: Product, current_user: Optional[User] = None) -> ProductResponse:
+    def serialize_product(
+        cls,
+        product: Product,
+        current_user: Optional[User] = None,
+        stock_profile: Optional[ProductStockProfile] = None,
+    ) -> ProductResponse:
         """Chuyển đổi Product model sang ProductResponse với phân quyền giá vốn (SCRUM-378).
         Nếu người dùng không phải Quản lý kinh doanh/Admin, ẩn trường giá vốn (`cost_price = None`).
         """
@@ -45,22 +50,26 @@ class ProductService:
         stock_val = 100
         min_stock_val = 10
 
-        db_state = getattr(product, "_sa_instance_state", None)
-        sess = getattr(db_state, "session", None) if db_state else None
-        if sess is not None:
-            try:
-                sp = sess.query(ProductStockProfile).filter(ProductStockProfile.product_id == product.id).first()
-                if sp:
-                    stock_val = sp.stock
-                    min_stock_val = sp.min_stock
-            except Exception:
-                pass
+        if stock_profile is not None:
+            stock_val = stock_profile.stock
+            min_stock_val = stock_profile.min_stock
+        else:
+            db_state = getattr(product, "_sa_instance_state", None)
+            sess = getattr(db_state, "session", None) if db_state else None
+            if sess is not None:
+                try:
+                    sp = sess.query(ProductStockProfile).filter(ProductStockProfile.product_id == product.id).first()
+                    if sp:
+                        stock_val = sp.stock
+                        min_stock_val = sp.min_stock
+                except Exception:
+                    pass
 
         return ProductResponse(
             id=product.id,
             sku=product.sku,
             name=product.name,
-            category=product.category,
+            category=product.category or "",
             category_id=getattr(product, "category_id", None),
             unit=product.unit,
             packaging_spec=product.packaging_spec,
@@ -215,7 +224,24 @@ class ProductService:
         if img_update is not None:
             product.image_url = img_update.strip() if isinstance(img_update, str) and img_update.strip() else None
         if getattr(data, "price", None) is not None or getattr(data, "sale_price", None) is not None:
-            product.price = float(data.price if data.price is not None else data.sale_price)
+            new_p = float(data.price if data.price is not None else data.sale_price)
+            if product.price is not None and int(product.price) != int(new_p):
+                from app.services.price_history_service import record_price_change
+                from app.models.product_price_history import PriceTypeEnum
+                reason = getattr(data, "reason", None) or "Điều chỉnh giá bán niêm yết sản phẩm"
+                record_price_change(
+                    db=db,
+                    product_id=str(product.id),
+                    product_sku=product.sku,
+                    product_name=product.name,
+                    price_type=PriceTypeEnum.LISTED_PRICE,
+                    old_price=int(product.price),
+                    new_price=int(new_p),
+                    reason=reason,
+                    effective_from=datetime.now(timezone.utc),
+                    changed_by=current_user
+                )
+            product.price = new_p
         if getattr(data, "description", None) is not None:
             product.description = data.description.strip() if data.description else None
 
@@ -287,7 +313,18 @@ class ProductService:
         offset = (page - 1) * page_size
         items = query.order_by(Product.id.desc()).offset(offset).limit(page_size).all()
 
-        serialized_items = [cls.serialize_product(p, current_user) for p in items]
+        stock_profiles = {}
+        p_ids = [p.id for p in items]
+        if p_ids:
+            try:
+                sps = db.query(ProductStockProfile).filter(ProductStockProfile.product_id.in_(p_ids)).all()
+                stock_profiles = {sp.product_id: sp for sp in sps}
+            except Exception:
+                pass
+
+        serialized_items = [
+            cls.serialize_product(p, current_user, stock_profiles.get(p.id)) for p in items
+        ]
 
         return ProductListResponse(
             items=serialized_items,

@@ -421,6 +421,14 @@ def seed_all(db: Session) -> Dict[str, Any]:
     mapping_stats = assign_default_permissions_to_roles(db)
     admin_stats = seed_default_admin(db)
 
+    try:
+        from app.services.customer_service import ensure_seed_customers
+        ensure_seed_customers(db)
+        from app.services.customer_assignment_service import ensure_seed_assignments
+        ensure_seed_assignments(db)
+    except Exception as e:
+        logger.warning("Error seeding customer assignments: %s", e)
+
     return {
         "status": "success",
         "permissions": perm_stats,

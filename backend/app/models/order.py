@@ -2,6 +2,8 @@ from datetime import datetime, timezone
 from sqlalchemy import (
     Column,
     Integer,
+    BigInteger,
+    Numeric,
     String,
     Float,
     DateTime,
@@ -76,5 +78,35 @@ class OrderItem(Base):
     quantity = Column(Integer, default=1, nullable=False)
     discount = Column(Float, default=0.0, nullable=False)
     subtotal = Column(Float, default=0.0, nullable=False)
+    # Đơn vị tính (S3-09: cái, hộp, thùng...)
+    unit = Column(String(50), nullable=True, default="cái")
+
+    # Snapshot chính sách chiết khấu sản lượng lúc chốt đơn (S3-01)
+    applied_discount_policy_id = Column(Integer, nullable=True, index=True)
+    applied_discount_policy_name = Column(String(255), nullable=True)
+    discount_rate = Column(Numeric(5, 2), nullable=True)      # % chiết khấu nếu áp dụng PERCENT
+    discount_amount = Column(BigInteger, nullable=True)        # Tiền chiết khấu VND nếu áp dụng FIXED_AMOUNT
 
     order = relationship("Order", back_populates="items")
+
+
+# Đảm bảo các cột mới của order_items tự động tồn tại trong CSDL hiện hữu
+try:
+    from app.core.database import engine
+    from sqlalchemy import inspect, text
+    with engine.connect() as _conn:
+        _cols = [c["name"] for c in inspect(_conn).get_columns("order_items")]
+        if _cols:
+            if "unit" not in _cols:
+                _conn.execute(text("ALTER TABLE order_items ADD COLUMN unit VARCHAR(50)"))
+            if "applied_discount_policy_id" not in _cols:
+                _conn.execute(text("ALTER TABLE order_items ADD COLUMN applied_discount_policy_id INTEGER"))
+            if "applied_discount_policy_name" not in _cols:
+                _conn.execute(text("ALTER TABLE order_items ADD COLUMN applied_discount_policy_name VARCHAR(255)"))
+            if "discount_rate" not in _cols:
+                _conn.execute(text("ALTER TABLE order_items ADD COLUMN discount_rate NUMERIC(5, 2)"))
+            if "discount_amount" not in _cols:
+                _conn.execute(text("ALTER TABLE order_items ADD COLUMN discount_amount BIGINT"))
+            _conn.commit()
+except Exception:
+    pass

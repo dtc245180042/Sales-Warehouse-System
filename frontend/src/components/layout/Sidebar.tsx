@@ -17,6 +17,7 @@ import {
   TrendingUp,
   Package,
   FileSpreadsheet,
+  Users,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { UserRole } from '../../types/User';
@@ -98,6 +99,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
     {
       heading: 'ĐỐI TÁC & CUNG ỨNG',
       items: [
+        {
+          title: 'Khách hàng & Đại lý',
+          path: '/customers',
+          icon: <Users className="w-5 h-5" />,
+          allowedRoles: [
+            'Admin',
+            'SalesManager',
+            'SalesStaff',
+            'WarehouseManager',
+            'WarehouseStaff',
+            'Accountant',
+            'Director',
+            'Manager',
+            'Staff',
+            'User',
+          ],
+        },
         {
           title: 'Nhà cung cấp',
           path: '/suppliers',

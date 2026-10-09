@@ -155,6 +155,8 @@ class OrderResponse(BaseModel):
     delivery_phone: Optional[str] = None
     delivery_address: Optional[str] = None
     delivery_notes: Optional[str] = None
+    customer_is_locked: bool = False
+    customer_lock_warning: Optional[str] = None
     expected_delivery_date: Optional[str] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
@@ -237,3 +239,11 @@ class OrderResponse(BaseModel):
     @computed_field
     def updatedAt(self) -> Optional[str]:
         return self.updated_at.strftime("%Y-%m-%d %H:%M") if self.updated_at else None
+
+    @computed_field
+    def customerIsLocked(self) -> bool:
+        return self.customer_is_locked
+
+    @computed_field
+    def customerLockWarning(self) -> Optional[str]:
+        return self.customer_lock_warning

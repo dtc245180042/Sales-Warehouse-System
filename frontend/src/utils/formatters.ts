@@ -13,22 +13,13 @@ export const formatNumber = (num: number): string => {
 export const formatDate = (dateString: string): string => {
   if (!dateString) return '-';
   try {
-    let normalized = dateString.trim();
-    if (normalized.includes(' ') && !normalized.includes('T')) {
-      normalized = normalized.replace(' ', 'T');
-    }
-    if (!normalized.endsWith('Z') && !/[+-]\d{2}:?\d{2}$/.test(normalized)) {
-      normalized += 'Z';
-    }
-    const d = new Date(normalized);
-    if (isNaN(d.getTime())) return dateString;
+    const d = new Date(dateString);
     return new Intl.DateTimeFormat('vi-VN', {
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',
       hour: '2-digit',
       minute: '2-digit',
-      hour12: false,
     }).format(d);
   } catch {
     return dateString;
@@ -38,15 +29,7 @@ export const formatDate = (dateString: string): string => {
 export const formatDateOnly = (dateString: string): string => {
   if (!dateString) return '-';
   try {
-    let normalized = dateString.trim();
-    if (normalized.includes(' ') && !normalized.includes('T')) {
-      normalized = normalized.replace(' ', 'T');
-    }
-    if (!normalized.endsWith('Z') && !/[+-]\d{2}:?\d{2}$/.test(normalized)) {
-      normalized += 'Z';
-    }
-    const d = new Date(normalized);
-    if (isNaN(d.getTime())) return dateString;
+    const d = new Date(dateString);
     return new Intl.DateTimeFormat('vi-VN', {
       year: 'numeric',
       month: '2-digit',
@@ -63,14 +46,11 @@ export const generateId = (prefix: string = 'ID'): string => {
 
 /**
  * Định dạng số thành chuỗi phân cách hàng nghìn bằng dấu chấm khi nhập tiền (VD: 1000000 -> "1.000.000")
- * Tự động loại bỏ số 0 đứng đầu không hợp lệ (VD: "01000000" -> "1.000.000")
  */
 export const formatCurrencyInput = (value: number | string | undefined | null): string => {
   if (value === undefined || value === null || value === '') return '';
-  let clean = value.toString().replace(/\D/g, '');
+  const clean = value.toString().replace(/\D/g, '');
   if (!clean) return '';
-  // Bỏ số 0 đứng trước nếu có các chữ số khác (VD: '01000' -> '1000')
-  clean = clean.replace(/^0+(?=\d)/, '');
   return clean.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 };
 

@@ -276,6 +276,39 @@ def check_sales_rep_scope(db: Session, customer_id: str, current_user: Optional[
             )
 
 
+def get_filter_options(db: Session) -> Dict[str, List[str]]:
+    """Lấy danh sách các giá trị bộ lọc đại lý đang có trong hệ thống (SCRUM-229)."""
+    ensure_seed_customers(db)
+
+    # Lấy danh sách khu vực
+    regions_query = db.query(Customer.region).filter(Customer.region.isnot(None)).distinct().all()
+    regions = sorted(list({r[0] for r in regions_query if r[0]}))
+    if not regions:
+        regions = ["Miền Bắc", "Miền Trung", "Miền Nam", "Tây Nguyên"]
+
+    # Lấy danh sách nhóm khách hàng
+    groups_query = db.query(Customer.customer_group).filter(Customer.customer_group.isnot(None)).distinct().all()
+    groups = sorted(list({g[0] for g in groups_query if g[0]}))
+    if not groups:
+        groups = ["TIER_1", "TIER_2", "WHOLESALE", "VIP", "RETAIL"]
+
+    # Lấy danh sách người phụ trách
+    reps_query = db.query(Customer.assigned_sales_rep).filter(Customer.assigned_sales_rep.isnot(None)).distinct().all()
+    reps = sorted(list({rp[0] for rp in reps_query if rp[0]}))
+    if not reps:
+        reps = ["Lê Thị Nhân Viên Kinh Doanh", "Nguyễn Văn Giám Đốc Kinh Doanh", "Trần Quản Trị Hệ Thống"]
+
+    # Danh sách trạng thái chuẩn
+    statuses = ["active", "inactive", "locked"]
+
+    return {
+        "regions": regions,
+        "customer_groups": groups,
+        "sales_reps": reps,
+        "statuses": statuses,
+    }
+
+
 def get_all_customers(
     db: Session,
     search: Optional[str] = None,
@@ -283,8 +316,8 @@ def get_all_customers(
     assigned_staff_id: Optional[str] = None,
     region: Optional[str] = None,
     assigned_sales_rep: Optional[str] = None,
-    status: Optional[str] = None,
     status_filter: Optional[str] = None,
+    status: Optional[str] = None,
     page: Optional[int] = None,
     page_size: Optional[int] = None,
     current_user: Optional[User] = None,
@@ -294,7 +327,7 @@ def get_all_customers(
     - Tìm nhanh theo mã đại lý, tên, MST hoặc số điện thoại
     - Lọc theo khu vực địa bàn (region)
     - Lọc theo nhóm khách hàng (customer_group)
-    - Lọc theo người phụ trách (assigned_sales_rep)
+    - Lọc theo người phụ trách (assigned_sales_rep / assigned_staff_id)
     - Lọc theo trạng thái (status: active, inactive, locked)
     - Phân quyền theo phạm vi phụ trách nếu là Sales Rep
     - Phân trang dữ liệu (khi truyền page/page_size)
@@ -345,12 +378,12 @@ def get_all_customers(
             )
         )
 
-    # 2. Lọc theo nhóm khách hàng
+    # 2. Bộ lọc nhóm khách hàng
     if customer_group and customer_group.strip().upper() != "ALL":
         query = query.filter(Customer.customer_group == customer_group.strip().upper())
 
-    # 3. Lọc theo khu vực
-    if region and region.strip() and region.upper() != "ALL":
+    # 3. Bộ lọc khu vực (Region Filter)
+    if region and region.strip() and region.strip().upper() != "ALL":
         reg = f"%{region.strip()}%"
         query = query.filter(
             or_(
@@ -359,11 +392,11 @@ def get_all_customers(
             )
         )
 
-    # 4. Lọc theo người phụ trách
+    # 4. Bộ lọc người phụ trách (assigned_sales_rep)
     if assigned_sales_rep and assigned_sales_rep.strip().lower() != "all":
         query = query.filter(Customer.assigned_sales_rep == assigned_sales_rep.strip())
 
-    # 5. Lọc theo trạng thái
+    # 5. Bộ lọc trạng thái (status hoặc status_filter)
     st = status or status_filter
     if st and st.strip().lower() != "all":
         query = query.filter(Customer.status == st.strip().lower())

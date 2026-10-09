@@ -20,24 +20,12 @@ export const CurrencyInput = forwardRef<HTMLInputElement, CurrencyInputProps>(
     }, [value]);
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-      let rawDigits = e.target.value.replace(/\D/g, '');
-      rawDigits = rawDigits.replace(/^0+(?=\d)/, '');
+      const rawDigits = e.target.value.replace(/\D/g, '');
       const formatted = formatCurrencyInput(rawDigits);
       setDisplayValue(formatted);
       const parsedNum = parseCurrencyInput(rawDigits);
       if (onChange) {
         onChange(parsedNum);
-      }
-    };
-
-    const handleFocus = (e: React.FocusEvent<HTMLInputElement>) => {
-      if (displayValue === '0') {
-        setDisplayValue('');
-      } else {
-        e.target.select();
-      }
-      if (rest.onFocus) {
-        rest.onFocus(e);
       }
     };
 
@@ -53,7 +41,6 @@ export const CurrencyInput = forwardRef<HTMLInputElement, CurrencyInputProps>(
             placeholder={placeholder}
             value={displayValue}
             onChange={handleChange}
-            onFocus={handleFocus}
             className={`${className} ${suffix ? 'pr-12' : ''}`}
           />
           <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs text-slate-400 font-medium pointer-events-none select-none">
@@ -73,7 +60,6 @@ export const CurrencyInput = forwardRef<HTMLInputElement, CurrencyInputProps>(
         placeholder={placeholder}
         value={displayValue}
         onChange={handleChange}
-        onFocus={handleFocus}
         className={className}
       />
     );

@@ -34,8 +34,8 @@ def get_customers(
     search: Optional[str] = Query(None, description="Tìm nhanh theo mã, tên, MST hoặc số điện thoại"),
     customer_group: Optional[str] = Query(None, description="Lọc theo nhóm: TIER_1, TIER_2, WHOLESALE, VIP, RETAIL"),
     assigned_staff_id: Optional[str] = Query(None, description="Lọc theo nhân viên phụ trách hoặc 'unassigned'"),
-    region: Optional[str] = Query(None, description="Lọc theo khu vực: Miền Bắc, Miền Trung, Miền Nam, Tây Nguyên"),
     assigned_sales_rep: Optional[str] = Query(None, description="Lọc theo người phụ trách"),
+    region: Optional[str] = Query(None, description="Lọc theo khu vực/địa bàn: Miền Bắc, Miền Trung, Miền Nam, Tây Nguyên"),
     status: Optional[str] = Query(None, description="Lọc theo trạng thái: active, inactive, locked"),
     page: Optional[int] = Query(None, ge=1, description="Số trang phân trang"),
     page_size: Optional[int] = Query(None, ge=1, le=1000, description="Kích thước trang"),
@@ -48,15 +48,17 @@ def get_customers(
     - Lọc theo khu vực địa bàn, nhóm khách hàng, nhân viên kinh doanh phụ trách, trạng thái.
     - Phân quyền phạm vi phụ trách cho Sales Rep.
     - Hỗ trợ phân trang khi truyền tham số `page` và `page_size`.
+    - Sales Rep: Chỉ xem các đại lý mình phụ trách (lọc ở tầng query).
+    - Manager/Admin: Xem 100% đại lý và hỗ trợ lọc theo nhân viên/khu vực/trạng thái.
     """
     result = customer_service.get_all_customers(
         db=db,
         search=search,
         customer_group=customer_group,
         assigned_staff_id=assigned_staff_id,
-        region=region,
         assigned_sales_rep=assigned_sales_rep,
-        status=status,
+        region=region,
+        status_filter=status,
         page=page,
         page_size=page_size,
         current_user=current_user,

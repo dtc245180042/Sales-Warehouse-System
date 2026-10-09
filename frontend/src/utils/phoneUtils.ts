@@ -26,19 +26,8 @@ export const normalizeVNPhoneNumber = (phone: string): string => {
 export const isValidVNPhoneNumber = (phone: string): boolean => {
   const cleaned = normalizeVNPhoneNumber(phone);
   // Đầu số di động Việt Nam gồm 10 số: 03x, 05x, 07x, 08x, 09x
-  const vnMobileRegex = /^(03[2-9]|05[25689]|07[06-9]|08[1-9]|09[0-9])[0-9]{7}$/;
-  // Đầu số cố định (máy bàn) Việt Nam gồm 10-11 số: 02x
-  const vnLandlineRegex = /^02[0-9]{8,9}$/;
-  return vnMobileRegex.test(cleaned) || vnLandlineRegex.test(cleaned);
-};
-
-/**
- * Lọc chỉ giữ lại chữ số (0-9) và tự động giới hạn độ dài (10 số cho di động, 11 số cho cố định)
- */
-export const filterPhoneInput = (val: string): string => {
-  const digits = val.replace(/\D/g, '');
-  const maxLen = digits.startsWith('02') ? 11 : 10;
-  return digits.slice(0, maxLen);
+  const vnPhoneRegex = /^(03[2-9]|05[25689]|07[06-9]|08[1-9]|09[0-9])[0-9]{7}$/;
+  return vnPhoneRegex.test(cleaned);
 };
 
 /**
@@ -54,20 +43,20 @@ export const validateVNPhoneNumber = (
   const cleaned = normalizeVNPhoneNumber(phone);
 
   if (!/^\d+$/.test(cleaned)) {
-    return { valid: false, message: 'Số điện thoại chỉ được chứa ký tự số (0-9).' };
+    return { valid: false, message: 'Số điện thoại chỉ được chứa các chữ số.' };
   }
 
-  if (cleaned.length < 10 || cleaned.length > 11) {
+  if (cleaned.length !== 10) {
     return {
       valid: false,
-      message: `Số điện thoại phải gồm đúng 10 chữ số (hiện có ${cleaned.length} số).`,
+      message: `Số điện thoại phải có đúng 10 chữ số (hiện tại có ${cleaned.length} số).`,
     };
   }
 
   if (!isValidVNPhoneNumber(cleaned)) {
     return {
       valid: false,
-      message: 'Đầu số điện thoại không hợp lệ (Vui lòng nhập đầu số mạng Việt Nam: 03, 05, 07, 08, 09 hoặc 02).',
+      message: 'Đầu số điện thoại không hợp lệ. Vui lòng nhập đầu số mạng Việt Nam (03, 05, 07, 08, 09).',
     };
   }
 

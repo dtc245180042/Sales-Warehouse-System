@@ -110,12 +110,18 @@ export const ProductDetail: React.FC = () => {
       {/* Main Product Card */}
       <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-8 border border-slate-200 dark:border-slate-800 shadow-soft grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
         {/* Left: Big Product Image */}
-        <div className="lg:col-span-6 bg-slate-100 dark:bg-slate-800/60 rounded-3xl overflow-hidden border border-slate-200 dark:border-slate-700/80 aspect-square relative group">
-          <img
-            src={product.image}
-            alt={product.name}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-          />
+          {product.image ? (
+            <img
+              src={product.image}
+              alt={product.name}
+              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+              onError={(e) => { e.currentTarget.style.display = 'none'; }}
+            />
+          ) : (
+            <div className="w-full h-full flex flex-col items-center justify-center text-slate-300 dark:text-slate-600">
+              <Package className="w-16 h-16 stroke-[1.2]" />
+            </div>
+          )}
 
           <div className="absolute top-4 left-4 flex flex-col gap-2">
             <span className="px-3 py-1 rounded-xl text-xs font-bold bg-white/90 dark:bg-slate-900/90 text-slate-800 dark:text-slate-200 backdrop-blur-md shadow-md border border-slate-200/50">

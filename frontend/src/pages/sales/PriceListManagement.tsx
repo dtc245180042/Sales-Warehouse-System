@@ -108,8 +108,8 @@ export const PriceListManagement: React.FC = () => {
           selectedLockStatus === 'locked'
             ? true
             : selectedLockStatus === 'unlocked'
-            ? false
-            : undefined,
+              ? false
+              : undefined,
         search: search.trim() || undefined,
         page: page,
         page_size: pageSize,
@@ -250,7 +250,7 @@ export const PriceListManagement: React.FC = () => {
   return (
     <PageContainer
       title="Bảng Giá Phân Phối"
-      subtitle="Quản lý giá theo nhóm đại lý & thời hạn (S2-10: Cấp 1, Cấp 2, Bán lẻ; kiểm soát giá sàn & khóa đơn)"
+      subtitle="Quản lý giá theo nhóm đại lý & thời hạn"
     >
       {/* 1. COMPACT TOP CONTROLS: Segmented Customer Group Tabs + Actions in ONE sleek bar */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 p-2.5 shadow-soft mb-3.5 space-y-2.5">
@@ -263,11 +263,10 @@ export const PriceListManagement: React.FC = () => {
                 setSelectedGroup('all');
                 setPage(1);
               }}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
-                selectedGroup === 'all'
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${selectedGroup === 'all'
                   ? 'bg-indigo-600 text-white shadow-sm'
                   : 'bg-slate-50 dark:bg-slate-800/80 text-slate-600 dark:text-slate-300 hover:bg-slate-100'
-              }`}
+                }`}
             >
               <Users className="w-3.5 h-3.5" />
               Tất cả nhóm
@@ -289,11 +288,10 @@ export const PriceListManagement: React.FC = () => {
                     setSelectedGroup(isSelected ? 'all' : g.value);
                     setPage(1);
                   }}
-                  className={`px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 border ${
-                    isSelected
+                  className={`px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 border ${isSelected
                       ? 'bg-indigo-50 text-indigo-700 border-indigo-300 dark:bg-indigo-950/60 dark:text-indigo-300 dark:border-indigo-800 shadow-2xs'
                       : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200/80 dark:border-slate-800 hover:border-slate-300'
-                  }`}
+                    }`}
                   title={`${g.label}: ${summary?.total_price_lists || 0} bảng giá`}
                 >
                   <span className={`w-1.5 h-1.5 rounded-full ${hasActive ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'}`} />
@@ -315,11 +313,10 @@ export const PriceListManagement: React.FC = () => {
                   setSelectedStatus(selectedStatus === 'PENDING_APPROVAL' ? 'all' : 'PENDING_APPROVAL');
                   setPage(1);
                 }}
-                className={`px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 border animate-pulse ${
-                  selectedStatus === 'PENDING_APPROVAL'
+                className={`px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 border animate-pulse ${selectedStatus === 'PENDING_APPROVAL'
                     ? 'bg-amber-500 text-white border-amber-600'
                     : 'bg-amber-50 text-amber-800 border-amber-300 dark:bg-amber-950/60 dark:text-amber-200 dark:border-amber-800'
-                }`}
+                  }`}
                 title="Bấm để lọc bảng giá có dòng giá dưới sàn chờ duyệt"
               >
                 <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
@@ -467,9 +464,8 @@ export const PriceListManagement: React.FC = () => {
                   return (
                     <tr
                       key={pl.id}
-                      className={`hover:bg-slate-50/60 dark:hover:bg-slate-800/30 transition-colors ${
-                        isPending ? 'bg-amber-50/30 dark:bg-amber-950/10' : ''
-                      }`}
+                      className={`hover:bg-slate-50/60 dark:hover:bg-slate-800/30 transition-colors ${isPending ? 'bg-amber-50/30 dark:bg-amber-950/10' : ''
+                        }`}
                     >
                       {/* Code & Version */}
                       <td className="py-2.5 px-3 whitespace-nowrap">

@@ -86,3 +86,24 @@ class OrderItem(Base):
     discount_amount = Column(BigInteger, nullable=True)        # Tiền chiết khấu VND nếu áp dụng FIXED_AMOUNT
 
     order = relationship("Order", back_populates="items")
+
+
+# Đảm bảo các cột mới của order_items tự động tồn tại trong CSDL SQLite hiện hữu
+try:
+    from app.core.database import engine
+    from sqlalchemy import text
+    with engine.connect() as _conn:
+        _res = _conn.execute(text("PRAGMA table_info(order_items)")).fetchall()
+        _cols = [r[1] for r in _res]
+        if _cols:
+            if "applied_discount_policy_id" not in _cols:
+                _conn.execute(text("ALTER TABLE order_items ADD COLUMN applied_discount_policy_id INTEGER"))
+            if "applied_discount_policy_name" not in _cols:
+                _conn.execute(text("ALTER TABLE order_items ADD COLUMN applied_discount_policy_name VARCHAR(255)"))
+            if "discount_rate" not in _cols:
+                _conn.execute(text("ALTER TABLE order_items ADD COLUMN discount_rate NUMERIC(5, 2)"))
+            if "discount_amount" not in _cols:
+                _conn.execute(text("ALTER TABLE order_items ADD COLUMN discount_amount BIGINT"))
+            _conn.commit()
+except Exception:
+    pass

@@ -43,9 +43,10 @@ def get_customers(
     db: Session = Depends(lay_phien_db),
 ):
     """
-    Lấy danh sách khách hàng và đại lý (S3-03, SC-228, SCRUM-229):
+    Lấy danh sách khách hàng và đại lý (SCRUM-229 & S3-03/S3-06):
     - Tìm kiếm nhanh theo mã đại lý, tên, MST hoặc số điện thoại.
     - Lọc theo khu vực địa bàn, nhóm khách hàng, nhân viên kinh doanh phụ trách, trạng thái.
+    - Phân quyền phạm vi phụ trách cho Sales Rep.
     - Hỗ trợ phân trang khi truyền tham số `page` và `page_size`.
     - Sales Rep: Chỉ xem các đại lý mình phụ trách (lọc ở tầng query).
     - Manager/Admin: Xem 100% đại lý và hỗ trợ lọc theo nhân viên/khu vực/trạng thái.

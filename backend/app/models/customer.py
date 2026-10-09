@@ -24,7 +24,6 @@ class Customer(Base):
     
     # Nhóm khách hàng (TIER_1, TIER_2, WHOLESALE, VIP, RETAIL)
     customer_group = Column(String(50), default="RETAIL", nullable=False, index=True)
-    
     # Mã số thuế & Khu vực (S3-03 / SCRUM-229)
     tax_code = Column(String(50), unique=True, nullable=True, index=True)
     region = Column(String(100), nullable=True, index=True)

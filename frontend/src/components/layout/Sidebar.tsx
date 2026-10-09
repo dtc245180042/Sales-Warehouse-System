@@ -104,7 +104,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
       heading: 'ĐỐI TÁC & CUNG ỨNG',
       items: [
         {
-          title: 'Đại lý phân phối',
+          title: 'Khách hàng & Đại lý',
+          path: '/customers',
           icon: <Users className="w-5 h-5" />,
           allowedRoles: [
             'Admin',
@@ -120,8 +121,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
           ],
           submenu: [
             {
-              title: 'Danh sách đại lý',
-              path: '/agents',
+              title: 'Danh sách khách hàng & đại lý',
+              path: '/customers',
               icon: <LayoutList className="w-3.5 h-3.5" />,
               allowedRoles: [
                 'Admin',

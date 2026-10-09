@@ -150,6 +150,14 @@ class CustomerResponse(CustomerBase):
         return self.created_at.strftime("%Y-%m-%d") if self.created_at else None
 
     @computed_field
+    def assignedSalesRep(self) -> Optional[str]:
+        return self.assigned_sales_rep or self.assigned_staff_name
+
+    @computed_field
+    def customerGroup(self) -> str:
+        return self.customer_group
+
+    @computed_field
     def assignedStaffId(self) -> Optional[str]:
         return self.assigned_staff_id
 
@@ -164,14 +172,6 @@ class CustomerResponse(CustomerBase):
     @computed_field
     def assignedAt(self) -> Optional[str]:
         return self.assigned_at
-
-    @computed_field
-    def assignedSalesRep(self) -> Optional[str]:
-        return self.assigned_sales_rep or self.assigned_staff_name
-
-    @computed_field
-    def customerGroup(self) -> str:
-        return self.customer_group
 
 
 class CustomerPaginationResponse(BaseModel):

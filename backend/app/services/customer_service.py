@@ -85,7 +85,7 @@ SEED_CUSTOMERS = [
         "total_orders": 25,
         "total_spent": 310000000.0,
         "last_order_date": "2026-09-30",
-        "status": "locked"
+        "status": "active"
     },
     {
         "id": "CUS-005",
@@ -241,11 +241,11 @@ def _enrich_customer_response(db: Session, customer: Customer) -> CustomerRespon
         customer_group=customer.customer_group,
         tax_code=customer.tax_code,
         region=customer.region,
+        assigned_sales_rep=customer.assigned_sales_rep or assigned_staff_name,
         status=customer.status,
-        total_orders=orders_count,
-        total_spent=total_spent,
-        last_order_date=last_order_date,
-        assigned_sales_rep=getattr(customer, "assigned_sales_rep", None) or assigned_staff_name,
+        total_orders=orders_count if orders_count > 0 else (customer.total_orders or 0),
+        total_spent=total_spent if total_spent > 0 else (customer.total_spent or 0.0),
+        last_order_date=last_order_date or customer.last_order_date,
         assigned_staff_id=assigned_staff_id,
         assigned_staff_name=assigned_staff_name,
         assigned_staff_phone=assigned_staff_phone,
@@ -323,12 +323,13 @@ def get_all_customers(
     current_user: Optional[User] = None,
 ) -> Union[Dict[str, Any], List[CustomerResponse]]:
     """
-    Truy vấn và lọc danh sách đại lý theo các tiêu chí (S3-03, SC-228, SCRUM-229):
-    - Tìm nhanh theo mã đại lý, tên, số điện thoại hoặc MST
+    Truy vấn và lọc danh sách đại lý theo các tiêu chí (SCRUM-229 & S3-03):
+    - Tìm nhanh theo mã đại lý, tên, MST hoặc số điện thoại
     - Lọc theo khu vực địa bàn (region)
     - Lọc theo nhóm khách hàng (customer_group)
     - Lọc theo người phụ trách (assigned_sales_rep / assigned_staff_id)
     - Lọc theo trạng thái (status: active, inactive, locked)
+    - Phân quyền theo phạm vi phụ trách nếu là Sales Rep
     - Phân trang dữ liệu (khi truyền page/page_size)
     """
     ensure_seed_customers(db)
@@ -409,10 +410,10 @@ def get_all_customers(
         p = max(1, page or 1)
         ps = max(1, min(page_size or 10, 1000))
         offset = (p - 1) * ps
-        items = query.offset(offset).limit(ps).all()
+        customers = query.offset(offset).limit(ps).all()
         total_pages = max(1, math.ceil(total / ps))
         return {
-            "items": [_enrich_customer_response(db, c) for c in items],
+            "items": [_enrich_customer_response(db, c) for c in customers],
             "total": total,
             "page": p,
             "page_size": ps,

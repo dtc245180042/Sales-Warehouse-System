@@ -43,13 +43,13 @@ npm run dev
 
 | STT | Tên đăng nhập (Username) | Địa chỉ Email | Mật khẩu (Password) | Vai trò (Role) | Phạm vi & Chức năng chính |
 | :---: | :--- | :--- | :--- | :--- | :--- |
-| **1** | `admin` | `admin@warehouse.local` | `Admin@1234`<br>*(hoặc `Admin@123456`)* | **Admin** | Quản trị toàn hệ thống, tạo/sửa/khóa tài khoản, gán quyền và kho |
-| **2** | `sales_mgr` | `sales_mgr@warehouse.local` | `SalesMgr@1234` | **Sales Manager** | Quản lý kinh doanh, xem giá vốn, biên lợi nhuận, duyệt đơn hàng |
-| **3** | `sales_rep` | `sales_rep@warehouse.local` | `SalesRep@1234` | **Sales Rep** | Nhân viên kinh doanh phụ trách đại lý và tạo đơn hàng theo địa bàn |
-| **4** | `wh_mgr` | `wh_mgr@warehouse.local` | `WhMgr@1234` | **WH Manager** | Quản lý kho, điều phối xuất nhập kho và tồn kho các chi nhánh |
-| **5** | `warehouse` | `warehouse@warehouse.local` | `Warehouse@1234` | **Warehouse** | Thủ kho/nhân viên kho (phải gắn với ít nhất một kho cụ thể) |
-| **6** | `accountant` | `accountant@warehouse.local` | `Accountant@1234` | **Accountant** | Kế toán viên theo dõi công nợ, hóa đơn và doanh thu |
-| **7** | `customer` | `customer@warehouse.local` | `Customer@1234` | **Customer** | Khách hàng / Đại lý đặt hàng trực tuyến |
+| **1** | `admin` | `admin@warehouse.local` | 123456 | **Admin** | Quản trị toàn hệ thống, tạo/sửa/khóa tài khoản, gán quyền và kho |
+| **2** | `sales_mgr` | `sales_mgr@warehouse.local` | `123456 | **Sales Manager** | Quản lý kinh doanh, xem giá vốn, biên lợi nhuận, duyệt đơn hàng |
+| **3** | `sales_rep` | `sales_rep@warehouse.local` | 123456 | **Sales Rep** | Nhân viên kinh doanh phụ trách đại lý và tạo đơn hàng theo địa bàn |
+| **4** | `wh_mgr` | `wh_mgr@warehouse.local` | 123456 | **WH Manager** | Quản lý kho, điều phối xuất nhập kho và tồn kho các chi nhánh |
+| **5** | `warehouse` | `warehouse@warehouse.local` | 123456 | **Warehouse** | Thủ kho/nhân viên kho (phải gắn với ít nhất một kho cụ thể) |
+| **6** | `accountant` | `accountant@warehouse.local` | 123456 | **Accountant** | Kế toán viên theo dõi công nợ, hóa đơn và doanh thu |
+| **7** | `customer` | `customer@warehouse.local` | `123456 | **Customer** | Khách hàng / Đại lý đặt hàng trực tuyến |
 
 ---
 

@@ -575,7 +575,7 @@ const ActivityLogPage: React.FC = () => {
                     : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700'
                 }`}
               >
-                {s === '' ? 'Tất cả trạng thái' : s === 'success' ? '✓ Thành công' : s === 'failed' ? '✗ Thất bại' : '⚠ Cảnh báo'}
+                {s === '' ? 'Tất cả trạng thái' : s === 'success' ? 'Thành công' : s === 'failed' ? 'Thất bại' : 'Cảnh báo'}
               </button>
             ))}
 

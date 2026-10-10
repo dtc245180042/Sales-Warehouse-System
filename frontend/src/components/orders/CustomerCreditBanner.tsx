@@ -208,9 +208,6 @@ export const CustomerCreditBanner: React.FC<CustomerCreditBannerProps> = ({
               <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100">
                 Hạn Mức & Công Nợ Đại Lý
               </h4>
-              <span className="text-[10px] font-semibold text-slate-400">
-                (S4-02)
-              </span>
             </div>
             {customerName && (
               <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate max-w-[200px]">

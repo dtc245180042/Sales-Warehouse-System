@@ -24,6 +24,14 @@ export interface OrderItem {
   discount_rate?: number;
   discountAmount?: number;
   discount_amount?: number;
+  availableStock?: number;
+  available_stock?: number;
+  physicalStock?: number;
+  physical_stock?: number;
+  reservedStock?: number;
+  reserved_stock?: number;
+  warehouse?: string;
+  maxOrderableQuantity?: number;
 }
 
 export interface Order {
@@ -57,8 +65,15 @@ export interface Order {
   deliveryAddress?: string;
   deliveryNotes?: string;
   expectedDeliveryDate?: string;
+  copiedFromOrderId?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface OrderCopyResponse {
+  order: Order;
+  warnings: string[];
+  message: string;
 }
 
 export interface OrderCalculateItem {
@@ -101,7 +116,36 @@ export interface ProductSearchForOrder {
   price: number;
   sale_price: number;
   stock: number;
+  available_stock?: number;
+  physical_stock?: number;
+  reserved_stock?: number;
+  warehouse?: string;
   unit: string;
   packaging_spec?: string;
   available_units: string[];
+}
+
+export interface LineItemAvailabilityResult {
+  product_id: string;
+  sku: string;
+  product_name: string;
+  unit: string;
+  requested_quantity: number;
+  physical_stock: number;
+  reserved_stock: number;
+  available_stock: number;
+  max_orderable_quantity: number;
+  warehouse_name: string;
+  warehouse_code: string;
+  is_available: boolean;
+  warning_message?: string;
+}
+
+export interface CheckOrderAvailabilityResponse {
+  customer_id: string;
+  warehouse_name: string;
+  warehouse_code: string;
+  all_items_available: boolean;
+  items: LineItemAvailabilityResult[];
+  summary_message?: string;
 }

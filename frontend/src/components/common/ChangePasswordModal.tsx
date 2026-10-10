@@ -188,7 +188,7 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ isOpen
           </div>
           {confirmPassword && (
             <p className={`text-[11px] mt-1 font-medium ${isMatch ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}`}>
-              {isMatch ? '✓ Mật khẩu xác nhận đã trùng khớp' : '✕ Mật khẩu xác nhận chưa khớp'}
+              {isMatch ? 'Mật khẩu xác nhận đã trùng khớp' : 'Mật khẩu xác nhận chưa khớp'}
             </p>
           )}
         </div>

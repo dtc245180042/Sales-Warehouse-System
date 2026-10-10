@@ -176,7 +176,7 @@ export const ProductImportPage: React.FC = () => {
   return (
     <PageContainer
       title="Nhập Danh Mục Sản Phẩm Từ Excel"
-      subtitle="Hỗ trợ đưa hàng nghìn mã hàng SKU vào hệ thống nhanh chóng với cơ chế kiểm tra lỗi và cập nhật tự động (SCRUM-216)"
+      subtitle="Hỗ trợ đưa hàng nghìn mã hàng SKU vào hệ thống nhanh chóng với cơ chế kiểm tra lỗi và cập nhật tự động"
       actions={
         <div className="flex items-center gap-2">
           <Button
@@ -503,7 +503,7 @@ export const ProductImportPage: React.FC = () => {
         <Modal
           isOpen={isSummaryModalOpen}
           onClose={() => setIsSummaryModalOpen(false)}
-          title="Kết Quả Nhập Danh Mục Sản Phẩm (SCRUM-216)"
+          title="Kết Quả Nhập Danh Mục Sản Phẩm"
         >
           <div className="space-y-6 py-2">
             <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-400">

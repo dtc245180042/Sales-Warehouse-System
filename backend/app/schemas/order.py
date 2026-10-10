@@ -139,6 +139,10 @@ class ProductSearchForOrderResponse(BaseModel):
     unit: str
     packaging_spec: Optional[str] = None
     available_units: List[str] = []
+    available_stock: Optional[int] = None
+    warehouse: Optional[str] = None
+    physical_stock: Optional[int] = None
+    reserved_stock: Optional[int] = None
 
 
 class OrderStatusUpdate(BaseModel):
@@ -179,6 +183,7 @@ class OrderResponse(BaseModel):
     customer_is_locked: bool = False
     customer_lock_warning: Optional[str] = None
     expected_delivery_date: Optional[str] = None
+    copied_from_order_id: Optional[str] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
@@ -276,3 +281,177 @@ class OrderResponse(BaseModel):
     @computed_field
     def approvalReason(self) -> Optional[str]:
         return self.approval_reason
+
+    @computed_field
+    def copiedFromOrderId(self) -> Optional[str]:
+        return self.copied_from_order_id
+
+
+# ============================================================================
+# SCRUM-236 (S4-04): Gợi ý mặt hàng từ lịch sử mua hàng 3 tháng gần nhất
+# ============================================================================
+
+class PurchaseHistoryItemSuggestion(BaseModel):
+    product_id: str
+    sku: Optional[str] = None
+    name: str
+    unit: str = "cái"
+    category: Optional[str] = "Khác"
+    category_id: Optional[int] = None
+    avg_quantity: float = Field(..., description="Số lượng bình quân trong các đơn 90 ngày (làm tròn 1 chữ số thập phân)")
+    total_quantity: int = Field(0, description="Tổng số lượng đã mua trong 90 ngày")
+    order_count: int = Field(0, description="Số đơn hàng đã mua sản phẩm này trong 90 ngày")
+    last_quantity: int = Field(1, description="Số lượng mua trong lần gần nhất")
+    last_purchased_at: Optional[str] = Field(None, description="Thời gian mua lần gần nhất (YYYY-MM-DD HH:MM)")
+    last_price: float = Field(0.0, description="Đơn giá mua lần gần nhất")
+    current_price: float = Field(0.0, description="Giá bán niêm yết hiện tại")
+    stock: int = Field(0, description="Tồn kho hiện tại")
+
+    model_config = ConfigDict(from_attributes=True)
+
+    @computed_field
+    def productId(self) -> str:
+        return self.product_id
+
+    @computed_field
+    def categoryId(self) -> Optional[int]:
+        return self.category_id
+
+    @computed_field
+    def avgQuantity(self) -> float:
+        return self.avg_quantity
+
+    @computed_field
+    def totalQuantity(self) -> int:
+        return self.total_quantity
+
+    @computed_field
+    def orderCount(self) -> int:
+        return self.order_count
+
+    @computed_field
+    def lastQuantity(self) -> int:
+        return self.last_quantity
+
+    @computed_field
+    def lastPurchasedAt(self) -> Optional[str]:
+        return self.last_purchased_at
+
+    @computed_field
+    def lastPrice(self) -> float:
+        return self.last_price
+
+    @computed_field
+    def currentPrice(self) -> float:
+        return self.current_price
+
+
+class PurchaseHistoryGroupSuggestion(BaseModel):
+    category: str = Field(..., description="Tên nhóm hàng")
+    category_id: Optional[int] = None
+    item_count: int = Field(0, description="Số lượng sản phẩm trong nhóm")
+    total_suggested_quantity: float = Field(0.0, description="Tổng số lượng bình quân của cả nhóm")
+    items: List[PurchaseHistoryItemSuggestion] = []
+
+    model_config = ConfigDict(from_attributes=True)
+
+    @computed_field
+    def categoryId(self) -> Optional[int]:
+        return self.category_id
+
+    @computed_field
+    def itemCount(self) -> int:
+        return self.item_count
+
+    @computed_field
+    def totalSuggestedQuantity(self) -> float:
+        return self.total_suggested_quantity
+
+
+class LastOrderItemSummary(BaseModel):
+    product_id: str
+    sku: Optional[str] = None
+    name: str
+    unit: str = "cái"
+    quantity: int = 1
+    price: float = 0.0
+
+    model_config = ConfigDict(from_attributes=True)
+
+    @computed_field
+    def productId(self) -> str:
+        return self.product_id
+
+
+class LastOrderSummary(BaseModel):
+    order_id: str
+    code: str
+    created_at: Optional[str] = None
+    total: float = 0.0
+    items: List[LastOrderItemSummary] = []
+
+    model_config = ConfigDict(from_attributes=True)
+
+    @computed_field
+    def orderId(self) -> str:
+        return self.order_id
+
+    @computed_field
+    def createdAt(self) -> Optional[str]:
+        return self.created_at
+
+
+class PurchaseHistorySuggestionResponse(BaseModel):
+    customer_id: str
+    customer_name: str
+    time_window_days: int = 90
+    total_orders_in_window: int = 0
+    has_purchase_history: bool = False
+    items: List[PurchaseHistoryItemSuggestion] = []
+    groups: List[PurchaseHistoryGroupSuggestion] = []
+    last_order: Optional[LastOrderSummary] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+    @computed_field
+    def customerId(self) -> str:
+        return self.customer_id
+
+    @computed_field
+    def customerName(self) -> str:
+        return self.customer_name
+
+    @computed_field
+    def timeWindowDays(self) -> int:
+        return self.time_window_days
+
+    @computed_field
+    def totalOrdersInWindow(self) -> int:
+        return self.total_orders_in_window
+
+    @computed_field
+    def hasPurchaseHistory(self) -> bool:
+        return self.has_purchase_history
+
+    @computed_field
+    def lastOrder(self) -> Optional[LastOrderSummary]:
+        return self.last_order
+
+
+class MergeItemsRequest(BaseModel):
+    current_items: List[OrderItemCreate] = []
+    items_to_add: List[OrderItemCreate] = []
+    strategy: str = Field("merge", description="'merge': cộng dồn số lượng; 'replace_qty': lấy số lượng mới")
+
+
+class MergeItemsResponse(BaseModel):
+    items: List[OrderItemCreate] = []
+    merged_count: int = 0
+    added_count: int = 0
+
+
+class OrderCopyResponse(BaseModel):
+    order: OrderResponse
+    warnings: List[str] = Field(default_factory=list, description="Cảnh báo sản phẩm ngừng kinh doanh không được sao chép")
+    message: str = Field("Sao chép đơn hàng thành công sang đơn nháp mới.", description="Thông báo trạng thái")
+

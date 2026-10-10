@@ -56,6 +56,9 @@ import { RevenueReport } from '../pages/reports/RevenueReport';
 import { InventoryReport } from '../pages/reports/InventoryReport';
 
 
+// Cổng Đại Lý B2B (S4-10, SCRUM-242)
+import { PortalOrderPage } from '../pages/portal/PortalOrderPage';
+
 // All 7 business roles allowed in Sprint 1 & 2 backoffice
 const ALL_BACKOFFICE_ROLES: UserRole[] = [
   'Admin',
@@ -447,6 +450,20 @@ export const AppRoutes: React.FC = () => {
           }
         />
       </Route>
+
+      {/* Cổng Đại lý tự đặt hàng B2B 24/7 Mobile & Desktop (S4-10, SCRUM-242) */}
+      <Route
+        path="/portal/order"
+        element={
+          <ProtectedRoute allowedRoles={['Customer', 'User', 'Admin']}>
+            <PortalOrderPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/portal"
+        element={<Navigate to="/portal/order" replace />}
+      />
 
       {/* Fallback 404 Route - SCRUM-204 */}
       <Route

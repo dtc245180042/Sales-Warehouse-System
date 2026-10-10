@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   Printer,
   FileDown,
+  Copy,
   Ban,
   CheckCircle2,
   Clock,
@@ -23,12 +24,14 @@ import { ConfirmDialog } from '../../components/common/ConfirmDialog';
 import { Loading } from '../../components/common/Loading';
 import { EmptyState } from '../../components/common/EmptyState';
 import { formatCurrency, formatDate } from '../../utils/formatters';
+import { OrderLifecycleTimeline } from '../../components/sales/OrderLifecycleTimeline';
 import { orderService } from '../../services/orderService';
 import { Order, OrderStatus } from '../../types/Order';
 import { useToast } from '../../contexts/ToastContext';
 import { useAuth } from '../../contexts/AuthContext';
 
 import { customerLockService } from '../../services/customerLockService';
+import { OrderPrintModal } from '../../components/orders/OrderPrintModal';
 
 export const OrderDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -40,6 +43,9 @@ export const OrderDetail: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
   const [isCustomerLocked, setIsCustomerLocked] = useState(false);
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
+  const [isCopyModalOpen, setIsCopyModalOpen] = useState(false);
+  const [isCopying, setIsCopying] = useState(false);
 
   // Phân quyền theo vai trò (RBAC S4-05, SCRUM-203, SCRUM-498):
   const isManagerOrAdmin = ['Admin', 'Director', 'SalesManager', 'Manager', 'Accountant'].includes(role);
@@ -111,6 +117,27 @@ export const OrderDetail: React.FC = () => {
     }
   };
 
+  const handleCopyOrder = async () => {
+    if (!order || isCopying) return;
+    setIsCopying(true);
+    try {
+      const res = await orderService.copyOrder(order.id);
+      setIsCopyModalOpen(false);
+
+      if (res.warnings && res.warnings.length > 0) {
+        res.warnings.forEach((warn) => showToast(warn, 'warning'));
+      }
+      showToast(`Đã sao chép sang đơn nháp mới ${res.order.code}`, 'success');
+
+      // Điều hướng sang trang tạo đơn với draftId của đơn mới
+      navigate(`/orders/create?draftId=${encodeURIComponent(res.order.id)}`);
+    } catch (err: any) {
+      showToast(err.message || 'Lỗi khi sao chép đơn hàng', 'error');
+    } finally {
+      setIsCopying(false);
+    }
+  };
+
   if (loading) return <Loading text="Đang tải chi tiết đơn hàng..." />;
   if (!order) {
     return (
@@ -149,19 +176,23 @@ export const OrderDetail: React.FC = () => {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => window.print()}
-            leftIcon={<Printer className="w-4 h-4" />}
+            onClick={() => setIsPrintModalOpen(true)}
+            leftIcon={<Printer className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />}
           >
-            In phiếu xuất
+            In / Lưu PDF
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => showToast('Đang tạo và tải file PDF đơn hàng...', 'info')}
-            leftIcon={<FileDown className="w-4 h-4" />}
-          >
-            Xuất PDF
-          </Button>
+          {(!user || ['admin', 'sales manager', 'sales rep', 'salesstaff', 'salesmanager', 'staff', 'manager'].includes((user.role || '').toLowerCase())) && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsCopyModalOpen(true)}
+              isLoading={isCopying}
+              disabled={isCopying}
+              leftIcon={<Copy className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />}
+            >
+              Sao chép đơn
+            </Button>
+          )}
           {canCancelOrder && order.status !== 'cancelled' && order.status !== 'completed' && (
             <Button
               variant="danger"
@@ -184,7 +215,7 @@ export const OrderDetail: React.FC = () => {
           <ShieldAlert className="w-6 h-6 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
           <div className="flex-1 text-xs sm:text-sm">
             <h4 className="font-bold text-amber-900 dark:text-amber-100 flex items-center gap-2">
-              ⚠️ ĐƠN HÀNG CẦN PHÊ DUYỆT CÔNG NỢ (S4-02)
+              ĐƠN HÀNG CẦN PHÊ DUYỆT CÔNG NỢ
               <span className="text-xs px-2 py-0.5 rounded-full bg-amber-200 dark:bg-amber-900/60 font-semibold text-amber-800 dark:text-amber-200">
                 Vượt hạn mức tín dụng
               </span>
@@ -197,7 +228,7 @@ export const OrderDetail: React.FC = () => {
         </div>
       )}
 
-      {/* Banner Cảnh báo đại lý bị khoá giao dịch (SC-228 Subtask 6) */}
+      {/* Banner Cảnh báo đại lý bị khoá giao dịch */}
       {(order.customerIsLocked || isCustomerLocked) && (
         <div
           id="order-customer-locked-alert"
@@ -206,18 +237,27 @@ export const OrderDetail: React.FC = () => {
           <AlertCircle className="w-6 h-6 text-amber-600 shrink-0 mt-0.5" />
           <div className="flex-1 text-xs sm:text-sm">
             <h4 className="font-bold text-amber-900 dark:text-amber-100 flex items-center gap-2">
-              ⚠️ CẢNH BÁO: ĐẠI LÝ ĐANG BỊ KHOÁ GIAO DỊCH
+              CẢNH BÁO: ĐẠI LÝ ĐANG BỊ KHOÁ GIAO DỊCH
               <span className="text-xs px-2 py-0.5 rounded-full bg-amber-200 dark:bg-amber-900/60 font-semibold text-amber-800 dark:text-amber-200">
                 Đơn dở vẫn được xử lý tiếp
               </span>
             </h4>
             <p className="mt-1 text-amber-800 dark:text-amber-200">
               {order.customerLockWarning ||
-                `Đại lý '${order.customerName}' hiện đang bị khoá giao dịch. Theo quy định SC-228, đơn hàng đã tạo này vẫn được phép tiếp tục đóng gói, giao hàng hoặc hoàn tất, nhưng không thể tạo đơn mới.`}
+                `Đại lý '${order.customerName}' hiện đang bị khoá giao dịch. Theo quy định, đơn hàng đã tạo này vẫn được phép tiếp tục đóng gói, giao hàng hoặc hoàn tất, nhưng không thể tạo đơn mới.`}
             </p>
           </div>
         </div>
       )}
+
+      {/* SCRUM-238 (S4-06): Tiến trình vòng đời đơn hàng trực quan và phân nhánh */}
+      <div className="mb-6">
+        <OrderLifecycleTimeline
+          order={order}
+          onUpdateStatus={(st) => handleUpdateStatus(st)}
+          onRequestCancel={() => setIsCancelModalOpen(true)}
+        />
+      </div>
 
       {/* Order Status Timeline Tracker */}
       {order.status !== 'cancelled' ? (
@@ -393,7 +433,7 @@ export const OrderDetail: React.FC = () => {
                           <span className="text-[11px] text-slate-400 font-mono">SKU: {it.sku}</span>
                           {(it.isBelowFloor || it.is_below_floor) && (
                             <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700">
-                              ⚠️ Dưới giá sàn {it.floorPrice || it.floor_price ? `(${formatCurrency(it.floorPrice || it.floor_price || 0)})` : ''}
+                              Dưới giá sàn {it.floorPrice || it.floor_price ? `(${formatCurrency(it.floorPrice || it.floor_price || 0)})` : ''}
                             </span>
                           )}
                         </div>
@@ -522,6 +562,25 @@ export const OrderDetail: React.FC = () => {
         message="Bạn có chắc chắn muốn hủy đơn hàng này? Toàn bộ số lượng sản phẩm sẽ được hoàn trả về tồn kho."
         confirmText="Hủy đơn"
         variant="danger"
+      />
+
+      <ConfirmDialog
+        isOpen={isCopyModalOpen}
+        onClose={() => !isCopying && setIsCopyModalOpen(false)}
+        onConfirm={handleCopyOrder}
+        title="Xác nhận sao chép đơn hàng"
+        message={`Bạn có chắc chắn muốn sao chép đơn hàng "${order.code}"? Hệ thống sẽ tạo một đơn nháp mới và tự động tính lại đơn giá & chiết khấu theo bảng giá hiện hành.`}
+        confirmText={isCopying ? "Đang sao chép..." : "Sao chép thành đơn nháp"}
+        cancelText="Đóng"
+        variant="info"
+        isLoading={isCopying}
+      />
+
+      <OrderPrintModal
+        isOpen={isPrintModalOpen}
+        onClose={() => setIsPrintModalOpen(false)}
+        orderId={order.id}
+        orderCode={order.code}
       />
     </PageContainer>
   );

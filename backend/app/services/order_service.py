@@ -778,6 +778,8 @@ def submit_draft_order(
     )
     if eval_res["requires_approval"]:
         order.status = "pending_approval"
+        order.requires_approval = True
+        order.approval_reason = eval_res.get("violation_summary") or eval_res.get("approval_reason")
         record_or_update_approval_request(db, order, eval_res)
         order.updated_at = datetime.now(timezone.utc)
         db.commit()

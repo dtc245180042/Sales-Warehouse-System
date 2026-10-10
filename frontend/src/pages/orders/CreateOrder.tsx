@@ -24,6 +24,10 @@ import {
   Boxes,
   ShieldAlert,
   Ban,
+  CreditCard,
+  Banknote,
+  QrCode,
+  Receipt,
 } from 'lucide-react';
 import { CustomerCreditBanner, CustomerCreditStatusInfo } from '../../components/orders/CustomerCreditBanner';
 import { customerService } from '../../services/customerService';
@@ -110,6 +114,28 @@ export const CreateOrder: React.FC = () => {
   const [calculatedSubtotal, setCalculatedSubtotal] = useState(0);
   const [calculatedDiscount, setCalculatedDiscount] = useState(0);
   const [calculatedTotal, setCalculatedTotal] = useState(0);
+
+  // Payment & Settlement State (Thanh toán tại chỗ / Quyết toán công nợ)
+  const [paymentMode, setPaymentMode] = useState<'credit' | 'full' | 'partial'>('credit');
+  const [paidAmount, setPaidAmount] = useState<number>(0);
+  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'transfer'>('transfer');
+
+  const unpaidAmount = useMemo(() => {
+    return Math.max(0, calculatedTotal - paidAmount);
+  }, [calculatedTotal, paidAmount]);
+
+  // Đồng bộ số tiền thanh toán khi tổng tiền hoặc chế độ quyết toán thay đổi
+  useEffect(() => {
+    if (paymentMode === 'full') {
+      setPaidAmount(calculatedTotal);
+    } else if (paymentMode === 'credit') {
+      setPaidAmount(0);
+    } else if (paymentMode === 'partial') {
+      if (paidAmount > calculatedTotal) {
+        setPaidAmount(calculatedTotal);
+      }
+    }
+  }, [calculatedTotal, paymentMode]);
 
   // Drafts Drawer State
   const [isDraftsDrawerOpen, setIsDraftsDrawerOpen] = useState(false);
@@ -542,9 +568,13 @@ export const CreateOrder: React.FC = () => {
       subtotal: calculatedSubtotal,
       discount: calculatedDiscount,
       total: calculatedTotal,
-      paidAmount: 0,
-      paymentMethod: 'transfer' as const,
-      paymentStatus: 'unpaid' as const,
+      paidAmount: paidAmount,
+      paymentMethod: paymentMethod,
+      paymentStatus: (paidAmount >= calculatedTotal && calculatedTotal > 0
+        ? 'paid'
+        : paidAmount > 0
+        ? 'partial'
+        : 'unpaid') as any,
       status: finalStatus as any,
       requiresApproval: willRequireApproval,
       approvalReason: hasBelowFloor
@@ -973,6 +1003,7 @@ export const CreateOrder: React.FC = () => {
               customerId={selectedCustomer.id}
               customerName={selectedCustomer.name}
               newOrderAmount={calculatedTotal}
+              newOrderPaid={paidAmount}
               onStatusChange={setCreditStatus}
             />
           )}
@@ -1303,8 +1334,8 @@ export const CreateOrder: React.FC = () => {
           )}
         </section>
 
-        {/* SECTION 3: Tóm tắt thanh toán theo thời gian thực */}
-        <section className="bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-2xl p-3.5 shadow-sm space-y-2.5 text-xs">
+        {/* SECTION 3: Thanh toán & Quyết toán công nợ tại hiện trường */}
+        <section className="bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-2xl p-4 shadow-sm space-y-4 text-xs">
           {/* Cảnh báo giá sàn đơn hàng (SCRUM-495) */}
           {hasBelowFloor && (
             <div className="p-3 bg-amber-50 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-700/80 rounded-xl flex items-start gap-2.5 text-xs text-amber-900 dark:text-amber-200">
@@ -1320,30 +1351,230 @@ export const CreateOrder: React.FC = () => {
             </div>
           )}
 
-          <div className="flex items-center justify-between text-slate-600 dark:text-slate-400">
-            <span>Tạm tính tiền hàng:</span>
-            <span className="font-semibold text-slate-800 dark:text-slate-200">
-              {formatCurrency(calculatedSubtotal)}
-            </span>
+          {/* Header Thanh toán */}
+          <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+            <div className="flex items-center gap-2">
+              <div className="p-2 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400">
+                <CreditCard className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="font-bold text-sm text-slate-900 dark:text-white">
+                  Thanh Toán & Quyết Toán Công Nợ
+                </h3>
+                <p className="text-[11px] text-slate-500">
+                  Thu tiền ngay tại chỗ hoặc ghi nợ vào hạn mức đại lý
+                </p>
+              </div>
+            </div>
+            {unpaidAmount > 0 ? (
+              <span className="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                Ghi nợ: {formatCurrency(unpaidAmount)}
+              </span>
+            ) : calculatedTotal > 0 ? (
+              <span className="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                ✓ Đã thu đủ 100%
+              </span>
+            ) : null}
           </div>
 
-          {calculatedDiscount > 0 && (
-            <div className="flex items-center justify-between text-emerald-600 dark:text-emerald-400 font-medium">
-              <span className="flex items-center gap-1">
-                <Sparkles className="w-3.5 h-3.5" />
-                Chiết khấu sản lượng:
-              </span>
-              <span>-{formatCurrency(calculatedDiscount)}</span>
+          {/* 3 Chế độ thanh toán (Segmented Control) */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+              Phương thức quyết toán:
+            </label>
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setPaymentMode('credit');
+                  setPaidAmount(0);
+                }}
+                className={`flex flex-col items-center justify-center p-2.5 rounded-xl border text-center transition-all ${
+                  paymentMode === 'credit'
+                    ? 'bg-blue-50 dark:bg-blue-950/60 border-blue-500 text-blue-700 dark:text-blue-300 font-bold ring-2 ring-blue-400/20 shadow-xs'
+                    : 'bg-slate-50/70 dark:bg-slate-800/40 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100'
+                }`}
+              >
+                <FileText className="w-4 h-4 mb-1" />
+                <span className="text-[11px]">Ghi nợ 100%</span>
+                <span className="text-[9px] text-slate-400 mt-0.5 font-normal">Tính vào hạn mức</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setPaymentMode('full');
+                  setPaidAmount(calculatedTotal);
+                }}
+                className={`flex flex-col items-center justify-center p-2.5 rounded-xl border text-center transition-all ${
+                  paymentMode === 'full'
+                    ? 'bg-emerald-50 dark:bg-emerald-950/60 border-emerald-500 text-emerald-700 dark:text-emerald-300 font-bold ring-2 ring-emerald-400/20 shadow-xs'
+                    : 'bg-slate-50/70 dark:bg-slate-800/40 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100'
+                }`}
+              >
+                <CheckCircle className="w-4 h-4 mb-1" />
+                <span className="text-[11px]">Trả đủ 100%</span>
+                <span className="text-[9px] text-slate-400 mt-0.5 font-normal">Thu tiền tại chỗ</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setPaymentMode('partial');
+                  if (paidAmount === 0 && calculatedTotal > 0) {
+                    setPaidAmount(Math.round(calculatedTotal * 0.3));
+                  }
+                }}
+                className={`flex flex-col items-center justify-center p-2.5 rounded-xl border text-center transition-all ${
+                  paymentMode === 'partial'
+                    ? 'bg-violet-50 dark:bg-violet-950/60 border-violet-500 text-violet-700 dark:text-violet-300 font-bold ring-2 ring-violet-400/20 shadow-xs'
+                    : 'bg-slate-50/70 dark:bg-slate-800/40 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100'
+                }`}
+              >
+                <Receipt className="w-4 h-4 mb-1" />
+                <span className="text-[11px]">Thanh toán 1 phần</span>
+                <span className="text-[9px] text-slate-400 mt-0.5 font-normal">Cọc / Trả trước</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Khi có thanh toán tại chỗ (Full hoặc Partial) */}
+          {paymentMode !== 'credit' && (
+            <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700/80 space-y-3">
+              {/* Phương thức thanh toán */}
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">
+                  Hình thức thu tiền tại chỗ:
+                </span>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod('cash')}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 transition-all ${
+                      paymentMethod === 'cash'
+                        ? 'bg-emerald-600 text-white shadow-xs'
+                        : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'
+                    }`}
+                  >
+                    <Banknote className="w-3.5 h-3.5" />
+                    Tiền mặt
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod('transfer')}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 transition-all ${
+                      paymentMethod === 'transfer'
+                        ? 'bg-blue-600 text-white shadow-xs'
+                        : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'
+                    }`}
+                  >
+                    <QrCode className="w-3.5 h-3.5" />
+                    Chuyển khoản
+                  </button>
+                </div>
+              </div>
+
+              {/* Ô nhập số tiền nếu là Partial */}
+              {paymentMode === 'partial' && (
+                <div className="space-y-1.5 pt-2 border-t border-slate-200/60 dark:border-slate-700/60">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] font-semibold text-slate-700 dark:text-slate-300">
+                      Số tiền trả trước / đặt cọc:
+                    </label>
+                    <span className="text-[10px] text-slate-500">
+                      Tối đa: {formatCurrency(calculatedTotal)}
+                    </span>
+                  </div>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      min="0"
+                      max={calculatedTotal}
+                      value={paidAmount || ''}
+                      placeholder="0"
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value) || 0;
+                        setPaidAmount(Math.min(calculatedTotal, Math.max(0, val)));
+                      }}
+                      className="w-full pl-3 pr-14 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-semibold text-slate-400">
+                      VNĐ
+                    </span>
+                  </div>
+
+                  {/* Quick percentage chips */}
+                  <div className="flex items-center gap-1.5 pt-1">
+                    <span className="text-[10px] text-slate-400">Gợi ý nhanh:</span>
+                    {[0.2, 0.3, 0.5].map((pct) => (
+                      <button
+                        key={pct}
+                        type="button"
+                        onClick={() => setPaidAmount(Math.round(calculatedTotal * pct))}
+                        className="px-2 py-0.5 rounded text-[10px] font-medium bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-100"
+                      >
+                        {pct * 100}% ({formatCurrency(Math.round(calculatedTotal * pct))})
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
-          <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
-            <span className="font-bold text-sm text-slate-900 dark:text-white">
-              Tổng thanh toán:
-            </span>
-            <span className="font-black text-base text-blue-600 dark:text-blue-400">
-              {formatCurrency(calculatedTotal)}
-            </span>
+          {/* Tóm tắt tiền hàng & Dòng tiền */}
+          <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-1.5">
+            <div className="flex items-center justify-between text-slate-600 dark:text-slate-400">
+              <span>Tạm tính tiền hàng:</span>
+              <span className="font-semibold text-slate-800 dark:text-slate-200">
+                {formatCurrency(calculatedSubtotal)}
+              </span>
+            </div>
+
+            {calculatedDiscount > 0 && (
+              <div className="flex items-center justify-between text-emerald-600 dark:text-emerald-400 font-medium">
+                <span className="flex items-center gap-1">
+                  <Sparkles className="w-3.5 h-3.5" />
+                  Chiết khấu sản lượng:
+                </span>
+                <span>-{formatCurrency(calculatedDiscount)}</span>
+              </div>
+            )}
+
+            <div className="flex items-center justify-between text-slate-800 dark:text-slate-200 font-bold">
+              <span>Tổng giá trị đơn hàng:</span>
+              <span className="font-extrabold text-slate-900 dark:text-white">
+                {formatCurrency(calculatedTotal)}
+              </span>
+            </div>
+
+            {paidAmount > 0 && (
+              <div className="flex items-center justify-between text-emerald-600 dark:text-emerald-400 font-semibold">
+                <span className="flex items-center gap-1">
+                  <Banknote className="w-3.5 h-3.5" />
+                  Đã thanh toán tại chỗ ({paymentMethod === 'cash' ? 'Tiền mặt' : 'Chuyển khoản'}):
+                </span>
+                <span>-{formatCurrency(paidAmount)}</span>
+              </div>
+            )}
+
+            <div className="pt-2 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between">
+              <div>
+                <span className="font-bold text-xs text-slate-900 dark:text-white">
+                  Ghi nợ vào công nợ đại lý:
+                </span>
+                <p className="text-[10px] text-slate-400">
+                  {unpaidAmount > 0
+                    ? 'Khoản nợ sẽ tính vào hạn mức tín dụng'
+                    : 'Đã thanh toán đủ, không tính vào hạn mức nợ'}
+                </p>
+              </div>
+              <span className={`font-black text-sm ${
+                unpaidAmount > 0 ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'
+              }`}>
+                {formatCurrency(unpaidAmount)}
+              </span>
+            </div>
           </div>
         </section>
       </main>
@@ -1354,14 +1585,14 @@ export const CreateOrder: React.FC = () => {
           {/* Price Preview */}
           <div className="min-w-0">
             <div className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">
-              Tổng phải thu
+              {unpaidAmount > 0 ? 'Ghi nợ công nợ' : 'Đã thanh toán đủ'}
             </div>
             <div className="text-base font-black text-blue-600 dark:text-blue-400 leading-tight truncate">
               {formatCurrency(calculatedTotal)}
             </div>
-            {calculatedDiscount > 0 && (
+            {paidAmount > 0 && (
               <div className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 truncate">
-                Tiết kiệm: {formatCurrency(calculatedDiscount)}
+                Đã thu: {formatCurrency(paidAmount)} &bull; Còn nợ: {formatCurrency(unpaidAmount)}
               </div>
             )}
           </div>

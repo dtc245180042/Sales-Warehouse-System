@@ -1,4 +1,5 @@
 import math
+from typing import Optional, Any, Union
 from typing import Optional, Union
 from fastapi import HTTPException, status
 from sqlalchemy import func, or_
@@ -270,6 +271,11 @@ class ProductService:
         return product
 
     @classmethod
+    def get_product(cls, db: Session, product_id: Any) -> Product:
+        """Lấy chi tiết một sản phẩm theo ID hoặc SKU (SCRUM-376)."""
+        product = db.query(Product).filter((Product.id == product_id) | (Product.sku == str(product_id))).first()
+        if not product and str(product_id).isdigit():
+            product = db.query(Product).filter(Product.id == int(product_id)).first()
     def get_product(cls, db: Session, product_id: Union[int, str]) -> Product:
         """Lấy chi tiết một sản phẩm theo ID hoặc SKU (SCRUM-376)."""
         pid_str = str(product_id).strip()

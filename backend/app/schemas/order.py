@@ -49,6 +49,8 @@ class OrderCreate(BaseModel):
     staff_id: Optional[str] = None
     staff_name: Optional[str] = None
     note: Optional[str] = None
+    requires_approval: Optional[bool] = False
+    approval_reason: Optional[str] = None
     delivery_address_id: Optional[int] = None
     delivery_address_name: Optional[str] = None
     delivery_receiver_name: Optional[str] = None
@@ -74,6 +76,8 @@ class OrderDraftUpdate(BaseModel):
     payment_method: Optional[str] = None
     payment_status: Optional[str] = None
     note: Optional[str] = None
+    requires_approval: Optional[bool] = None
+    approval_reason: Optional[str] = None
     delivery_address_id: Optional[int] = None
     delivery_address_name: Optional[str] = None
     delivery_receiver_name: Optional[str] = None
@@ -174,6 +178,8 @@ class OrderResponse(BaseModel):
     delivery_phone: Optional[str] = None
     delivery_address: Optional[str] = None
     delivery_notes: Optional[str] = None
+    requires_approval: Optional[bool] = False
+    approval_reason: Optional[str] = None
     customer_is_locked: bool = False
     customer_lock_warning: Optional[str] = None
     expected_delivery_date: Optional[str] = None

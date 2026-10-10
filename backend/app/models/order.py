@@ -44,6 +44,7 @@ class Order(Base):
     payment_status = Column(String(50), default="paid", nullable=False)  # paid, unpaid, partial
     status = Column(String(50), default="pending", nullable=False, index=True)  # pending, pending_approval, confirmed, shipping, completed, cancelled
     
+    # S4-02: Đánh dấu đơn cần duyệt khi vượt hạn mức công nợ (SCRUM-498)
     # Đánh dấu đơn cần duyệt khi giá bán dưới giá sàn hoặc vượt hạn mức (SCRUM-490, SCRUM-495)
     requires_approval = Column(Boolean, default=False, nullable=True)
     approval_reason = Column(Text, nullable=True)

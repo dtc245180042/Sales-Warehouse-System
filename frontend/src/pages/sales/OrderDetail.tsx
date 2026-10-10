@@ -329,6 +329,7 @@ export const OrderDetail: React.FC = () => {
               ) : (
                 <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200 font-medium">
                   <ShieldAlert className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span>Đơn hàng vượt hạn mức công nợ, đang chờ Quản lý kinh doanh hoặc Ban giám đốc phê duyệt.</span>
                   <span>
                     {order.approvalReason
                       ? `Lý do cần duyệt: ${order.approvalReason}`

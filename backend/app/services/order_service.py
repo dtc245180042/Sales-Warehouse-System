@@ -435,12 +435,31 @@ def create_order(db: Session, order_in: OrderCreate, current_user: Optional[User
         count += 1
         order_code = f"DH-2026-{str(count).zfill(3)}"
 
+    # 1. Kiểm tra vi phạm hạn mức công nợ và giá sàn (SCRUM-237 / S4-05)
+    requires_approval = False
+    eval_res = None
+    if not is_draft:
+        from app.services.order_approval_service import evaluate_order_violations
+        computed_total = order_in.total or sum((itm.price * itm.quantity) for itm in order_in.items)
+        eval_res = evaluate_order_violations(
+            db=db,
+            customer_id=order_in.customer_id,
+            items=order_in.items,
+            total_amount=computed_total,
+            paid_amount=order_in.paid_amount,
+            price_list_id=order_in.price_list_id,
+        )
+        if eval_res["requires_approval"] or order_in.status == "pending_approval":
+            requires_approval = True
+
     # 2. Tạo đơn hàng (Chỉ ghi các trường thuộc bảng Order gốc)
     valid_order_cols = {c.name for c in Order.__table__.columns}
     order_dict = order_in.model_dump(exclude={"items", "expected_delivery_date"})
     order_data = {k: v for k, v in order_dict.items() if k in valid_order_cols}
     order_data["id"] = order_id
     order_data["code"] = order_code
+    if requires_approval:
+        order_data["status"] = "pending_approval"
     if current_user and not order_data.get("staff_id"):
         order_data["staff_id"] = str(current_user.id)
         order_data["staff_name"] = current_user.full_name or current_user.username
@@ -600,12 +619,18 @@ def create_order(db: Session, order_in: OrderCreate, current_user: Optional[User
                 pl.has_orders = True
                 pl.orders_count += 1
 
-        # 4. Cập nhật chi tiêu của khách hàng
-        cus = db.query(Customer).filter(Customer.id == order_in.customer_id).first()
-        if cus:
-            cus.total_orders += 1
-            cus.total_spent += order_in.total
-            cus.last_order_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        # 4. Cập nhật chi tiêu của khách hàng (chỉ khi không phải chờ duyệt)
+        if not requires_approval:
+            cus = db.query(Customer).filter(Customer.id == order_in.customer_id).first()
+            if cus:
+                cus.total_orders += 1
+                cus.total_spent += order_in.total
+                cus.last_order_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+    # 5. Ghi nhận thông tin chờ duyệt ngoại lệ nếu có vi phạm
+    if requires_approval:
+        from app.services.order_approval_service import record_or_update_approval_request
+        record_or_update_approval_request(db, new_order, eval_res)
 
     db.commit()
     db.refresh(new_order)
@@ -739,6 +764,25 @@ def submit_draft_order(
     if getattr(order, "delivery_address_id", None):
         from app.services.customer_delivery_address_service import validate_delivery_address_for_customer
         validate_delivery_address_for_customer(db, order.customer_id, order.delivery_address_id)
+
+    # 2.5. Kiểm tra vi phạm ngoại lệ cần phê duyệt (SCRUM-237 / S4-05)
+    from app.services.order_approval_service import evaluate_order_violations, record_or_update_approval_request
+    eval_res = evaluate_order_violations(
+        db=db,
+        customer_id=order.customer_id,
+        items=order.items,
+        total_amount=order.total,
+        paid_amount=order.paid_amount,
+        price_list_id=order.price_list_id,
+        order_id=order.id
+    )
+    if eval_res["requires_approval"]:
+        order.status = "pending_approval"
+        record_or_update_approval_request(db, order, eval_res)
+        order.updated_at = datetime.now(timezone.utc)
+        db.commit()
+        db.refresh(order)
+        return _attach_delivery_profile(order, db)
 
     # 3. Kiểm tra tồn khả dụng & Giữ chỗ tồn kho an toàn (SCRUM-504, SCRUM-505, SCRUM-506)
     from app.services.inventory_reservation_service import reserve_stock_for_order
@@ -914,23 +958,30 @@ def update_order_status(
     # Nghiệp vụ kiểm tra hạn mức công nợ khi XUẤT HÀNG (Hàng rời kho: status -> shipping hoặc completed)
     if new_status in ["shipping", "completed"] and old_status not in ["shipping", "completed"]:
         unpaid = max(0.0, float(order.total or 0.0) - float(order.paid_amount or 0.0))
+        from app.models.order_approval import OrderApprovalRequest
+        appr_req = db.query(OrderApprovalRequest).filter(OrderApprovalRequest.order_id == order.id).first()
+        is_manager_approved = bool(old_status == "reserved" or (appr_req and appr_req.approval_status == "APPROVED"))
         if unpaid > 0 and order.customer_id:
             from app.services.customer_credit_service import get_or_create_credit_profile, check_credit_for_dispatch
             # Khóa dòng bi quan (Pessimistic Lock) giữ khóa đến hết transaction để chống Race Condition khi xuất kho đồng thời
             is_approved = bool(order.approval_reason) or (old_status == "pending_approval" and new_status in ["confirmed", "shipping", "completed"])
             cred_prof = get_or_create_credit_profile(db=db, customer_id=order.customer_id, for_update=True)
-            chk = check_credit_for_dispatch(
-                db=db,
-                customer_id=order.customer_id,
-                unpaid_amount=unpaid,
-                order_id=order.id,
-                is_manager_approved=is_approved
-            )
-            if not chk["allowed"]:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=chk["error_message"]
+            from app.models.order_approval import OrderApprovalRequest
+            appr_req = db.query(OrderApprovalRequest).filter(OrderApprovalRequest.order_id == order.id).first()
+            is_manager_approved = bool(old_status == "reserved" or (appr_req and appr_req.approval_status == "APPROVED") or is_approved)
+            if not is_manager_approved:
+                chk = check_credit_for_dispatch(
+                    db=db,
+                    customer_id=order.customer_id,
+                    unpaid_amount=unpaid,
+                    order_id=order.id,
+                    is_manager_approved=is_manager_approved
                 )
+                if not chk["allowed"]:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=chk["error_message"]
+                    )
             # Cập nhật ngay dư nợ đã xuất trên dòng đang khóa để luồng kế tiếp đọc được ngay qua Current Read
             cred_prof.current_debt = int(cred_prof.current_debt or 0) + int(round(unpaid))
 
@@ -946,6 +997,14 @@ def update_order_status(
         # Hoàn tất giữ chỗ và trừ tồn kho vật lý (SCRUM-504)
         from app.services.inventory_reservation_service import fulfill_stock_reservations_for_order
         fulfill_stock_reservations_for_order(db, order.id)
+
+    # Khi đơn hàng được duyệt từ pending_approval sang confirmed / approved -> chuyển sang giữ chỗ tồn kho (S4-05, S4-03)
+    if old_status == "pending_approval" and new_status in ["confirmed", "approved"]:
+        from app.services.inventory_reservation_service import reserve_stock_for_order
+        try:
+            reserve_stock_for_order(db=db, order=order)
+        except Exception:
+            pass
 
     # Nếu chuyển sang hủy từ trạng thái chưa hủy, giải phóng tồn giữ chỗ (SCRUM-504, S4-06)
     if new_status == "cancelled" and old_status != "cancelled":

@@ -23,6 +23,7 @@ import { ConfirmDialog } from '../../components/common/ConfirmDialog';
 import { Loading } from '../../components/common/Loading';
 import { EmptyState } from '../../components/common/EmptyState';
 import { formatCurrency, formatDate } from '../../utils/formatters';
+import { OrderLifecycleTimeline } from '../../components/sales/OrderLifecycleTimeline';
 import { orderService } from '../../services/orderService';
 import { Order, OrderStatus } from '../../types/Order';
 import { useToast } from '../../contexts/ToastContext';
@@ -218,6 +219,15 @@ export const OrderDetail: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* SCRUM-238 (S4-06): Tiến trình vòng đời đơn hàng trực quan và phân nhánh */}
+      <div className="mb-6">
+        <OrderLifecycleTimeline
+          order={order}
+          onUpdateStatus={(st) => handleUpdateStatus(st)}
+          onRequestCancel={() => setIsCancelModalOpen(true)}
+        />
+      </div>
 
       {/* Order Status Timeline Tracker */}
       {order.status !== 'cancelled' ? (

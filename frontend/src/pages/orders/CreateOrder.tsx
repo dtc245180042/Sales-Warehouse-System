@@ -44,7 +44,7 @@ import {
 } from '../../types/Order';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
-import { formatCurrency } from '../../utils/formatters';
+import { formatCurrency, formatCurrencyInput } from '../../utils/formatters';
 
 interface FormItem {
   productId: string;
@@ -1319,13 +1319,17 @@ export const CreateOrder: React.FC = () => {
                     <div className="flex items-center gap-1">
                       <label className="text-[11px] text-slate-500 shrink-0">Giá:</label>
                       <input
-                        type="number"
-                        min="0"
-                        value={item.price}
-                        onChange={(e) =>
-                          handleUpdatePrice(item.productId, parseFloat(e.target.value) || 0)
-                        }
-                        className={`w-24 px-2 py-1 text-xs font-bold rounded-lg border text-right transition-colors ${
+                        type="text"
+                        inputMode="numeric"
+                        value={item.price === 0 ? '' : formatCurrencyInput(item.price)}
+                        placeholder="0"
+                        onFocus={(e) => e.target.select()}
+                        onChange={(e) => {
+                          const raw = e.target.value.replace(/\D/g, '').replace(/^0+(?=\d)/, '');
+                          const num = raw === '' ? 0 : parseInt(raw, 10);
+                          handleUpdatePrice(item.productId, isNaN(num) ? 0 : num);
+                        }}
+                        className={`w-32 px-2 py-1 text-xs font-bold rounded-lg border text-right transition-colors ${
                           item.isBelowFloor
                             ? 'bg-amber-100 dark:bg-amber-950/80 border-amber-500 text-amber-950 dark:text-amber-200 ring-2 ring-amber-400/30'
                             : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500'
@@ -1563,13 +1567,14 @@ export const CreateOrder: React.FC = () => {
                   </div>
                   <div className="relative">
                     <input
-                      type="number"
-                      min="0"
-                      max={calculatedTotal}
-                      value={paidAmount || ''}
+                      type="text"
+                      inputMode="numeric"
+                      value={paidAmount === 0 ? '' : formatCurrencyInput(paidAmount)}
                       placeholder="0"
+                      onFocus={(e) => e.target.select()}
                       onChange={(e) => {
-                        const val = parseFloat(e.target.value) || 0;
+                        const raw = e.target.value.replace(/\D/g, '').replace(/^0+(?=\d)/, '');
+                        const val = raw === '' ? 0 : parseInt(raw, 10);
                         setPaidAmount(Math.min(calculatedTotal, Math.max(0, val)));
                       }}
                       className="w-full pl-3 pr-14 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"

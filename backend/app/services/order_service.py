@@ -1,5 +1,5 @@
 from typing import List, Optional, Any
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
@@ -10,7 +10,16 @@ from app.models.price_list import PriceList
 from app.models.product_stock_profile import ProductStockProfile
 from app.models.auth import User, UserRole
 from app.models.customer_assignment import CustomerAssignment
-from app.schemas.order import OrderCreate, OrderStatusUpdate
+from app.schemas.order import (
+    OrderCreate,
+    OrderStatusUpdate,
+    OrderItemCreate,
+    PurchaseHistorySuggestionResponse,
+    PurchaseHistoryItemSuggestion,
+    PurchaseHistoryGroupSuggestion,
+    LastOrderSummary,
+    LastOrderItemSummary,
+)
 from app.services.product_service import ensure_seed_products
 from app.services.customer_service import ensure_seed_customers
 
@@ -967,3 +976,258 @@ def cancel_order(
     current_user: Optional[User] = None,
 ) -> Order:
     return update_order_status(db, order_id, "cancelled", current_user=current_user)
+
+
+# ============================================================================
+# SCRUM-236 (S4-04): Lịch sử mua hàng 3 tháng gần nhất & Gợi ý mặt hàng
+# ============================================================================
+
+def get_purchase_history_suggestions(
+    db: Session,
+    customer_id: str,
+    current_user: Optional[User] = None,
+    window_days: int = 90
+) -> PurchaseHistorySuggestionResponse:
+    """
+    Truy vấn lịch sử mua hàng 3 tháng gần nhất của đại lý theo SKU và nhóm hàng,
+    tính số lượng bình quân (avg_quantity) và cấu trúc dữ liệu phục vụ gợi ý khi gõ đơn.
+    Đồng thời áp dụng Scope Guard kiểm tra quyền phụ trách của Sales Rep (SCRUM-236 / S3-06).
+    """
+    ensure_seed_orders(db)
+
+    # 1. Kiểm tra tồn tại của khách hàng / đại lý
+    customer = db.query(Customer).filter(Customer.id == customer_id).first()
+    if not customer:
+        customer = db.query(Customer).filter(Customer.code == customer_id).first()
+    if not customer:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Không tìm thấy đại lý / khách hàng với mã '{customer_id}'."
+        )
+
+    # 2. Scope Guard: Sales Rep chỉ được xem lịch sử mua hàng của đại lý được phân công
+    if current_user and current_user.role == UserRole.SALES_REP.value:
+        assignment = db.query(CustomerAssignment).filter(
+            CustomerAssignment.customer_id == customer.id,
+            CustomerAssignment.assigned_staff_id == current_user.id
+        ).first()
+        if not assignment:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Bạn không được phân công quản lý đại lý '{customer.name}' nên không thể xem lịch sử mua hàng."
+            )
+
+    # 3. Lọc các đơn hàng trong 90 ngày gần nhất (không tính đơn hủy cancelled và đơn nháp draft)
+    now_utc = datetime.now(timezone.utc)
+    cutoff_date = now_utc - timedelta(days=window_days)
+
+    query = db.query(Order).filter(
+        Order.customer_id == customer.id,
+        Order.status.notin_(["cancelled", "draft"])
+    )
+
+    all_valid_orders = query.order_by(Order.created_at.desc()).all()
+
+    filtered_orders = []
+    for ord_obj in all_valid_orders:
+        if not ord_obj.created_at:
+            continue
+        ord_dt = ord_obj.created_at
+        if ord_dt.tzinfo is None:
+            ord_dt = ord_dt.replace(tzinfo=timezone.utc)
+        if ord_dt >= cutoff_date:
+            filtered_orders.append(ord_obj)
+
+    total_orders_in_window = len(filtered_orders)
+
+    # Nếu không có đơn hàng nào trong 90 ngày
+    if total_orders_in_window == 0:
+        return PurchaseHistorySuggestionResponse(
+            customer_id=customer.id,
+            customer_name=customer.name,
+            time_window_days=window_days,
+            total_orders_in_window=0,
+            has_purchase_history=False,
+            items=[],
+            groups=[],
+            last_order=None
+        )
+
+    # 4. Xác định thông tin đơn hàng gần nhất (Last Order)
+    latest_order = filtered_orders[0]
+    last_order_items = []
+    for item in latest_order.items:
+        last_order_items.append(LastOrderItemSummary(
+            product_id=str(item.product_id),
+            sku=item.sku,
+            name=item.name,
+            unit=item.unit or "cái",
+            quantity=item.quantity,
+            price=item.price
+        ))
+
+    created_at_str = latest_order.created_at.strftime("%Y-%m-%d %H:%M") if latest_order.created_at else None
+    last_order_summary = LastOrderSummary(
+        order_id=latest_order.id,
+        code=latest_order.code,
+        created_at=created_at_str,
+        total=latest_order.total,
+        items=last_order_items
+    )
+
+    # 5. Gom nhóm theo SKU / Product ID để tính số lượng bình quân (avg_quantity)
+    item_stats = {}
+    for ord_obj in filtered_orders:
+        ord_time_str = ord_obj.created_at.strftime("%Y-%m-%d %H:%M") if ord_obj.created_at else None
+
+        for itm in ord_obj.items:
+            key = str(itm.product_id)
+            if key not in item_stats:
+                item_stats[key] = {
+                    "product_id": str(itm.product_id),
+                    "sku": itm.sku,
+                    "name": itm.name,
+                    "unit": itm.unit or "cái",
+                    "total_quantity": 0,
+                    "order_ids": set(),
+                    "last_quantity": itm.quantity,
+                    "last_purchased_at": ord_time_str,
+                    "last_price": itm.price,
+                }
+            stat = item_stats[key]
+            stat["total_quantity"] += itm.quantity
+            stat["order_ids"].add(ord_obj.id)
+            if not stat.get("last_purchased_at"):
+                stat["last_purchased_at"] = ord_time_str
+                stat["last_quantity"] = itm.quantity
+                stat["last_price"] = itm.price
+
+    # 6. Tra cứu thông tin danh mục, tồn kho và giá hiện tại từ bảng Product
+    product_keys = list(item_stats.keys())
+    products_db = []
+    int_ids = [int(k) for k in product_keys if k.isdigit()]
+    if int_ids:
+        products_db = db.query(Product).filter(Product.id.in_(int_ids)).all()
+    prod_map = {str(p.id): p for p in products_db}
+
+    sku_list = [v["sku"] for v in item_stats.values() if v.get("sku")]
+    if sku_list:
+        sku_products = db.query(Product).filter(Product.sku.in_(sku_list)).all()
+        for sp in sku_products:
+            prod_map[str(sp.id)] = sp
+            prod_map[sp.sku] = sp
+
+    suggestion_items: List[PurchaseHistoryItemSuggestion] = []
+
+    for key, stat in item_stats.items():
+        order_count = len(stat["order_ids"])
+        total_qty = stat["total_quantity"]
+        avg_qty = round(total_qty / max(order_count, 1), 1)
+
+        prod_obj = prod_map.get(key) or (prod_map.get(stat["sku"]) if stat.get("sku") else None)
+        category_name = "Khác"
+        category_id = None
+        current_price = stat["last_price"]
+        unit = stat["unit"]
+        stock_val = 0
+
+        if prod_obj:
+            if prod_obj.category:
+                category_name = prod_obj.category
+            category_id = prod_obj.category_id
+            if prod_obj.price:
+                current_price = prod_obj.price
+            if prod_obj.unit:
+                unit = prod_obj.unit
+            stock_prof = db.query(ProductStockProfile).filter(ProductStockProfile.product_id == prod_obj.id).first()
+            if stock_prof:
+                stock_val = stock_prof.stock
+
+        suggestion_items.append(PurchaseHistoryItemSuggestion(
+            product_id=stat["product_id"],
+            sku=stat["sku"] or (prod_obj.sku if prod_obj else None),
+            name=prod_obj.name if prod_obj else stat["name"],
+            unit=unit,
+            category=category_name,
+            category_id=category_id,
+            avg_quantity=avg_qty,
+            total_quantity=total_qty,
+            order_count=order_count,
+            last_quantity=stat["last_quantity"],
+            last_purchased_at=stat["last_purchased_at"],
+            last_price=stat["last_price"],
+            current_price=current_price,
+            stock=stock_val
+        ))
+
+    # Sắp xếp theo số lần mua nhiều nhất
+    suggestion_items.sort(key=lambda x: (x.order_count, x.total_quantity), reverse=True)
+
+    # 7. Gom nhóm theo danh mục sản phẩm (Groups by Category)
+    groups_dict = {}
+    for itm in suggestion_items:
+        cat_key = itm.category or "Khác"
+        if cat_key not in groups_dict:
+            groups_dict[cat_key] = {
+                "category": cat_key,
+                "category_id": itm.category_id,
+                "items": [],
+            }
+        groups_dict[cat_key]["items"].append(itm)
+
+    groups_result: List[PurchaseHistoryGroupSuggestion] = []
+    for cat_name, gdata in groups_dict.items():
+        g_items = gdata["items"]
+        tot_suggested = round(sum(i.avg_quantity for i in g_items), 1)
+        groups_result.append(PurchaseHistoryGroupSuggestion(
+            category=cat_name,
+            category_id=gdata["category_id"],
+            item_count=len(g_items),
+            total_suggested_quantity=tot_suggested,
+            items=g_items
+        ))
+
+    groups_result.sort(key=lambda g: g.item_count, reverse=True)
+
+    return PurchaseHistorySuggestionResponse(
+        customer_id=customer.id,
+        customer_name=customer.name,
+        time_window_days=window_days,
+        total_orders_in_window=total_orders_in_window,
+        has_purchase_history=True,
+        items=suggestion_items,
+        groups=groups_result,
+        last_order=last_order_summary
+    )
+
+
+def merge_items_anti_duplicate(
+    current_items: List[OrderItemCreate],
+    items_to_add: List[OrderItemCreate],
+    strategy: str = "merge"
+) -> List[OrderItemCreate]:
+    """
+    Quy tắc chống trùng dòng khi thêm sản phẩm/nhóm hàng từ lịch sử mua hàng (SCRUM-236).
+    Nếu sản phẩm đã có trong đơn, cộng dồn hoặc cập nhật số lượng, không tạo thêm dòng mới.
+    """
+    result: List[OrderItemCreate] = [item.model_copy() for item in current_items]
+    index_map = {str(item.product_id): idx for idx, item in enumerate(result)}
+
+    for add_item in items_to_add:
+        pid = str(add_item.product_id)
+        if pid in index_map:
+            idx = index_map[pid]
+            target = result[idx]
+            if strategy == "replace_qty":
+                target.quantity = add_item.quantity
+            else:
+                target.quantity += add_item.quantity
+            target.subtotal = round(target.price * target.quantity - target.discount, 2)
+        else:
+            new_copy = add_item.model_copy()
+            new_copy.subtotal = round(new_copy.price * new_copy.quantity - new_copy.discount, 2)
+            result.append(new_copy)
+            index_map[pid] = len(result) - 1
+
+    return result
+

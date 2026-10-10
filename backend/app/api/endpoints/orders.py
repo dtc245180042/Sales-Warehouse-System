@@ -46,10 +46,11 @@ def get_draft_orders(
 @router.get("/products/search", response_model=List[ProductSearchForOrderResponse])
 def search_products_for_order(
     q: Optional[str] = Query(None, description="Từ khóa SKU hoặc tên sản phẩm"),
+    customer_id: Optional[str] = Query(None, description="Mã khách hàng để tính tồn khả dụng theo kho phục vụ (S4-03)"),
     db: Session = Depends(lay_phien_db),
 ):
-    """Tìm kiếm sản phẩm hỗ trợ tạo đơn hàng kèm quy cách/đơn vị tính (S3-09, SCRUM-230)."""
-    return order_service.search_products_for_order(db=db, query_str=q)
+    """Tìm kiếm sản phẩm hỗ trợ tạo đơn hàng kèm quy cách/đơn vị tính và tồn khả dụng (S3-09, S4-03)."""
+    return order_service.search_products_for_order(db=db, query_str=q, customer_id=customer_id)
 
 
 @router.get("", response_model=List[OrderResponse])

@@ -61,6 +61,11 @@ interface FormItem {
   availableUnits: string[];
   appliedDiscountName?: string;
   stock?: number;
+  availableStock?: number;
+  physicalStock?: number;
+  reservedStock?: number;
+  warehouse?: string;
+  maxOrderableQuantity?: number;
 }
 
 export const CreateOrder: React.FC = () => {
@@ -85,6 +90,13 @@ export const CreateOrder: React.FC = () => {
   const [creditStatus, setCreditStatus] = useState<CustomerCreditStatusInfo | null>(null);
   const [effectivePriceList, setEffectivePriceList] = useState<EffectivePriceListResponse | null>(null);
   const [isLoadingPriceList, setIsLoadingPriceList] = useState(false);
+
+  // S4-03: Kho phục vụ đại lý & Tồn khả dụng (SCRUM-503, SCRUM-505)
+  const [servicingWarehouse, setServicingWarehouse] = useState<{
+    warehouse_name: string;
+    warehouse_code: string;
+    is_default: boolean;
+  } | null>(null);
 
   // Delivery Addresses
   const [deliveryAddresses, setDeliveryAddresses] = useState<DeliveryAddress[]>([]);
@@ -266,8 +278,23 @@ export const CreateOrder: React.FC = () => {
         .finally(() => {
           setIsLoadingPriceList(false);
         });
+
+      // S4-03: Lấy kho phục vụ đại lý (SCRUM-505)
+      orderService
+        .getCustomerServicingWarehouse(selectedCustomer.id)
+        .then((wh) => {
+          setServicingWarehouse(wh);
+        })
+        .catch(() => {
+          setServicingWarehouse({
+            warehouse_name: 'Kho Tổng Hà Nội',
+            warehouse_code: 'WH-HANOI',
+            is_default: true,
+          });
+        });
     } else {
       setEffectivePriceList(null);
+      setServicingWarehouse(null);
     }
   }, [selectedCustomer?.id]);
 
@@ -275,6 +302,52 @@ export const CreateOrder: React.FC = () => {
   const hasBelowFloor = useMemo(() => {
     return items.some((i) => i.isBelowFloor);
   }, [items]);
+
+  // SCRUM-506 & SCRUM-508: Kiểm tra danh sách mặt hàng vượt tồn khả dụng
+  const exceedingStockItems = useMemo(() => {
+    return items.filter(
+      (i) => typeof i.availableStock === 'number' && i.quantity > i.availableStock
+    );
+  }, [items]);
+
+  const hasExceedingStock = exceedingStockItems.length > 0;
+
+  // S4-03: Kiểm tra tồn khả dụng theo thời gian thực (SCRUM-503, SCRUM-507, SCRUM-508)
+  const checkItemsAvailability = async (currentItems: FormItem[], customerId: string) => {
+    if (currentItems.length === 0 || !customerId) return;
+    try {
+      const res = await orderService.checkAvailability(customerId, currentItems);
+      setItems((prev) =>
+        prev.map((itm) => {
+          const match = res.items.find(
+            (r) => String(r.product_id) === String(itm.productId) || (r.sku && r.sku === itm.sku)
+          );
+          if (match) {
+            return {
+              ...itm,
+              availableStock: match.available_stock,
+              physicalStock: match.physical_stock,
+              reservedStock: match.reserved_stock,
+              warehouse: match.warehouse_name,
+              maxOrderableQuantity: match.max_orderable_quantity,
+            };
+          }
+          return itm;
+        })
+      );
+    } catch (err) {
+      console.warn('Lỗi kiểm tra tồn khả dụng:', err);
+    }
+  };
+
+  useEffect(() => {
+    if (selectedCustomer && items.length > 0) {
+      const timer = setTimeout(() => {
+        checkItemsAvailability(items, selectedCustomer.id);
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [selectedCustomer?.id, items.map((i) => `${i.productId}-${i.quantity}`).join('|')]);
 
   // Handle address select change
   const handleAddressChange = (addrIdStr: string) => {
@@ -292,7 +365,7 @@ export const CreateOrder: React.FC = () => {
     }
   };
 
-  // Product Search Debounce
+  // Product Search Debounce (S4-03: kèm customer_id để lấy tồn kho phục vụ)
   useEffect(() => {
     if (!productQuery.trim()) {
       setProductResults([]);
@@ -302,7 +375,7 @@ export const CreateOrder: React.FC = () => {
     const timer = setTimeout(async () => {
       setIsSearchingProduct(true);
       try {
-        const res = await orderService.searchProductsForOrder(productQuery.trim());
+        const res = await orderService.searchProductsForOrder(productQuery.trim(), selectedCustomer?.id);
         setProductResults(res);
         setIsProductDropdownOpen(true);
       } catch {
@@ -312,14 +385,14 @@ export const CreateOrder: React.FC = () => {
       }
     }, 250);
     return () => clearTimeout(timer);
-  }, [productQuery]);
+  }, [productQuery, selectedCustomer?.id]);
 
   // Tự động nạp gợi ý sản phẩm khi focus vào ô tìm kiếm
   const handleFocusProductSearch = async () => {
     if (productResults.length === 0) {
       setIsSearchingProduct(true);
       try {
-        const res = await orderService.searchProductsForOrder(productQuery.trim());
+        const res = await orderService.searchProductsForOrder(productQuery.trim(), selectedCustomer?.id);
         setProductResults(res);
         setIsProductDropdownOpen(true);
       } catch {
@@ -446,8 +519,9 @@ export const CreateOrder: React.FC = () => {
         const currentQty = items[existingIndex].quantity + 1;
         await handleUpdateQty(String(prod.id), currentQty);
       } else {
-        // Thêm dòng mới với giá tự động và giá sàn
+        // Thêm dòng mới với giá tự động, giá sàn và tồn khả dụng theo kho (S4-03)
         const defaultUnit = prod.unit || (prod.available_units?.[0] ?? 'cái');
+        const avail = prod.available_stock ?? prod.stock;
         const newItem: FormItem = {
           productId: String(prod.id),
           sku: prod.sku,
@@ -462,10 +536,20 @@ export const CreateOrder: React.FC = () => {
           subtotal: pricing.line_total,
           availableUnits: prod.available_units || [defaultUnit],
           stock: prod.stock,
+          availableStock: avail,
+          physicalStock: prod.physical_stock,
+          reservedStock: prod.reserved_stock,
+          warehouse: prod.warehouse || servicingWarehouse?.warehouse_name || 'Kho Tổng Hà Nội',
+          maxOrderableQuantity: avail,
           appliedDiscountName: pricing.applied_discount_policy_name || undefined,
         };
         setItems((prev) => [newItem, ...prev]);
-        showToast(`Đã áp giá tự động cho "${prod.name}": ${formatCurrency(pricing.applied_unit_price)}`, 'success');
+
+        if (typeof avail === 'number' && 1 > avail) {
+          showToast(`Cảnh báo: "${prod.name}" không đủ tồn khả dụng (Còn ${avail} ${defaultUnit})`, 'warning');
+        } else {
+          showToast(`Đã thêm "${prod.name}": ${formatCurrency(pricing.applied_unit_price)} (Tồn khả dụng: ${avail ?? 'N/A'} ${defaultUnit})`, 'success');
+        }
       }
     } catch (err: any) {
       const msg = err.response?.data?.detail || err.message || 'Lỗi áp giá sản phẩm';
@@ -477,11 +561,19 @@ export const CreateOrder: React.FC = () => {
     setIsProductDropdownOpen(false);
   };
 
-  // Update item quantity (SCRUM-491: Tính lại chiết khấu theo sản lượng khi đổi số lượng)
+  // Update item quantity (SCRUM-491: Tính lại chiết khấu theo sản lượng; SCRUM-508: Cảnh báo nếu vượt tồn khả dụng)
   const handleUpdateQty = async (productId: string, newQty: number) => {
     if (newQty < 1) return;
     const itm = items.find((i) => i.productId === productId);
     if (!itm) return;
+
+    // Cảnh báo nếu số lượng yêu cầu vượt quá tồn khả dụng (SCRUM-508)
+    if (typeof itm.availableStock === 'number' && newQty > itm.availableStock) {
+      showToast(
+        `Cảnh báo tồn kho: Số lượng đặt (${newQty}) vượt tồn khả dụng (${itm.availableStock} ${itm.unit}) của mặt hàng "${itm.name}"!`,
+        'warning'
+      );
+    }
 
     if (selectedCustomer) {
       try {
@@ -694,6 +786,18 @@ export const CreateOrder: React.FC = () => {
       if (creditStatus?.isBlocked) {
         showToast(
           creditStatus.blockReason || 'Đại lý đang có khoản nợ quá hạn. Hệ thống chặn tạo đơn hoàn toàn theo quy định!',
+          'error'
+        );
+        return;
+      }
+
+      // SCRUM-506 & SCRUM-508: Chặn chốt đơn khi số lượng vượt tồn khả dụng
+      if (hasExceedingStock) {
+        const itemAlerts = exceedingStockItems
+          .map((i) => `"${i.name}" (còn ${i.availableStock} ${i.unit}, yêu cầu ${i.quantity})`)
+          .join(', ');
+        showToast(
+          `Không thể chốt đơn: Có mặt hàng vượt tồn khả dụng: ${itemAlerts}. Vui lòng giảm số lượng hoặc đặt tối đa!`,
           'error'
         );
         return;
@@ -1074,6 +1178,14 @@ export const CreateOrder: React.FC = () => {
                   </span>
                 </div>
               ) : null}
+
+              {/* S4-03: Hiển thị kho phục vụ đại lý (SCRUM-505) */}
+              <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-blue-100/70 dark:bg-blue-900/40 border border-blue-200 dark:border-blue-800 text-[11px] text-blue-900 dark:text-blue-200 font-medium">
+                <Boxes className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                <span>
+                  Kho phục vụ: <strong className="font-bold">{servicingWarehouse?.warehouse_name || 'Kho Tổng Hà Nội'}</strong> ({servicingWarehouse?.warehouse_code || 'WH-HANOI'}) &bull; Tính tồn khả dụng theo kho
+                </span>
+              </div>
             </div>
           )}
 
@@ -1264,11 +1376,24 @@ export const CreateOrder: React.FC = () => {
                             {p.name}
                           </span>
                         </div>
-                        <div className="flex items-center gap-2 text-[11px] text-slate-500 mt-0.5">
+                        <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500 mt-0.5">
                           <span className="font-mono text-[10px] bg-slate-100 dark:bg-slate-800 px-1 py-0.2 rounded">
                             {p.sku}
                           </span>
-                          <span>Kho: <strong className="text-slate-700 dark:text-slate-300">{p.stock}</strong></span>
+                          <span className={`px-1.5 py-0.2 text-[10px] font-bold rounded ${
+                            (p.available_stock ?? p.stock) <= 0
+                              ? 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300'
+                              : (p.available_stock ?? p.stock) <= 10
+                              ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                              : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                          }`}>
+                            Khả dụng: {p.available_stock ?? p.stock} {p.unit}
+                          </span>
+                          {p.warehouse && (
+                            <span className="text-[10px] text-slate-400">
+                              ({p.warehouse})
+                            </span>
+                          )}
                           <span>ĐVT: {p.unit}</span>
                         </div>
                       </div>
@@ -1290,6 +1415,21 @@ export const CreateOrder: React.FC = () => {
               </div>
             )}
           </div>
+
+          {/* SCRUM-508: Cảnh báo vượt tồn khả dụng toàn đơn hàng */}
+          {hasExceedingStock && (
+            <div className="p-3 bg-rose-50 dark:bg-rose-950/60 border border-rose-300 dark:border-rose-700/80 rounded-xl flex items-start gap-2.5 text-xs text-rose-900 dark:text-rose-200">
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="font-bold text-rose-800 dark:text-rose-300">
+                  ⚠️ Cảnh báo: Có {exceedingStockItems.length} mặt hàng vượt tồn khả dụng (SCRUM-506 & SCRUM-508)
+                </p>
+                <p className="text-[11px] text-rose-700 dark:text-rose-400 mt-0.5 leading-relaxed">
+                  Hệ thống không thể chốt đơn khi số lượng vượt tồn khả dụng tại kho phục vụ ({servicingWarehouse?.warehouse_name || 'Kho Tổng Hà Nội'}). Vui lòng bấm <strong>"Đặt tối đa"</strong> trên từng dòng hàng hoặc giảm số lượng về mức cho phép.
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Items List */}
           {items.length === 0 ? (
@@ -1327,12 +1467,14 @@ export const CreateOrder: React.FC = () => {
                 <div
                   key={item.productId}
                   className={`p-3 rounded-xl space-y-2 border transition-all ${
-                    item.isBelowFloor
+                    typeof item.availableStock === 'number' && item.quantity > item.availableStock
+                      ? 'bg-rose-50/70 dark:bg-rose-950/40 border-rose-400 dark:border-rose-700/80 shadow-xs ring-1 ring-rose-400/30'
+                      : item.isBelowFloor
                       ? 'bg-amber-50/70 dark:bg-amber-950/40 border-amber-300 dark:border-amber-700/80 shadow-xs'
                       : 'bg-slate-50/80 dark:bg-slate-800/50 border-slate-200/80 dark:border-slate-700/70'
                   }`}
                 >
-                  {/* Row 1: Name, SKU, Floor Price & Delete */}
+                  {/* Row 1: Name, SKU, Floor Price, Tồn khả dụng (SCRUM-503) & Delete */}
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 flex-1">
                       <h4 className="font-semibold text-xs text-slate-900 dark:text-white leading-tight">
@@ -1347,6 +1489,28 @@ export const CreateOrder: React.FC = () => {
                             Giá sàn: <strong className="font-semibold text-slate-700 dark:text-slate-300">{formatCurrency(item.floorPrice)}</strong>
                           </span>
                         ) : null}
+                      </div>
+
+                      {/* S4-03: Hiển thị Tồn khả dụng theo từng dòng hàng (SCRUM-503) */}
+                      <div className="flex flex-wrap items-center gap-2 mt-1">
+                        <div className="flex items-center gap-1.5 text-[11px]">
+                          <Boxes className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                          <span className="text-slate-500 dark:text-slate-400">Tồn khả dụng:</span>
+                          <span className={`px-2 py-0.5 rounded-md font-bold text-[11px] ${
+                            (item.availableStock ?? 999) <= 0
+                              ? 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300 border border-rose-300 dark:border-rose-800'
+                              : (item.availableStock ?? 999) <= 10
+                              ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300 dark:border-amber-800'
+                              : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800'
+                          }`}>
+                            {item.availableStock ?? item.stock ?? '...'} {item.unit}
+                          </span>
+                          {item.warehouse && (
+                            <span className="text-[10px] text-slate-400 font-normal">
+                              ({item.warehouse})
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
                     <button
@@ -1400,7 +1564,7 @@ export const CreateOrder: React.FC = () => {
                       />
                     </div>
 
-                    {/* Stepper Quantity (Touch friendly >= 44px) */}
+                    {/* Stepper Quantity (Touch friendly >= 44px; Chặn tăng khi đạt mức tồn khả dụng - SCRUM-508) */}
                     <div className="flex items-center bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden shadow-2xs">
                       <button
                         type="button"
@@ -1422,7 +1586,9 @@ export const CreateOrder: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => handleUpdateQty(item.productId, item.quantity + 1)}
-                        className="w-8 h-8 flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 active:scale-95 transition-all"
+                        disabled={typeof item.availableStock === 'number' && item.quantity >= item.availableStock}
+                        className="w-8 h-8 flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed active:scale-95 transition-all"
+                        title={typeof item.availableStock === 'number' && item.quantity >= item.availableStock ? 'Đã đạt tồn khả dụng tối đa' : 'Tăng số lượng'}
                       >
                         <Plus className="w-3.5 h-3.5" />
                       </button>
@@ -1435,6 +1601,25 @@ export const CreateOrder: React.FC = () => {
                       </span>
                     </div>
                   </div>
+
+                  {/* Warning exceeding available stock & quick max action (SCRUM-506, SCRUM-508) */}
+                  {typeof item.availableStock === 'number' && item.quantity > item.availableStock && (
+                    <div className="flex items-center justify-between gap-2 p-2 rounded-lg bg-rose-100/90 dark:bg-rose-950/80 border border-rose-300 dark:border-rose-700 text-[11px] text-rose-900 dark:text-rose-200">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                        <span className="truncate">
+                          ⚠️ Vượt tồn khả dụng! Còn <strong>{item.availableStock} {item.unit}</strong> khả dụng (yêu cầu {item.quantity}).
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleUpdateQty(item.productId, Math.max(0, item.availableStock || 0))}
+                        className="px-2.5 py-1 text-[10px] font-bold rounded-md bg-rose-600 hover:bg-rose-700 text-white active:scale-95 transition-all shadow-xs shrink-0"
+                      >
+                        Đặt tối đa ({item.availableStock})
+                      </button>
+                    </div>
+                  )}
 
                   {/* Warning below floor price (SCRUM-495) */}
                   {item.isBelowFloor && (
@@ -1755,10 +1940,12 @@ export const CreateOrder: React.FC = () => {
             <button
               type="button"
               onClick={handleSubmitOrder}
-              disabled={isSubmitting || isSavingDraft || items.length === 0 || Boolean(creditStatus?.isBlocked)}
+              disabled={isSubmitting || isSavingDraft || items.length === 0 || Boolean(creditStatus?.isBlocked) || hasExceedingStock}
               className={`flex items-center gap-1.5 px-3.5 py-2.5 text-xs font-bold rounded-xl text-white shadow-md transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed ${
                 items.length === 0
                   ? 'bg-slate-400 dark:bg-slate-700'
+                  : hasExceedingStock
+                  ? 'bg-rose-600 hover:bg-rose-700 shadow-rose-500/20'
                   : creditStatus?.isBlocked
                   ? 'bg-rose-600 hover:bg-rose-700 shadow-rose-500/20'
                   : creditStatus?.requiresApproval
@@ -1768,6 +1955,8 @@ export const CreateOrder: React.FC = () => {
               title={
                 items.length === 0
                   ? 'Vui lòng thêm sản phẩm vào mục (2) Mặt Hàng để chốt đơn'
+                  : hasExceedingStock
+                  ? `Bị chặn: Có ${exceedingStockItems.length} mặt hàng vượt số lượng tồn khả dụng`
                   : creditStatus?.isBlocked
                   ? 'Bị chặn do đại lý có nợ quá hạn'
                   : creditStatus?.requiresApproval
@@ -1779,6 +1968,11 @@ export const CreateOrder: React.FC = () => {
                 <>
                   <Boxes className="w-3.5 h-3.5" />
                   <span>Chưa có sản phẩm</span>
+                </>
+              ) : hasExceedingStock ? (
+                <>
+                  <Ban className="w-3.5 h-3.5" />
+                  <span>Vượt tồn ({exceedingStockItems.length})</span>
                 </>
               ) : creditStatus?.isBlocked ? (
                 <>

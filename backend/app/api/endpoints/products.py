@@ -83,7 +83,9 @@ def xem_chi_tiet_san_pham(
 ):
     """Lấy chi tiết sản phẩm theo ID (SCRUM-376)."""
     product = ProductService.get_product(db=db, product_id=product_id)
-    return ProductService.serialize_product(product, current_user)
+    from app.models.product_stock_profile import ProductStockProfile
+    sp = db.query(ProductStockProfile).filter(ProductStockProfile.product_id == product.id).first()
+    return ProductService.serialize_product(product, current_user, stock_profile=sp)
 
 
 @router.put(

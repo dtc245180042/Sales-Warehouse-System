@@ -14,15 +14,15 @@ from app.api import api_router, api_v1_router
 def khoi_tao_tai_khoan_ban_dau(phien_db: Session):
     """Khởi tạo tài khoản mẫu đầy đủ thông tin cho 7 vai trò hệ thống theo đúng SCRUM."""
     danh_sach_tai_khoan_mau = [
-        ("admin", "admin@warehouse.local", "123456", UserRole.ADMIN.value, "Trần Quản Trị Hệ Thống", "0901234567", None),
-        ("sales_mgr", "sales_mgr@warehouse.local", "123456", UserRole.SALES_MANAGER.value, "Nguyễn Văn Giám Đốc Kinh Doanh", "0902345678", None),
-        ("sales_rep", "sales_rep@warehouse.local", "123456", UserRole.SALES_REP.value, "Lê Thị Nhân Viên Kinh Doanh", "0903456789", None),
-        ("wh_mgr", "wh_mgr@warehouse.local", "123456", UserRole.WH_MANAGER.value, "Phạm Văn Trưởng Kho", "0904567890", "Kho Tổng Hà Nội"),
-        ("warehouse", "warehouse@warehouse.local", "123456", UserRole.WAREHOUSE.value, "Hoàng Văn Thủ Kho", "0905678901", "Kho Đà Nẵng"),
-        ("accountant", "accountant@warehouse.local", "123456", UserRole.ACCOUNTANT.value, "Đỗ Thị Kế Toán Trưởng", "0906789012", None),
-        ("customer", "customer@warehouse.local", "123456", UserRole.CUSTOMER.value, "Công ty TNHH Đại Lý Tuấn Phương", "0907890123", None),
+        ("admin", "admin@saleswarehouse.com", "Admin@123456", UserRole.ADMIN.value, "Trần Quản Trị Hệ Thống", "0901234567", None, ["ADMIN"]),
+        ("sales_mgr", "sales_mgr@warehouse.local", "SalesMgr@1234", UserRole.SALES_MANAGER.value, "Nguyễn Văn Giám Đốc Kinh Doanh", "0902345678", None, ["MANAGER"]),
+        ("sales_rep", "sales_rep@warehouse.local", "SalesRep@1234", UserRole.SALES_REP.value, "Lê Thị Nhân Viên Kinh Doanh", "0903456789", None, ["SALES"]),
+        ("wh_mgr", "wh_mgr@warehouse.local", "WhMgr@1234", UserRole.WH_MANAGER.value, "Phạm Văn Trưởng Kho", "0904567890", "Kho Tổng Hà Nội", ["MANAGER", "WAREHOUSE"]),
+        ("warehouse", "warehouse@warehouse.local", "Warehouse@1234", UserRole.WAREHOUSE.value, "Hoàng Văn Thủ Kho", "0905678901", "Kho Đà Nẵng", ["WAREHOUSE"]),
+        ("accountant", "accountant@warehouse.local", "Accountant@1234", UserRole.ACCOUNTANT.value, "Đỗ Thị Kế Toán Trưởng", "0906789012", None, ["ACCOUNTANT"]),
+        ("customer", "customer@warehouse.local", "Customer@1234", UserRole.CUSTOMER.value, "Công ty TNHH Đại Lý Tuấn Phương", "0907890123", None, []),
     ]
-    for ten_dang_nhap, dia_chi_email, mat_khau_goc, vai_tro, ho_ten, sdt, kho in danh_sach_tai_khoan_mau:
+    for ten_dang_nhap, dia_chi_email, mat_khau_goc, vai_tro, ho_ten, sdt, kho, r_names in danh_sach_tai_khoan_mau:
         existing = phien_db.query(User).filter(
             (User.username == ten_dang_nhap) | (User.email == dia_chi_email)
         ).first()
@@ -38,17 +38,18 @@ def khoi_tao_tai_khoan_ban_dau(phien_db: Session):
                 is_active=True,
                 token_version=1
             )
-            # Gán role tương ứng nếu có
-            role_obj = phien_db.query(Role).filter(
-                (Role.name == vai_tro.upper().replace(" ", "_")) | (Role.name == vai_tro.upper())
-            ).first()
-            if role_obj:
-                tai_khoan_moi.roles.append(role_obj)
+            for rname in r_names:
+                role_obj = phien_db.query(Role).filter(Role.name == rname).first()
+                if role_obj:
+                    tai_khoan_moi.roles.append(role_obj)
             phien_db.add(tai_khoan_moi)
         else:
+            existing.username = ten_dang_nhap
+            existing.email = dia_chi_email
             existing.hashed_password = bam_mat_khau(mat_khau_goc)
             existing.failed_login_attempts = 0
             existing.locked_until = None
+            existing.lock_reason = None
             existing.is_active = True
             if not existing.full_name:
                 existing.full_name = ho_ten
@@ -56,8 +57,11 @@ def khoi_tao_tai_khoan_ban_dau(phien_db: Session):
                 existing.phone_number = sdt
             if not existing.assigned_warehouse and kho:
                 existing.assigned_warehouse = kho
-            if existing.role != vai_tro:
-                existing.role = vai_tro
+            existing.role = vai_tro
+            for rname in r_names:
+                role_obj = phien_db.query(Role).filter(Role.name == rname).first()
+                if role_obj and role_obj not in existing.roles:
+                    existing.roles.append(role_obj)
     phien_db.commit()
 
 
@@ -119,5 +123,7 @@ quan_ly_vong_doi_ung_dung = lifespan
 seed_initial_users = khoi_tao_tai_khoan_ban_dau
 
 if __name__ == "__main__":
+    import os
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    port = int(os.getenv("PORT", 8001))
+    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)

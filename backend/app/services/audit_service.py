@@ -17,16 +17,24 @@ from app.core.device_parser import phan_tich_thiet_bi, lay_dia_chi_ip
 
 
 def dam_bao_cot_device_ton_tai(db: Session):
-    """Tự động kiểm tra và tạo cột device trong bảng audit_logs nếu chưa tồn tại (tương thích SQLite/MySQL/PostgreSQL)."""
+    """Tự động kiểm tra và tạo cột device và status trong bảng audit_logs nếu chưa tồn tại (tương thích SQLite/MySQL/PostgreSQL)."""
     try:
         from sqlalchemy import text
-        db.execute(text("SELECT device FROM audit_logs LIMIT 1"))
+        db.execute(text("SELECT device, status FROM audit_logs LIMIT 1"))
     except Exception:
         try:
             db.rollback()
             from sqlalchemy import text
-            db.execute(text("ALTER TABLE audit_logs ADD COLUMN device VARCHAR(255)"))
-            db.commit()
+            try:
+                db.execute(text("ALTER TABLE audit_logs ADD COLUMN device VARCHAR(255)"))
+                db.commit()
+            except Exception:
+                db.rollback()
+            try:
+                db.execute(text("ALTER TABLE audit_logs ADD COLUMN status VARCHAR(50) DEFAULT 'success'"))
+                db.commit()
+            except Exception:
+                db.rollback()
         except Exception:
             try:
                 db.rollback()

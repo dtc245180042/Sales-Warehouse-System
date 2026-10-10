@@ -296,7 +296,7 @@ export const ResetPassword: React.FC = () => {
                 isMatch ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'
               }`}
             >
-              {isMatch ? '✓ Mật khẩu xác nhận trùng khớp' : '✕ Mật khẩu xác nhận chưa khớp'}
+              {isMatch ? 'Mật khẩu xác nhận trùng khớp' : 'Mật khẩu xác nhận chưa khớp'}
             </p>
           )}
         </div>

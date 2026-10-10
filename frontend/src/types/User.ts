@@ -7,13 +7,15 @@ export type BusinessRole =
   | 'Accountant'        // Kế toán
   | 'Director';         // Ban giám đốc
 
-export type UserRole = BusinessRole | 'Manager' | 'Staff' | 'User';
+export type UserRole = BusinessRole | 'Manager' | 'Staff' | 'User' | 'Customer';
 
 export type UserStatus = 'active' | 'inactive' | 'locked';
 
 export interface User {
   id: string;
   name: string;
+  username?: string;
+  fullName?: string;
   email: string;
   password?: string;
   role: UserRole;

@@ -15,7 +15,8 @@ import {
   Mail,
   MapPin,
   AlertCircle,
-  PackageCheck
+  PackageCheck,
+  Package,
 } from 'lucide-react';
 import { useUserCart } from '../../contexts/UserCartContext';
 import { mockUserApi } from '../../services/api';
@@ -146,7 +147,7 @@ export const CreateOrderPage: React.FC = () => {
           </div>
 
           <h2 className="text-3xl font-extrabold text-slate-900 dark:text-white mb-2">
-            ✓ Tạo đơn hàng thành công!
+            Tạo đơn hàng thành công!
           </h2>
           <p className="text-slate-500 dark:text-slate-400 mb-6">
             Đơn hàng đã được lưu vào hệ thống và sẵn sàng để đóng gói, xử lý giao hàng.
@@ -292,11 +293,18 @@ export const CreateOrderPage: React.FC = () => {
                 <div className="divide-y divide-slate-100 dark:divide-slate-800 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
                   {items.map((item) => (
                     <div key={item.product.id} className="p-4 flex items-center gap-4 hover:bg-slate-50/50 dark:hover:bg-slate-800/50">
-                      <img
-                        src={item.product.image}
-                        alt={item.product.name}
-                        className="w-14 h-14 rounded-lg object-cover bg-slate-100 dark:bg-slate-800 shrink-0"
-                      />
+                      {item.product.image ? (
+                        <img
+                          src={item.product.image}
+                          alt={item.product.name}
+                          className="w-14 h-14 rounded-lg object-cover bg-slate-100 dark:bg-slate-800 shrink-0"
+                          onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                        />
+                      ) : (
+                        <div className="w-14 h-14 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 flex items-center justify-center shrink-0">
+                          <Package className="w-6 h-6" />
+                        </div>
+                      )}
                       <div className="flex-1 min-w-0">
                         <div className="font-semibold text-slate-900 dark:text-white truncate">
                           {item.product.name}
@@ -540,7 +548,7 @@ export const CreateOrderPage: React.FC = () => {
                       : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
                   }`}
                 >
-                  ✓ Đã thanh toán
+                  Đã thanh toán
                 </button>
                 <button
                   type="button"
@@ -588,7 +596,7 @@ export const CreateOrderPage: React.FC = () => {
               <div className="bg-slate-50 dark:bg-slate-800/60 p-4 rounded-xl space-y-2 border border-slate-200 dark:border-slate-700">
                 <div className="text-xs font-bold uppercase text-slate-400">Phương thức thanh toán</div>
                 <div className="font-semibold text-slate-900 dark:text-white">
-                  {paymentMethod === 'cash' ? '💵 Tiền mặt' : paymentMethod === 'transfer' ? '🏦 Chuyển khoản ngân hàng' : '📱 Ví điện tử'}
+                  {paymentMethod === 'cash' ? 'Tiền mặt' : paymentMethod === 'transfer' ? 'Chuyển khoản ngân hàng' : 'Ví điện tử'}
                 </div>
                 <div className="text-sm text-slate-600 dark:text-slate-300">
                   Tình trạng:{' '}

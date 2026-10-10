@@ -1,6 +1,6 @@
 import os
 import uuid
-from typing import Optional
+from typing import Optional, Union
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy.orm import Session
 
@@ -77,13 +77,15 @@ def tao_san_pham_moi(
     summary="Xem thông tin chi tiết một sản phẩm (SCRUM-376)"
 )
 def xem_chi_tiet_san_pham(
-    product_id: int,
+    product_id: Union[int, str],
     current_user: User = Depends(lay_nguoi_dung_hien_tai),
     db: Session = Depends(lay_phien_db),
 ):
     """Lấy chi tiết sản phẩm theo ID (SCRUM-376)."""
     product = ProductService.get_product(db=db, product_id=product_id)
-    return ProductService.serialize_product(product, current_user)
+    from app.models.product_stock_profile import ProductStockProfile
+    sp = db.query(ProductStockProfile).filter(ProductStockProfile.product_id == product.id).first()
+    return ProductService.serialize_product(product, current_user, stock_profile=sp)
 
 
 @router.put(

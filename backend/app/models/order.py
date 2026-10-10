@@ -2,11 +2,14 @@ from datetime import datetime, timezone
 from sqlalchemy import (
     Column,
     Integer,
+    BigInteger,
+    Numeric,
     String,
     Float,
     DateTime,
     ForeignKey,
     Text,
+    Boolean,
 )
 from sqlalchemy.orm import relationship
 from app.core.database import Base
@@ -39,8 +42,12 @@ class Order(Base):
     # Phương thức thanh toán & trạng thái
     payment_method = Column(String(50), default="cash", nullable=False)  # cash, transfer, card
     payment_status = Column(String(50), default="paid", nullable=False)  # paid, unpaid, partial
-    status = Column(String(50), default="pending", nullable=False, index=True)  # pending, confirmed, shipping, completed, cancelled
+    status = Column(String(50), default="pending", nullable=False, index=True)  # pending, pending_approval, confirmed, shipping, completed, cancelled
     
+    # Đánh dấu đơn cần duyệt khi giá bán dưới giá sàn hoặc vượt hạn mức (SCRUM-490, SCRUM-495)
+    requires_approval = Column(Boolean, default=False, nullable=True)
+    approval_reason = Column(Text, nullable=True)
+
     # Nhân viên tạo / phụ trách đơn (SCRUM-364 nhận diện avatar nhân viên tạo)
     staff_id = Column(String(50), nullable=True, index=True)
     staff_name = Column(String(255), nullable=True)
@@ -59,6 +66,14 @@ class Order(Base):
         nullable=False
     )
 
+    # Tham chiếu đơn hàng gốc khi sao chép đơn (S4-09, SCRUM-241)
+    copied_from_order_id = Column(String(50), nullable=True, index=True)
+
+    # Nguồn tạo đơn hàng: 'internal' (Backoffice/POS/NVKD) hoặc 'portal' (Đại lý tự đặt qua Cổng đại lý) (S4-10, SCRUM-242)
+    source = Column(String(50), default="internal", nullable=False, index=True)
+    # Cờ đánh dấu đơn chưa được phân công NVKD phụ trách (S4-10, SCRUM-242)
+    is_unassigned = Column(Boolean, default=False, nullable=False, index=True)
+
     items = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan", lazy="joined")
 
 
@@ -76,5 +91,57 @@ class OrderItem(Base):
     quantity = Column(Integer, default=1, nullable=False)
     discount = Column(Float, default=0.0, nullable=False)
     subtotal = Column(Float, default=0.0, nullable=False)
+    # Đơn vị tính (S3-09: cái, hộp, thùng...)
+    unit = Column(String(50), nullable=True, default="cái")
+
+    # Giá sàn và cờ bán dưới sàn (S4-01 / SCRUM-490)
+    floor_price = Column(Float, nullable=True)
+    is_below_floor = Column(Boolean, default=False, nullable=True)
+
+    # Snapshot chính sách chiết khấu sản lượng lúc chốt đơn (S3-01)
+    applied_discount_policy_id = Column(Integer, nullable=True, index=True)
+    applied_discount_policy_name = Column(String(255), nullable=True)
+    discount_rate = Column(Numeric(5, 2), nullable=True)      # % chiết khấu nếu áp dụng PERCENT
+    discount_amount = Column(BigInteger, nullable=True)        # Tiền chiết khấu VND nếu áp dụng FIXED_AMOUNT
 
     order = relationship("Order", back_populates="items")
+
+
+# Đảm bảo các cột mới của order_items và orders tự động tồn tại trong CSDL hiện hữu
+try:
+    from app.core.database import engine
+    from sqlalchemy import inspect, text
+    with engine.connect() as _conn:
+        _cols = [c["name"] for c in inspect(_conn).get_columns("order_items")]
+        if _cols:
+            if "unit" not in _cols:
+                _conn.execute(text("ALTER TABLE order_items ADD COLUMN unit VARCHAR(50)"))
+            if "applied_discount_policy_id" not in _cols:
+                _conn.execute(text("ALTER TABLE order_items ADD COLUMN applied_discount_policy_id INTEGER"))
+            if "applied_discount_policy_name" not in _cols:
+                _conn.execute(text("ALTER TABLE order_items ADD COLUMN applied_discount_policy_name VARCHAR(255)"))
+            if "discount_rate" not in _cols:
+                _conn.execute(text("ALTER TABLE order_items ADD COLUMN discount_rate NUMERIC(5, 2)"))
+            if "discount_amount" not in _cols:
+                _conn.execute(text("ALTER TABLE order_items ADD COLUMN discount_amount BIGINT"))
+            if "floor_price" not in _cols:
+                _conn.execute(text("ALTER TABLE order_items ADD COLUMN floor_price FLOAT"))
+            if "is_below_floor" not in _cols:
+                _conn.execute(text("ALTER TABLE order_items ADD COLUMN is_below_floor BOOLEAN DEFAULT 0"))
+            _conn.commit()
+
+        _order_cols = [c["name"] for c in inspect(_conn).get_columns("orders")]
+        if _order_cols:
+            if "requires_approval" not in _order_cols:
+                _conn.execute(text("ALTER TABLE orders ADD COLUMN requires_approval BOOLEAN DEFAULT 0"))
+            if "approval_reason" not in _order_cols:
+                _conn.execute(text("ALTER TABLE orders ADD COLUMN approval_reason TEXT"))
+            if "copied_from_order_id" not in _order_cols:
+                _conn.execute(text("ALTER TABLE orders ADD COLUMN copied_from_order_id VARCHAR(50)"))
+            if "source" not in _order_cols:
+                _conn.execute(text("ALTER TABLE orders ADD COLUMN source VARCHAR(50) DEFAULT 'internal'"))
+            if "is_unassigned" not in _order_cols:
+                _conn.execute(text("ALTER TABLE orders ADD COLUMN is_unassigned BOOLEAN DEFAULT FALSE"))
+            _conn.commit()
+except Exception:
+    pass

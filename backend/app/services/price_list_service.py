@@ -1,6 +1,6 @@
 import math
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import List, Optional, Tuple
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
@@ -503,14 +503,17 @@ def clone_inherited_version(
     if clone_data and clone_data.valid_from:
         new_valid_from = clone_data.valid_from
     else:
-        new_valid_from = parent.valid_to or datetime.now(timezone.utc)
+        now_dt = datetime.now(timezone.utc)
+        parent_from_dt = normalize_datetime(parent.valid_from) or now_dt
+        new_valid_from = parent.valid_to or max(parent_from_dt, now_dt)
     new_valid_to = clone_data.valid_to if (clone_data and clone_data.valid_to) else None
     validate_effective_dates(new_valid_from, new_valid_to)
 
     # Ràng buộc nghiệp vụ: Ngày bắt đầu hiệu lực phiên bản mới không được trước phiên bản gốc
     norm_new_from = normalize_datetime(new_valid_from)
     norm_parent_from = normalize_datetime(parent.valid_from)
-    if norm_new_from < norm_parent_from:
+    tolerance = timedelta(seconds=5)
+    if norm_new_from and norm_parent_from and norm_new_from < (norm_parent_from - tolerance):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=(
@@ -1138,7 +1141,27 @@ def update_price_list_item(
     if data.floor_price is not None:
         item.floor_price = data.floor_price
     if data.sale_price is not None:
-        item.sale_price = data.sale_price
+        new_sale = data.sale_price
+        if int(item.sale_price) != int(new_sale):
+            from app.services.price_history_service import record_price_change
+            from app.models.product_price_history import PriceTypeEnum
+            reason = getattr(data, "reason", None) or getattr(data, "note", None) or f"Cập nhật giá bán theo bảng giá '{price_list.name}'"
+            record_price_change(
+                db=db,
+                product_id=str(item.product_id),
+                product_sku=item.product_sku,
+                product_name=item.product_name,
+                price_type=PriceTypeEnum.SALE_PRICE,
+                old_price=int(item.sale_price),
+                new_price=int(new_sale),
+                reason=reason,
+                effective_from=price_list.valid_from or datetime.now(timezone.utc),
+                changed_by=user,
+                price_list_id=price_list.id,
+                price_list_name=price_list.name,
+                customer_group=price_list.customer_group
+            )
+        item.sale_price = new_sale
     if data.note is not None:
         item.note = data.note
 

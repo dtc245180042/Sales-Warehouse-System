@@ -27,12 +27,15 @@ def get_order_lifecycle(order_id: str, db: Session = Depends(get_db)):
         "history": histories
     }
 
+from typing import Optional
+
 @router.post("/{order_id}/cancel")
 def cancel_order_endpoint(
     order_id: str,
-    reason: str = Body(..., embed=True),
-    user_name: str = Body("NVKD", embed=True),
+    reason: Optional[str] = Body(default="Hủy đơn hàng", embed=True),
+    user_name: Optional[str] = Body(default="NVKD", embed=True),
     db: Session = Depends(get_db)
 ):
     """API Hủy đơn hàng (SCRUM-594, SCRUM-595, SCRUM-597)"""
-    return cancel_order_service(order_id, reason, user_name, db)
+    effective_reason = (reason and reason.strip()) or "Hủy đơn hàng"
+    return cancel_order_service(order_id, effective_reason, user_name or "NVKD", db)

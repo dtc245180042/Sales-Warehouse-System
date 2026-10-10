@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
+import React, { useState, useMemo } from 'react';
+import { NavLink, Link, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
   ShieldCheck,
@@ -16,7 +16,11 @@ import {
   BarChart3,
   TrendingUp,
   Package,
-  FileSpreadsheet,
+  Users,
+  Store,
+  Receipt,
+  PlusCircle,
+  ShoppingCart,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { UserRole } from '../../types/User';
@@ -43,20 +47,33 @@ interface MenuItem {
   }[];
 }
 
-const isSubmenuItemActive = (
+const normalizePath = (p: string) => (p.length > 1 && p.endsWith('/') ? p.slice(0, -1) : p);
+
+const isNavItemActive = (
   currentPath: string,
   itemPath: string,
-  allSubmenuPaths: string[]
+  allSiblingPaths: string[]
 ): boolean => {
-  if (currentPath === itemPath) return true;
-  const otherSiblingMatches = allSubmenuPaths.some(
-    (siblingPath) =>
-      siblingPath !== itemPath &&
-      siblingPath.length > itemPath.length &&
-      (currentPath === siblingPath || currentPath.startsWith(siblingPath + '/'))
-  );
+  const normCurrent = normalizePath(currentPath);
+  const normItem = normalizePath(itemPath);
+
+  if (normCurrent === normItem) return true;
+
+  // Nếu có một đường dẫn khác có độ dài lớn hơn và match với URL hiện tại (VD: /orders/create khớp hơn /orders)
+  // thì đường dẫn ngắn hơn không được coi là active
+  const otherSiblingMatches = allSiblingPaths.some((siblingPath) => {
+    const normSibling = normalizePath(siblingPath);
+    return (
+      normSibling !== normItem &&
+      normSibling.length > normItem.length &&
+      (normCurrent === normSibling || normCurrent.startsWith(normSibling + '/'))
+    );
+  });
+
   if (otherSiblingMatches) return false;
-  return currentPath.startsWith(itemPath + '/');
+
+  // Match các sub-path chi tiết (ví dụ: /orders/123 hoặc /orders/OD-2026-0001 -> Quản lý đơn hàng vẫn active)
+  return normCurrent.startsWith(normItem + '/');
 };
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -72,6 +89,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
     setOpenSubmenus((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
+  const ALL_ROLES: UserRole[] = [
+    'Admin',
+    'SalesManager',
+    'SalesStaff',
+    'WarehouseManager',
+    'WarehouseStaff',
+    'Accountant',
+    'Director',
+    'Manager',
+    'Staff',
+    'User',
+  ];
+
   const menuSections: { heading?: string; items: MenuItem[] }[] = [
     {
       heading: 'BẢNG ĐIỀU KHIỂN',
@@ -80,18 +110,30 @@ export const Sidebar: React.FC<SidebarProps> = ({
           title: 'Tổng quan Dashboard',
           path: '/dashboard',
           icon: <LayoutDashboard className="w-5 h-5" />,
-          allowedRoles: [
-            'Admin',
-            'SalesManager',
-            'SalesStaff',
-            'WarehouseManager',
-            'WarehouseStaff',
-            'Accountant',
-            'Director',
-            'Manager',
-            'Staff',
-            'User',
-          ],
+          allowedRoles: ALL_ROLES,
+        },
+      ],
+    },
+    {
+      heading: 'QUẢN LÝ BÁN HÀNG',
+      items: [
+        {
+          title: 'Quản lý đơn hàng',
+          path: '/orders',
+          icon: <LayoutList className="w-5 h-5" />,
+          allowedRoles: ALL_ROLES,
+        },
+        {
+          title: 'Tạo đơn hiện trường',
+          path: '/orders/create',
+          icon: <ShoppingCart className="w-5 h-5" />,
+          allowedRoles: ALL_ROLES,
+        },
+        {
+          title: 'Bán hàng tại quầy (POS)',
+          path: '/sales/pos',
+          icon: <Store className="w-5 h-5" />,
+          allowedRoles: ALL_ROLES.filter((r) => r !== 'User'),
         },
       ],
     },
@@ -99,26 +141,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
       heading: 'ĐỐI TÁC & CUNG ỨNG',
       items: [
         {
+          title: 'Đại lý & Hạn mức công nợ',
+          path: '/customers',
+          icon: <Store className="w-5 h-5" />,
+          allowedRoles: ALL_ROLES,
+        },
+        {
           title: 'Nhà cung cấp',
           path: '/suppliers',
           icon: <Building2 className="w-5 h-5" />,
-          allowedRoles: [
-            'Admin',
-            'SalesManager',
-            'SalesStaff',
-            'WarehouseManager',
-            'WarehouseStaff',
-            'Accountant',
-            'Director',
-            'Manager',
-            'Staff',
-            'User',
-          ],
+          allowedRoles: ALL_ROLES,
         },
       ],
     },
     {
-      heading: 'DANH MỤC SẢN PHẨM',
+      heading: 'KHO & SẢN PHẨM',
       items: [
         {
           title: 'Sản phẩm',
@@ -129,16 +166,30 @@ export const Sidebar: React.FC<SidebarProps> = ({
             'SalesStaff',
             'WarehouseManager',
             'WarehouseStaff',
-
             'Director',
             'Manager',
             'Staff',
           ],
           submenu: [
             {
-              title: 'Danh sách sản phẩm',
+              title: 'Danh mục sản phẩm',
               path: '/products',
               icon: <LayoutList className="w-3.5 h-3.5" />,
+              allowedRoles: [
+                'Admin',
+                'SalesManager',
+                'SalesStaff',
+                'WarehouseManager',
+                'WarehouseStaff',
+                'Director',
+                'Manager',
+                'Staff',
+              ],
+            },
+            {
+              title: 'Nhóm ngành hàng',
+              path: '/categories',
+              icon: <FolderTree className="w-3.5 h-3.5" />,
               allowedRoles: [
                 'Admin',
                 'SalesManager',
@@ -162,52 +213,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 'Manager',
               ],
             },
-            {
-              title: 'Nhóm hàng & Ngành hàng',
-              path: '/categories',
-              icon: <FolderTree className="w-3.5 h-3.5" />,
-              allowedRoles: [
-                'Admin',
-                'SalesManager',
-                'SalesStaff',
-                'WarehouseManager',
-                'WarehouseStaff',
-                'Director',
-                'Manager',
-                'Staff',
-              ],
-            },
-            {
-              title: 'Nhập từ Excel',
-              path: '/products/import',
-              icon: <FileSpreadsheet className="w-3.5 h-3.5" />,
-              allowedRoles: [
-                'Admin',
-                'SalesManager',
-                'Director',
-                'Manager',
-              ],
-            },
           ],
         },
         {
-          title: 'Bảng Giá Phân Phối',
+          title: 'Bảng Giá & Chiết Khấu',
           path: '/price-lists',
           icon: <Tag className="w-5 h-5" />,
-          allowedRoles: [
-            'Admin',
-            'SalesManager',
-            'SalesStaff',
-            'Director',
-            'Accountant',
-            'Manager',
-            'Staff',
-          ],
+          allowedRoles: ALL_ROLES,
         },
       ],
     },
     {
-      heading: 'BÁO CÁO & THỐNG KÊ',
+      heading: 'BÁO CÁO & PHÂN TÍCH',
       items: [
         {
           title: 'Báo cáo Bán hàng',
@@ -224,7 +241,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           ],
         },
         {
-          title: 'Báo cáo Doanh thu',
+          title: 'Báo cáo Doanh thu & Công nợ',
           path: '/reports/revenue',
           icon: <TrendingUp className="w-5 h-5" />,
           allowedRoles: [
@@ -265,25 +282,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
           allowedRoles: ['Admin'],
         },
         {
-          title: 'Cài đặt & Bảo mật tài khoản',
+          title: 'Cài đặt hệ thống',
           path: '/settings',
           icon: <Settings className="w-5 h-5" />,
-          allowedRoles: [
-            'Admin',
-            'SalesManager',
-            'SalesStaff',
-            'WarehouseManager',
-            'WarehouseStaff',
-            'Accountant',
-            'Director',
-            'Manager',
-            'Staff',
-            'User',
-          ],
+          allowedRoles: ALL_ROLES,
         },
       ],
     },
   ];
+
+  const allTopLevelPaths = useMemo(() => {
+    return menuSections
+      .flatMap((s) => s.items.map((i) => i.path).filter(Boolean) as string[]);
+  }, [menuSections]);
 
   const sidebarContent = (
     <div className="flex flex-col h-full bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 transition-all duration-300">
@@ -319,7 +330,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 if (item.submenu) {
                   const allSubmenuPaths = item.submenu.map((s) => s.path);
                   const isAnySubActive = item.submenu.some((sub) =>
-                    isSubmenuItemActive(location.pathname, sub.path, allSubmenuPaths)
+                    isNavItemActive(location.pathname, sub.path, allSubmenuPaths)
                   );
                   const isSubOpen = openSubmenus[item.title.toLowerCase()] ?? isAnySubActive;
 
@@ -327,11 +338,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     <div key={itemIdx} className="space-y-1">
                       <button
                         onClick={() => toggleSubmenu(item.title.toLowerCase())}
-                        className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm font-medium transition-colors outline-none focus:outline-none ${
-                          isAnySubActive
-                            ? 'text-indigo-600 dark:text-indigo-400 bg-indigo-50/60 dark:bg-indigo-950/30'
-                            : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60'
-                        }`}
+                        className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm font-medium transition-colors outline-none focus:outline-none ${isAnySubActive
+                          ? 'text-indigo-600 dark:text-indigo-400 bg-indigo-50/60 dark:bg-indigo-950/30'
+                          : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60'
+                          }`}
                         title={isCollapsed ? item.title : undefined}
                       >
                         <div className="flex items-center gap-3">
@@ -340,9 +350,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         </div>
                         {!isCollapsed && (
                           <ChevronDown
-                            className={`w-4 h-4 transition-transform duration-200 ${
-                              isSubOpen ? 'rotate-180 text-indigo-500' : 'text-slate-400'
-                            }`}
+                            className={`w-4 h-4 transition-transform duration-200 ${isSubOpen ? 'rotate-180 text-indigo-500' : 'text-slate-400'
+                              }`}
                           />
                         )}
                       </button>
@@ -352,27 +361,26 @@ export const Sidebar: React.FC<SidebarProps> = ({
                           {item.submenu
                             .filter((sub) => sub.allowedRoles.includes(role))
                             .map((sub, sIdx) => {
-                              const isActive = isSubmenuItemActive(
+                              const isActive = isNavItemActive(
                                 location.pathname,
                                 sub.path,
                                 allSubmenuPaths
                               );
 
                               return (
-                                <NavLink
+                                <Link
                                   key={sIdx}
                                   to={sub.path}
-                                  end={sub.path === '/products'}
                                   onClick={onMobileClose}
-                                  className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all outline-none focus:outline-none ${
-                                    isActive
-                                      ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-200 dark:shadow-none'
-                                      : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800/40'
-                                  }`}
+                                  className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all outline-none focus:outline-none ${isActive
+                                    ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-200 dark:shadow-none'
+                                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800/40'
+                                    }`}
+                                  aria-current={isActive ? 'page' : undefined}
                                 >
                                   {sub.icon}
                                   <span>{sub.title}</span>
-                                </NavLink>
+                                </Link>
                               );
                             })}
                         </div>
@@ -381,23 +389,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   );
                 }
 
+                const isItemActive = isNavItemActive(location.pathname, item.path!, allTopLevelPaths);
+
                 return (
-                  <NavLink
+                  <Link
                     key={itemIdx}
                     to={item.path!}
                     onClick={onMobileClose}
-                    className={({ isActive }) =>
-                      `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all outline-none focus:outline-none ${
-                        isActive
-                          ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/25'
-                          : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60'
-                      }`
-                    }
+                    className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all outline-none focus:outline-none ${isItemActive
+                      ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/25'
+                      : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60'
+                    }`}
                     title={isCollapsed ? item.title : undefined}
+                    aria-current={isItemActive ? 'page' : undefined}
                   >
                     <span className="shrink-0">{item.icon}</span>
                     {!isCollapsed && <span>{item.title}</span>}
-                  </NavLink>
+                  </Link>
                 );
               })}
             </div>
@@ -425,19 +433,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <div className="flex items-center justify-between text-xs">
             <span className="text-slate-500 dark:text-slate-400">Vai trò:</span>
             <span
-              className={`font-semibold px-2 py-0.5 rounded-full text-[11px] ${
-                role === 'Admin'
-                  ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/50 dark:text-purple-300'
-                  : role === 'Director'
+              className={`font-semibold px-2 py-0.5 rounded-full text-[11px] ${role === 'Admin'
+                ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/50 dark:text-purple-300'
+                : role === 'Director'
                   ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300'
                   : role === 'SalesManager' || role === 'SalesStaff'
-                  ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300'
-                  : role === 'WarehouseManager' || role === 'WarehouseStaff'
-                  ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300'
-                  : role === 'Accountant'
-                  ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300'
-                  : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
-              }`}
+                    ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300'
+                    : role === 'WarehouseManager' || role === 'WarehouseStaff'
+                      ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300'
+                      : role === 'Accountant'
+                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300'
+                        : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                }`}
             >
               {getRoleDisplayName(role)}
             </span>
@@ -457,9 +464,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
     <>
       {/* Desktop Sidebar */}
       <aside
-        className={`hidden lg:block shrink-0 h-screen sticky top-0 transition-all duration-300 z-30 ${
-          isCollapsed ? 'w-20' : 'w-64'
-        }`}
+        className={`hidden lg:block shrink-0 h-screen sticky top-0 transition-all duration-300 z-30 ${isCollapsed ? 'w-20' : 'w-64'
+          }`}
       >
         {sidebarContent}
       </aside>

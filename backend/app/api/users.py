@@ -328,18 +328,31 @@ def khoa_tai_khoan(
     # Kiểm tra nếu là nhân viên kinh doanh để cảnh báo bàn giao đại lý
     la_nhan_vien_kinh_doanh = target_user.role in [UserRole.SALES_REP.value, UserRole.SALES_MANAGER.value]
     thong_bao_canh_bao = None
+    assigned_count = 0
     if la_nhan_vien_kinh_doanh:
-        thong_bao_canh_bao = (
-            f"CẢNH BÁO: Nhân viên '{target_user.username}' thuộc bộ phận kinh doanh phụ trách các đại lý địa bàn. "
-            f"Vui lòng phân công bàn giao danh sách khách hàng/đại lý ngay lập tức."
-        )
+        from app.models.customer_assignment import CustomerAssignment
+        assigned_count = phien_db.query(CustomerAssignment).filter(
+            CustomerAssignment.assigned_staff_id == target_user.id
+        ).count()
+        if assigned_count > 0:
+            thong_bao_canh_bao = (
+                f"CẢNH BÁO: Nhân viên '{target_user.full_name or target_user.username}' đang phụ trách {assigned_count} đại lý. "
+                f"Vui lòng thực hiện chuyển giao địa bàn ngay lập tức."
+            )
+        else:
+            thong_bao_canh_bao = (
+                f"CẢNH BÁO: Nhân viên '{target_user.username}' thuộc bộ phận kinh doanh phụ trách các đại lý địa bàn. "
+                f"Vui lòng phân công bàn giao danh sách khách hàng/đại lý ngay lập tức."
+            )
 
     return {
         "status": "success",
         "message": f"Tài khoản '{target_user.username}' đã bị khóa thành công.",
         "lock_reason": target_user.lock_reason,
         "session_revoked": True,
-        "handover_warning": thong_bao_canh_bao
+        "handover_warning": thong_bao_canh_bao,
+        "assigned_customer_count": assigned_count,
+        "quick_handover_url": f"/customers?assigned_staff_id={target_user.id}"
     }
 
 

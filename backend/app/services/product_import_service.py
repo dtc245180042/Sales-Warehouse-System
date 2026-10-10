@@ -207,6 +207,7 @@ class ProductImportService:
         seen_skus_in_file = set()
 
         for index, row in df.iterrows():
+            row_num = index + 2
             raw_sku = str(row.get("sku", "")).strip()
             # Chuẩn hóa theo Cách 1: IN HOA, thay khoảng trắng thành dấu gạch ngang
             sku = re.sub(r'\s+', '-', raw_sku).upper() if raw_sku and raw_sku.lower() != "nan" else ""

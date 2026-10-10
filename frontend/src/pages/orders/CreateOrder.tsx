@@ -825,7 +825,7 @@ export const CreateOrder: React.FC = () => {
   }, [customers, customerSearch]);
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pb-28 text-slate-800 dark:text-slate-100">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pb-6 text-slate-800 dark:text-slate-100">
       {/* Top Header Optimized for Mobile 360px */}
       <header className="sticky top-0 z-30 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-3 py-2.5 shadow-sm">
         <div className="max-w-2xl mx-auto flex items-center justify-between gap-2">
@@ -1676,9 +1676,9 @@ export const CreateOrder: React.FC = () => {
         </section>
       </main>
 
-      {/* Sticky Bottom Bar Optimized for 360px Mobile */}
-      <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 p-2.5 shadow-xl">
-        <div className="max-w-2xl mx-auto flex items-center justify-between gap-2">
+      {/* Sticky Bottom Bar - Ngang hàng và khớp chuẩn với khối bảng trên */}
+      <div className="sticky bottom-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 p-2.5 shadow-xl">
+        <div className="max-w-2xl mx-auto px-3 flex items-center justify-between gap-2">
           {/* Price Preview */}
           <div className="min-w-0">
             <div className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">

@@ -447,6 +447,31 @@ def create_order(db: Session, order_in: OrderCreate, current_user: Optional[User
         order_data["total"] = computed_total
         order_data["subtotal"] = computed_total
 
+    # S4-02: Kiểm tra hạn mức công nợ & nợ quá hạn khi tạo đơn chính thức (SCRUM-496, SCRUM-497, SCRUM-498)
+    credit_approval_reason = None
+    if not is_draft and order_in.customer_id:
+        computed_order_total = float(order_data.get("total", 0.0) or 0.0)
+        order_paid = float(order_data.get("paid_amount", 0.0) or 0.0)
+        unpaid = max(0.0, computed_order_total - order_paid)
+
+        from app.services.customer_credit_service import check_credit_for_order_placement
+        credit_check = check_credit_for_order_placement(
+            db=db,
+            customer_id=order_in.customer_id,
+            unpaid_amount=unpaid,
+            order_id=None,
+        )
+        if credit_check.get("is_blocked"):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=credit_check["error_message"]
+            )
+        if credit_check.get("requires_approval"):
+            order_data["status"] = "pending_approval"
+            order_data["requires_approval"] = True
+            credit_approval_reason = credit_check.get("approval_reason")
+            order_data["approval_reason"] = credit_approval_reason
+
     new_order = Order(**order_data)
     from app.services.order_pricing_service import lookup_line_pricing
     from app.models.volume_discount import VolumeDiscountPolicy
@@ -505,10 +530,14 @@ def create_order(db: Session, order_in: OrderCreate, current_user: Optional[User
 
         new_order.items.append(OrderItem(**itm_dict))
 
-    # Đánh dấu đơn hàng cần duyệt nếu có sản phẩm bán dưới giá sàn (SCRUM-490)
+    # Đánh dấu đơn hàng cần duyệt nếu có sản phẩm bán dưới giá sàn hoặc vượt hạn mức (SCRUM-490, SCRUM-498)
     if has_subfloor:
+        subfloor_text = "; ".join(subfloor_reasons)
+        if credit_approval_reason:
+            new_order.approval_reason = f"{credit_approval_reason}; {subfloor_text}"
+        else:
+            new_order.approval_reason = subfloor_text
         new_order.requires_approval = True
-        new_order.approval_reason = "; ".join(subfloor_reasons)
         if not is_draft and new_order.status in ["pending", "confirmed"]:
             new_order.status = "pending_approval"
 
@@ -766,12 +795,33 @@ def submit_draft_order(
         if pricing_res.is_below_floor and pricing_res.approval_reason:
             subfloor_reasons.append(pricing_res.approval_reason)
 
-    if subfloor_reasons:
+    # S4-02: Kiểm tra hạn mức công nợ & nợ quá hạn khi chốt đơn nháp (SCRUM-496, SCRUM-497, SCRUM-498)
+    unpaid = max(0.0, float(order.total or 0.0) - float(order.paid_amount or 0.0))
+    from app.services.customer_credit_service import check_credit_for_order_placement
+    credit_check = check_credit_for_order_placement(
+        db=db,
+        customer_id=order.customer_id,
+        unpaid_amount=unpaid,
+        order_id=order.id,
+    )
+    if credit_check.get("is_blocked"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=credit_check["error_message"]
+        )
+
+    all_approval_reasons = list(subfloor_reasons)
+    if credit_check.get("requires_approval") and credit_check.get("approval_reason"):
+        all_approval_reasons.append(credit_check["approval_reason"])
+
+    if all_approval_reasons:
         order.requires_approval = True
-        order.approval_reason = "; ".join(subfloor_reasons)
+        order.approval_reason = "; ".join(all_approval_reasons)
         order.status = "pending_approval"
     else:
         order.status = "pending"
+        order.requires_approval = False
+        order.approval_reason = None
 
     order.updated_at = datetime.now(timezone.utc)
     db.commit()
@@ -800,9 +850,76 @@ def get_draft_orders(
 
 
 
-def update_order_status(db: Session, order_id: str, new_status: str) -> Order:
+def update_order_status(
+    db: Session,
+    order_id: str,
+    new_status: str,
+    current_user: Optional[User] = None,
+) -> Order:
     order = get_order_by_id(db, order_id)
     old_status = order.status
+
+    # RBAC Guard: Kiểm tra phân quyền vai trò đối với các hành động chuyển trạng thái đơn hàng (S4-05, SCRUM-203, SCRUM-498)
+    if current_user:
+        u_role = (current_user.role or "").strip().lower()
+
+        # 1. Duyệt đơn hàng vượt hạn mức công nợ hoặc dưới sàn (pending_approval -> confirmed / approved) (S4-05)
+        if old_status == "pending_approval" and new_status in ["confirmed", "approved"]:
+            allowed_approvers = ["admin", "sales manager", "director", "accountant", "manager"]
+            if u_role not in allowed_approvers:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Chỉ Quản lý kinh doanh (Sales Manager), Ban giám đốc hoặc Kế toán mới có quyền phê duyệt đơn hàng vượt hạn mức công nợ hoặc dưới giá sàn."
+                )
+
+        # 2. Duyệt / Xác nhận đơn hàng chờ xử lý (pending -> confirmed)
+        if old_status == "pending" and new_status in ["confirmed", "approved"]:
+            allowed_confirmers = ["admin", "sales manager", "director", "wh manager", "manager"]
+            if u_role not in allowed_confirmers:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Nhân viên kinh doanh không có quyền duyệt/xác nhận đơn hàng. Yêu cầu Quản lý kinh doanh hoặc Quản trị viên."
+                )
+
+        # 3. Xuất kho & bắt đầu giao hàng (confirmed -> shipping)
+        if new_status == "shipping" and old_status != "shipping":
+            allowed_shippers = ["admin", "director", "wh manager", "warehouse", "sales manager", "manager"]
+            if u_role not in allowed_shippers:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Nhân viên kinh doanh không có quyền chuyển đơn hàng sang trạng thái giao hàng. Thao tác này do bộ phận Kho vận phụ trách."
+                )
+
+        # 4. Xác nhận hoàn tất đơn hàng (shipping -> completed)
+        if new_status == "completed" and old_status != "completed":
+            allowed_completers = ["admin", "director", "wh manager", "warehouse", "accountant", "sales manager", "manager"]
+            if u_role not in allowed_completers:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Nhân viên kinh doanh không có quyền xác nhận hoàn tất đơn hàng. Thao tác này do bộ phận Kho hoặc Kế toán phụ trách."
+                )
+
+        # 5. Hủy đơn hàng (cancelled)
+        if new_status == "cancelled" and old_status != "cancelled":
+            if u_role == "sales rep":
+                is_owner = (
+                    (order.staff_id and str(order.staff_id) == str(current_user.id)) or
+                    (order.staff_name and current_user.full_name and order.staff_name == current_user.full_name)
+                )
+                if not is_owner:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail="Bạn chỉ có thể yêu cầu hủy đơn hàng do chính mình lập."
+                    )
+                if old_status in ["shipping", "completed"]:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="Không thể hủy đơn hàng đang giao hoặc đã hoàn thành."
+                    )
+
+    # S4-02: Khi duyệt đơn từ pending_approval sang confirmed / pending / shipping / completed / approved
+    if old_status == "pending_approval" and new_status in ["confirmed", "pending", "shipping", "completed", "approved"]:
+        order.requires_approval = False
 
     # Nghiệp vụ kiểm tra hạn mức công nợ khi XUẤT HÀNG (Hàng rời kho: status -> shipping hoặc completed)
     if new_status in ["shipping", "completed"] and old_status not in ["shipping", "completed"]:
@@ -810,8 +927,15 @@ def update_order_status(db: Session, order_id: str, new_status: str) -> Order:
         if unpaid > 0 and order.customer_id:
             from app.services.customer_credit_service import get_or_create_credit_profile, check_credit_for_dispatch
             # Khóa dòng bi quan (Pessimistic Lock) giữ khóa đến hết transaction để chống Race Condition khi xuất kho đồng thời
+            is_approved = bool(order.approval_reason) or (old_status == "pending_approval" and new_status in ["confirmed", "shipping", "completed"])
             cred_prof = get_or_create_credit_profile(db=db, customer_id=order.customer_id, for_update=True)
-            chk = check_credit_for_dispatch(db=db, customer_id=order.customer_id, unpaid_amount=unpaid, order_id=order.id)
+            chk = check_credit_for_dispatch(
+                db=db,
+                customer_id=order.customer_id,
+                unpaid_amount=unpaid,
+                order_id=order.id,
+                is_manager_approved=is_approved
+            )
             if not chk["allowed"]:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
@@ -865,5 +989,9 @@ def update_order_status(db: Session, order_id: str, new_status: str) -> Order:
     return _enrich_order_lock_warning(db, order)
 
 
-def cancel_order(db: Session, order_id: str) -> Order:
-    return update_order_status(db, order_id, "cancelled")
+def cancel_order(
+    db: Session,
+    order_id: str,
+    current_user: Optional[User] = None,
+) -> Order:
+    return update_order_status(db, order_id, "cancelled", current_user=current_user)

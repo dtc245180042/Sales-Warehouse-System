@@ -46,7 +46,9 @@ class ProductService:
         Nếu người dùng không phải Quản lý kinh doanh/Admin, ẩn trường giá vốn (`cost_price = None`).
         """
         can_view_cost = cls.is_sales_manager_or_admin(current_user)
-        price_val = float(getattr(product, "price", 0.0) or 0.0)
+        price_val = float(getattr(product, "price", 0.0) or getattr(product, "sale_price", 0.0) or 0.0)
+        if price_val <= 0.0 and getattr(product, "cost_price", None):
+            price_val = round(float(product.cost_price) * 1.2, -4)
         stock_val = 100
         min_stock_val = 10
 

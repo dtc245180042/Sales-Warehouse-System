@@ -288,7 +288,7 @@ def evaluate_order_violations(
         else:
             reasons.append(f"Vượt hạn mức nợ {credit_excess_amount:,} đ")
     if has_floor_price_violation:
-        reasons.append(f"Bán dưới giá sàn ({len(floor_price_violations)} mặt hàng, lệch {int(total_floor_price_gap):,} đ)")
+        reasons.append(f"Bán dưới giá sàn (thấp hơn giá sàn, {len(floor_price_violations)} mặt hàng, lệch {int(total_floor_price_gap):,} đ)")
 
     violation_summary = " & ".join(reasons) if reasons else None
 

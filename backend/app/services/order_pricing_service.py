@@ -193,18 +193,30 @@ def lookup_line_pricing(
     customer_group = (cust.customer_group or "RETAIL").strip()
     customer_group_label = GROUP_LABELS.get(customer_group, customer_group)
 
-    # 3. SCRUM-492: Chặn khi không có bảng giá hiệu lực
+    # 3. SCRUM-492: Chặn khi không có bảng giá hiệu lực (áp dụng bắt buộc cho các nhóm đại lý B2B)
+    is_agent_group = customer_group not in ["RETAIL", "LE", "CANHAN", "INDIVIDUAL"]
     if not active_pl:
-        err_msg = (
-            f"Không có bảng giá nào đang có hiệu lực cho nhóm khách hàng '{customer_group_label}' "
-            f"({customer_group}) mà đại lý '{cust.name}' thuộc về. "
-            f"Vui lòng thiết lập bảng giá có hiệu lực trước khi tạo đơn hàng."
-        )
-        if strict_block:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=err_msg
+        if is_agent_group:
+            err_msg = (
+                f"Không có bảng giá nào đang có hiệu lực cho nhóm khách hàng '{customer_group_label}' "
+                f"({customer_group}) mà đại lý '{cust.name}' thuộc về. "
+                f"Vui lòng thiết lập bảng giá có hiệu lực trước khi tạo đơn hàng."
             )
+            if strict_block:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=err_msg
+                )
+            success_val = False
+            message_val = err_msg
+            requires_approval_val = True
+            approval_reason_val = "Không có bảng giá hiệu lực cho nhóm đại lý"
+        else:
+            success_val = True
+            message_val = "Áp dụng giá niêm yết chuẩn từ danh mục sản phẩm (Khách Bán Lẻ)."
+            requires_approval_val = False
+            approval_reason_val = None
+
         # Tính chiết khấu sản lượng dựa trên giá catalog
         calc_res = calculate_volume_discount(
             db=db,
@@ -216,8 +228,14 @@ def lookup_line_pricing(
         final_u_price = max(0.0, base_u_price - calc_res.discount_amount_per_unit)
         total_disc = calc_res.discount_amount_per_unit * quantity
 
+        floor_price_val = float(prod.cost_price or 0.0) if prod.cost_price else 0.0
+        is_subfloor = bool(floor_price_val > 0 and base_u_price < floor_price_val)
+        if is_subfloor:
+            requires_approval_val = True
+            approval_reason_val = f"Đơn giá bán '{base_u_price:,.0f} đ' thấp hơn giá vốn/giá sàn '{floor_price_val:,.0f} đ'."
+
         return LinePricingLookupResponse(
-            success=False,
+            success=success_val,
             has_effective_price_list=False,
             price_list_id=None,
             price_list_code=None,
@@ -231,12 +249,12 @@ def lookup_line_pricing(
             unit=prod.unit or "cái",
             listed_price=float(prod.price or 0.0),
             default_price=float(prod.price or 0.0),
-            floor_price=0.0,
+            floor_price=floor_price_val,
             applied_unit_price=base_u_price,
             is_manual_price=bool(custom_price is not None),
-            is_below_floor=False,
-            requires_approval=True,
-            approval_reason="Không có bảng giá hiệu lực cho nhóm khách hàng",
+            is_below_floor=is_subfloor,
+            requires_approval=requires_approval_val,
+            approval_reason=approval_reason_val,
             quantity=quantity,
             discount_rate=calc_res.discount_rate,
             discount_amount_per_unit=calc_res.discount_amount_per_unit,
@@ -245,7 +263,7 @@ def lookup_line_pricing(
             line_total=final_u_price * quantity,
             applied_discount_policy_id=calc_res.applied_policy_id,
             applied_discount_policy_name=getattr(calc_res, "applied_discount_policy_name", None),
-            message=err_msg
+            message=message_val
         )
 
     # 4. Tìm dòng giá của sản phẩm trong bảng giá này
@@ -259,16 +277,27 @@ def lookup_line_pricing(
     ).first()
 
     if not item:
-        err_msg = (
-            f"Sản phẩm '{prod.name}' (SKU: {prod.sku}) chưa có trong bảng giá hiệu lực "
-            f"'{active_pl.name}' ({active_pl.code}) của nhóm khách hàng '{customer_group_label}'. "
-            f"Hệ thống chặn thêm dòng hàng này vào đơn."
-        )
-        if strict_block:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=err_msg
+        if is_agent_group:
+            err_msg = (
+                f"Sản phẩm '{prod.name}' (SKU: {prod.sku}) chưa có trong bảng giá hiệu lực "
+                f"'{active_pl.name}' ({active_pl.code}) của nhóm khách hàng '{customer_group_label}'. "
+                f"Hệ thống chặn thêm dòng hàng này vào đơn."
             )
+            if strict_block:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=err_msg
+                )
+            success_val = False
+            msg_val = err_msg
+            requires_appr_val = True
+            appr_reason_val = "Sản phẩm chưa có trong bảng giá hiệu lực"
+        else:
+            success_val = True
+            msg_val = "Áp dụng giá niêm yết danh mục sản phẩm (Khách Bán Lẻ)."
+            requires_appr_val = False
+            appr_reason_val = None
+
         calc_res = calculate_volume_discount(
             db=db,
             product_id=str(prod.id),
@@ -279,8 +308,14 @@ def lookup_line_pricing(
         final_u_price = max(0.0, base_u_price - calc_res.discount_amount_per_unit)
         total_disc = calc_res.discount_amount_per_unit * quantity
 
+        floor_price_val = float(prod.cost_price or 0.0) if prod.cost_price else 0.0
+        is_subfloor = bool(floor_price_val > 0 and base_u_price < floor_price_val)
+        if is_subfloor:
+            requires_appr_val = True
+            appr_reason_val = f"Đơn giá bán '{base_u_price:,.0f} đ' thấp hơn giá vốn/giá sàn '{floor_price_val:,.0f} đ'."
+
         return LinePricingLookupResponse(
-            success=False,
+            success=success_val,
             has_effective_price_list=True,
             price_list_id=active_pl.id,
             price_list_code=active_pl.code,
@@ -294,12 +329,12 @@ def lookup_line_pricing(
             unit=prod.unit or "cái",
             listed_price=float(prod.price or 0.0),
             default_price=float(prod.price or 0.0),
-            floor_price=0.0,
+            floor_price=floor_price_val,
             applied_unit_price=base_u_price,
             is_manual_price=bool(custom_price is not None),
-            is_below_floor=False,
-            requires_approval=True,
-            approval_reason="Sản phẩm chưa có trong bảng giá hiệu lực",
+            is_below_floor=is_subfloor,
+            requires_approval=requires_appr_val,
+            approval_reason=appr_reason_val,
             quantity=quantity,
             discount_rate=calc_res.discount_rate,
             discount_amount_per_unit=calc_res.discount_amount_per_unit,
@@ -308,7 +343,7 @@ def lookup_line_pricing(
             line_total=final_u_price * quantity,
             applied_discount_policy_id=calc_res.applied_policy_id,
             applied_discount_policy_name=getattr(calc_res, "applied_discount_policy_name", None),
-            message=err_msg
+            message=msg_val
         )
 
     # 5. SCRUM-489: Xác định giá bán mặc định và giá sàn

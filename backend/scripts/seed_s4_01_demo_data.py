@@ -134,9 +134,59 @@ def run_seed():
                 item.product_sku = sku
                 item.sale_price = sale_price
                 item.floor_price = floor_price
+        # 3. Bảng giá cho RETAIL (Khách bán lẻ)
+        pl_retail = db.query(PriceList).filter(
+            PriceList.customer_group == "RETAIL",
+            PriceList.status == "APPROVED",
+            PriceList.name == "Bảng giá Niêm yết Bán lẻ Chuẩn 2026"
+        ).first()
+
+        if not pl_retail:
+            pl_retail = PriceList(
+                code="BG-RETAIL-DEMO",
+                name="Bảng giá Niêm yết Bán lẻ Chuẩn 2026",
+                customer_group="RETAIL",
+                valid_from=now - timedelta(days=1),
+                valid_to=valid_to,
+                status="APPROVED",
+                created_by_name="Admin"
+            )
+            db.add(pl_retail)
+            db.flush()
+
+        demo_items_retail = [
+            ("PRD-001", "IP15P-128-TI", "iPhone 15 Pro 128GB Titan Tự Nhiên", "cái", 26990000.0, 26990000.0, 25000000.0),
+            ("PRD-002", "SAM-S24U-512", "Samsung Galaxy S24 Ultra 512GB Gray", "cái", 29990000.0, 29990000.0, 28000000.0),
+            ("PRD-005", "SN-WH1000XM5-BK", "Tai nghe Sony WH-1000XM5 Black", "cái", 7990000.0, 7990000.0, 7000000.0),
+            ("PRD-006", "AP-PRO-2-USBC", "AirPods Pro 2 USB-C MagSafe Case", "hộp", 5690000.0, 5690000.0, 5000000.0),
+        ]
+
+        for prod_id, sku, name, unit, list_price, sale_price, floor_price in demo_items_retail:
+            item = db.query(PriceListItem).filter(
+                PriceListItem.price_list_id == pl_retail.id,
+                PriceListItem.product_id == prod_id
+            ).first()
+            if not item:
+                item = PriceListItem(
+                    price_list_id=pl_retail.id,
+                    product_id=prod_id,
+                    product_sku=sku,
+                    product_name=name,
+                    unit=unit,
+                    listed_price=list_price,
+                    sale_price=sale_price,
+                    floor_price=floor_price,
+                    discount_percent=0.0,
+                    status="APPROVED"
+                )
+                db.add(item)
+            else:
+                item.product_sku = sku
+                item.sale_price = sale_price
+                item.floor_price = floor_price
                 item.status = "APPROVED"
 
-        # 3. Chính sách Chiết khấu sản lượng áp dụng toàn hệ thống
+        # 4. Chính sách Chiết khấu sản lượng áp dụng toàn hệ thống
         vd_policy = db.query(VolumeDiscountPolicy).filter(
             VolumeDiscountPolicy.code == "CKSL-DEMO-2026"
         ).first()

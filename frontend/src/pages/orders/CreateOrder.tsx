@@ -806,18 +806,22 @@ export const CreateOrder: React.FC = () => {
     setExpectedDeliveryDate(d.toISOString().split('T')[0]);
   };
 
-  // Filtered customer list
+  // Filtered customer list (Hỗ trợ tìm theo tên, mã code KH-xxx, mã ID CUS-xxx, SĐT)
   const filteredCustomers = useMemo(() => {
-    if (!customerSearch.trim()) return customers.slice(0, 10);
-    const q = customerSearch.toLowerCase();
+    if (!customerSearch.trim()) return customers.slice(0, 15);
+    const q = customerSearch.toLowerCase().trim();
+    const qClean = q.replace(/[-\s_]/g, '');
     return customers
-      .filter(
-        (c) =>
-          c.name.toLowerCase().includes(q) ||
-          c.code.toLowerCase().includes(q) ||
-          c.phone.toLowerCase().includes(q)
-      )
-      .slice(0, 10);
+      .filter((c) => {
+        const nameMatch = c.name?.toLowerCase().includes(q);
+        const codeMatch = c.code ? c.code.toLowerCase().includes(q) : false;
+        const idMatch = c.id ? c.id.toLowerCase().includes(q) : false;
+        const phoneMatch = c.phone ? c.phone.includes(q) : false;
+        const codeCleanMatch = c.code ? c.code.toLowerCase().replace(/[-\s_]/g, '').includes(qClean) : false;
+        const idCleanMatch = c.id ? c.id.toLowerCase().replace(/[-\s_]/g, '').includes(qClean) : false;
+        return nameMatch || codeMatch || idMatch || phoneMatch || codeCleanMatch || idCleanMatch;
+      })
+      .slice(0, 15);
   }, [customers, customerSearch]);
 
   return (
@@ -955,9 +959,21 @@ export const CreateOrder: React.FC = () => {
                             <span className="font-semibold text-xs text-slate-900 dark:text-white truncate">
                               {c.name}
                             </span>
-                            <span className="text-[10px] font-mono bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 px-1.5 py-0.5 rounded">
-                              {c.code}
-                            </span>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <span className="text-[10px] font-mono bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 px-1.5 py-0.5 rounded font-semibold">
+                                {c.code}
+                              </span>
+                              {c.id && c.id !== c.code && (
+                                <span className="text-[10px] font-mono bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 px-1.5 py-0.5 rounded font-semibold">
+                                  {c.id}
+                                </span>
+                              )}
+                              {c.customerGroup && (
+                                <span className="text-[9px] font-bold bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 px-1.5 py-0.5 rounded">
+                                  {c.customerGroup}
+                                </span>
+                              )}
+                            </div>
                           </div>
                           <div className="flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
                             <span>{c.phone || 'Chưa có SĐT'}</span>

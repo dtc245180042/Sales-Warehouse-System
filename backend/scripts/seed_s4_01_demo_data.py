@@ -20,6 +20,8 @@ from app.models.price_list import PriceList, PriceListItem
 from app.models.volume_discount import VolumeDiscountPolicy, VolumeDiscountTier
 from app.models.product import Product
 from app.models.customer import Customer
+from app.models.customer_assignment import CustomerAssignment
+from app.models.auth import User
 
 def run_seed():
     db = SessionLocal()
@@ -212,6 +214,16 @@ def run_seed():
             vd_policy.applied_scope = "ALL_PRODUCTS"
             vd_policy.is_active = True
             vd_policy.valid_to = valid_to
+
+        # 5. Phân công các đại lý demo (CUS-001, CUS-002, CUS-003, CUS-004, CUS-005) cho sales_rep
+        rep_user = db.query(User).filter(User.username == "sales_rep").first()
+        if rep_user:
+            for cid in ["CUS-001", "CUS-002", "CUS-003", "CUS-004", "CUS-005"]:
+                asgn = db.query(CustomerAssignment).filter(CustomerAssignment.customer_id == cid).first()
+                if asgn:
+                    asgn.assigned_staff_id = rep_user.id
+                else:
+                    db.add(CustomerAssignment(customer_id=cid, assigned_staff_id=rep_user.id))
 
         db.commit()
         print("✓ Khởi tạo dữ liệu Demo S4-01 thành công!")

@@ -97,18 +97,29 @@ def update_order_status(
     order_id: str,
     status_in: OrderStatusUpdate,
     db: Session = Depends(lay_phien_db),
+    current_user: Optional[User] = Depends(lay_nguoi_dung_tuy_chon),
 ):
-    """Cập nhật trạng thái đơn hàng (tự động hoàn kho nếu hủy đơn)."""
-    return order_service.update_order_status(db=db, order_id=order_id, new_status=status_in.status)
+    """Cập nhật trạng thái đơn hàng (tự động hoàn kho nếu hủy đơn; kiểm tra quyền theo RBAC)."""
+    return order_service.update_order_status(
+        db=db,
+        order_id=order_id,
+        new_status=status_in.status,
+        current_user=current_user,
+    )
 
 
 @router.post("/{order_id}/cancel", response_model=OrderResponse)
 def cancel_order(
     order_id: str,
     db: Session = Depends(lay_phien_db),
+    current_user: Optional[User] = Depends(lay_nguoi_dung_tuy_chon),
 ):
     """Hủy đơn hàng và hoàn lại số lượng tồn kho sản phẩm."""
-    return order_service.cancel_order(db=db, order_id=order_id)
+    return order_service.cancel_order(
+        db=db,
+        order_id=order_id,
+        current_user=current_user,
+    )
 
 
 @router.put("/{order_id}/draft", response_model=OrderResponse)

@@ -34,7 +34,7 @@ import { OrderItem, PaymentMethod } from '../../types/Order';
 import { productCategories } from '../../mock/products';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
-import { VOLUME_DISCOUNT_TIERS, getVolumeDiscountInfo } from '../agents/AgentOrderCreate';
+import { VOLUME_DISCOUNT_TIERS, getVolumeDiscountInfo } from '../../services/volumeDiscountService';
 import { VolumeDiscountPolicyModal } from '../../components/sales/VolumeDiscountPolicyModal';
 
 interface CartItem extends OrderItem {

@@ -1,6 +1,6 @@
 import re
 from datetime import datetime
-from typing import List, Optional, Any
+from typing import List, Optional, Any, Union
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from app.models.product import ProductStatus
 
@@ -189,7 +189,7 @@ class ProductResponse(BaseModel):
     """Schema phản hồi thông tin sản phẩm (SCRUM-220).
     Lưu ý: `cost_price` được bảo mật theo vai trò (SCRUM-378).
     """
-    id: int
+    id: Union[int, str]
     sku: str
     name: str
     category: str

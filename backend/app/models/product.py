@@ -35,6 +35,7 @@ class Product(Base):
     packaging_spec = Column(String(255), nullable=True)               # Quy cách đóng gói (vd: 12 hộp/thùng)
     cost_price = Column(Float, nullable=True, default=0.0)            # Giá vốn (Chỉ Quản lý kinh doanh xem/sửa)
     price = Column(Float, nullable=True, default=0.0)                 # Giá bán niêm yết (SCRUM-214)
+    sale_price = Column(Float, nullable=True, default=0.0)            # Giá bán niêm yết (tương thích ngược)
     description = Column(String(255), nullable=True)                  # Mô tả sản phẩm
     image_url = Column(String(500), nullable=True)                   # Đường dẫn ảnh sản phẩm
     status = Column(String(50), nullable=False, default=ProductStatus.ACTIVE, index=True)  # Trạng thái kinh doanh

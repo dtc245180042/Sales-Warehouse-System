@@ -1,5 +1,5 @@
 import math
-from typing import Optional
+from typing import Optional, Any, Union
 from fastapi import HTTPException, status
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
@@ -46,7 +46,9 @@ class ProductService:
         Nếu người dùng không phải Quản lý kinh doanh/Admin, ẩn trường giá vốn (`cost_price = None`).
         """
         can_view_cost = cls.is_sales_manager_or_admin(current_user)
-        price_val = float(getattr(product, "price", 0.0) or 0.0)
+        price_val = float(getattr(product, "price", 0.0) or getattr(product, "sale_price", 0.0) or 0.0)
+        if price_val <= 0.0 and getattr(product, "cost_price", None):
+            price_val = round(float(product.cost_price) * 1.2, -4)
         stock_val = 100
         min_stock_val = 10
 
@@ -268,9 +270,11 @@ class ProductService:
         return product
 
     @classmethod
-    def get_product(cls, db: Session, product_id: int) -> Product:
-        """Lấy chi tiết một sản phẩm theo ID (SCRUM-376)."""
-        product = db.query(Product).filter(Product.id == product_id).first()
+    def get_product(cls, db: Session, product_id: Any) -> Product:
+        """Lấy chi tiết một sản phẩm theo ID hoặc SKU (SCRUM-376)."""
+        product = db.query(Product).filter((Product.id == product_id) | (Product.sku == str(product_id))).first()
+        if not product and str(product_id).isdigit():
+            product = db.query(Product).filter(Product.id == int(product_id)).first()
         if not product:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,

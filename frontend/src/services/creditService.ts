@@ -38,20 +38,30 @@ export const creditService = {
   },
 
   /**
-   * Kiểm tra điều kiện xuất kho cho đơn hàng phát sinh nợ
+   * Kiểm tra điều kiện công nợ và quá hạn (tạo đơn hoặc xuất kho)
    */
   checkCredit: async (
     customerId: string,
     unpaidAmount: number,
-    orderId?: string
+    orderId?: string,
+    context: 'order' | 'dispatch' = 'order'
   ): Promise<CreditCheckResult> => {
     const res = await apiClient.post(
       `/customers/${encodeURIComponent(customerId)}/check-credit`,
       {
         unpaid_amount: unpaidAmount,
         order_id: orderId,
+        context: context,
       }
     );
+    return res.data;
+  },
+
+  /**
+   * Lấy tóm tắt công nợ, hạn mức và nợ quá hạn cho màn hình tạo đơn (SCRUM-499)
+   */
+  getSummary: async (customerId: string): Promise<CustomerCreditProfile> => {
+    const res = await apiClient.get(`/customers/${encodeURIComponent(customerId)}/credit-summary`);
     return res.data;
   },
 };

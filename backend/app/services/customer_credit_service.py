@@ -130,7 +130,8 @@ def check_credit_for_dispatch(
     db: Session,
     customer_id: str,
     unpaid_amount: float = 0.0,
-    order_id: Optional[str] = None
+    order_id: Optional[str] = None,
+    is_manager_approved: bool = False
 ) -> Dict[str, Any]:
     """
     Kiểm tra điều kiện xuất kho theo đúng 4 bước đã chốt:
@@ -160,7 +161,7 @@ def check_credit_for_dispatch(
     today_date = datetime.now(timezone.utc).date()
 
     # Bước 1: Chưa cấp hạn mức nợ
-    if profile.credit_limit <= 0:
+    if profile.credit_limit <= 0 and not is_manager_approved:
         return {
             "allowed": False,
             "error_message": (
@@ -231,23 +232,24 @@ def check_credit_for_dispatch(
     total_debt_after_dispatch = dispatched_debt + order_unpaid
     if total_debt_after_dispatch > profile.credit_limit:
         excess = total_debt_after_dispatch - profile.credit_limit
-        return {
-            "allowed": False,
-            "error_message": (
-                f"Đơn hàng vượt quá hạn mức công nợ khả dụng của khách hàng! "
-                f"Đại lý '{customer.name}' không đủ hạn mức công nợ để xuất đơn này "
-                f"(Hạn mức: {profile.credit_limit:,} đ, Dư nợ đã xuất: {dispatched_debt:,} đ, "
-                f"Đơn hàng cần nợ: {order_unpaid:,} đ, Vượt quá: {excess:,} đ). "
-                f"Vui lòng thanh toán bớt nợ trước khi xuất hàng."
-            ),
-            "credit_limit": profile.credit_limit,
-            "max_debt_days": profile.max_debt_days,
-            "dispatched_debt": dispatched_debt,
-            "order_unpaid_amount": order_unpaid,
-            "excess_amount": excess,
-            "overdue_days": 0,
-            "overdue_order_code": None,
-        }
+        if not is_manager_approved:
+            return {
+                "allowed": False,
+                "error_message": (
+                    f"Đơn hàng vượt quá hạn mức công nợ khả dụng của khách hàng! "
+                    f"Đại lý '{customer.name}' không đủ hạn mức công nợ để xuất đơn này "
+                    f"(Hạn mức: {profile.credit_limit:,} đ, Dư nợ đã xuất: {dispatched_debt:,} đ, "
+                    f"Đơn hàng cần nợ: {order_unpaid:,} đ, Vượt quá: {excess:,} đ). "
+                    f"Vui lòng thanh toán bớt nợ trước khi xuất hàng."
+                ),
+                "credit_limit": profile.credit_limit,
+                "max_debt_days": profile.max_debt_days,
+                "dispatched_debt": dispatched_debt,
+                "order_unpaid_amount": order_unpaid,
+                "excess_amount": excess,
+                "overdue_days": 0,
+                "overdue_order_code": None,
+            }
 
     return {
         "allowed": True,
@@ -259,6 +261,221 @@ def check_credit_for_dispatch(
         "excess_amount": 0,
         "overdue_days": 0,
         "overdue_order_code": None,
+    }
+
+
+def check_customer_overdue_debt(
+    db: Session,
+    customer_id: str,
+    order_id: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Kiểm tra xem khách hàng / đại lý có khoản nợ nào quá hạn thanh toán hay không (S4-02, SCRUM-497).
+    - Điều kiện: đơn hàng đã xuất kho (shipping, completed) và còn nợ (total - paid_amount > 0).
+    - Số ngày quá hạn = (hôm nay - ngày xuất kho) - max_debt_days.
+    - Nếu có khoản nợ quá hạn: Bị chặn tạo đơn hoàn toàn theo quy định.
+    """
+    customer = _get_customer(db, customer_id)
+    profile = get_or_create_credit_profile(db, customer.id)
+    today_date = datetime.now(timezone.utc).date()
+
+    debt_query = db.query(Order).filter(
+        Order.customer_id == customer.id,
+        Order.status.in_(["shipping", "completed"]),
+        Order.status != "cancelled"
+    )
+    if order_id:
+        debt_query = debt_query.filter(Order.id != order_id)
+
+    past_debt_orders = debt_query.all()
+    max_overdue_days = 0
+    overdue_order_code = None
+    overdue_rem_amount = 0
+
+    for o in past_debt_orders:
+        rem = max(0.0, float(o.total or 0.0) - float(o.paid_amount or 0.0))
+        if rem > 0:
+            disp_dt = None
+            prof = db.query(OrderDeliveryProfile).filter(OrderDeliveryProfile.order_id == o.id).first()
+            if prof and hasattr(prof, "dispatched_at") and prof.dispatched_at:
+                disp_dt = prof.dispatched_at
+            elif o.created_at:
+                disp_dt = o.created_at
+
+            if disp_dt:
+                disp_date = disp_dt.date() if hasattr(disp_dt, "date") else disp_dt
+                days_in_debt = (today_date - disp_date).days
+                if days_in_debt > profile.max_debt_days:
+                    excess_days = days_in_debt - profile.max_debt_days
+                    if excess_days > max_overdue_days:
+                        max_overdue_days = excess_days
+                        overdue_order_code = o.code
+                        overdue_rem_amount = int(round(rem))
+
+    has_overdue = max_overdue_days > 0
+    block_msg = None
+    if has_overdue:
+        block_msg = (
+            f"Đại lý '{customer.name}' đang có khoản nợ quá hạn chưa thanh toán! "
+            f"(Đơn hàng {overdue_order_code} nợ quá hạn {max_overdue_days} ngày, quy định tối đa {profile.max_debt_days} ngày, "
+            f"số tiền nợ còn lại: {overdue_rem_amount:,} đ). Đại lý bị chặn tạo đơn hoàn toàn theo quy định hệ thống."
+        )
+
+    return {
+        "has_overdue": has_overdue,
+        "overdue_days": max_overdue_days,
+        "overdue_order_code": overdue_order_code,
+        "is_blocked": has_overdue,
+        "block_reason": block_msg,
+    }
+
+
+def check_credit_for_order_placement(
+    db: Session,
+    customer_id: str,
+    unpaid_amount: float = 0.0,
+    order_id: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Kiểm tra hạn mức công nợ và số ngày quá hạn khi tạo hoặc chốt đơn hàng (S4-02, SCRUM-496, SCRUM-497, SCRUM-498).
+    
+    Quy tắc nghiệp vụ S4-02:
+    1. Kiểm tra nợ quá hạn:
+       - Nếu đại lý có khoản nợ quá số ngày cho phép: Chặn tạo/chốt đơn hoàn toàn!
+    2. Đơn thanh toán đủ 100% (unpaid_amount <= 0):
+       - Cho phép tạo đơn, không bị chặn và không cần duyệt.
+    3. Kiểm tra hạn mức tiền:
+       - Nếu tổng nợ sau khi tạo đơn (current_debt + unpaid_amount) vượt hạn mức credit_limit:
+         -> Đơn hàng được đánh dấu cần duyệt (status = 'pending_approval', requires_approval = True).
+       - Nếu không vượt hạn mức:
+         -> Cho phép tạo đơn bình thường (requires_approval = False).
+    """
+    customer = _get_customer(db, customer_id)
+    profile = get_or_create_credit_profile(db, customer.id)
+    order_unpaid = max(0, int(round(unpaid_amount)))
+
+    # 1. Kiểm tra nợ quá hạn trước tiên (Chặn hoàn toàn nếu vi phạm)
+    overdue_info = check_customer_overdue_debt(db=db, customer_id=customer.id, order_id=order_id)
+    if overdue_info["is_blocked"]:
+        return {
+            "allowed": False,
+            "action": "BLOCK",
+            "requires_approval": False,
+            "is_blocked": True,
+            "error_message": overdue_info["block_reason"],
+            "warning_message": None,
+            "credit_limit": profile.credit_limit,
+            "max_debt_days": profile.max_debt_days,
+            "dispatched_debt": profile.current_debt,
+            "current_debt": profile.current_debt,
+            "available_credit": max(0, profile.credit_limit - profile.current_debt),
+            "order_unpaid_amount": order_unpaid,
+            "excess_amount": 0,
+            "overdue_days": overdue_info["overdue_days"],
+            "overdue_order_code": overdue_info["overdue_order_code"],
+            "approval_reason": None,
+        }
+
+    # 2. Đã thanh toán đủ 100% (không phát sinh nợ mới)
+    calc_debt = calculate_actual_customer_debt(db, customer.id)
+    current_debt = max(int(profile.current_debt or 0), calc_debt)
+    available_credit = max(0, profile.credit_limit - current_debt)
+
+    if order_unpaid <= 0:
+        return {
+            "allowed": True,
+            "action": "ALLOW",
+            "requires_approval": False,
+            "is_blocked": False,
+            "error_message": None,
+            "warning_message": None,
+            "credit_limit": profile.credit_limit,
+            "max_debt_days": profile.max_debt_days,
+            "dispatched_debt": current_debt,
+            "current_debt": current_debt,
+            "available_credit": available_credit,
+            "order_unpaid_amount": 0,
+            "excess_amount": 0,
+            "overdue_days": 0,
+            "overdue_order_code": None,
+            "approval_reason": None,
+        }
+
+    # 3. Kiểm tra hạn mức tiền:
+    total_debt_after = current_debt + order_unpaid
+    
+    # Trường hợp 3a: Chưa được cấp hạn mức nhưng phát sinh nợ
+    if profile.credit_limit <= 0:
+        excess = order_unpaid
+        approval_msg = (
+            f"Đại lý '{customer.name}' chưa được cấp hạn mức công nợ "
+            f"(Hạn mức: 0 đ, Đơn hàng cần nợ: {order_unpaid:,} đ). "
+            f"Đơn hàng được chuyển sang trạng thái Chờ duyệt bởi Quản lý kinh doanh."
+        )
+        return {
+            "allowed": True,
+            "action": "REQUIRE_APPROVAL",
+            "requires_approval": True,
+            "is_blocked": False,
+            "error_message": None,
+            "warning_message": approval_msg,
+            "credit_limit": profile.credit_limit,
+            "max_debt_days": profile.max_debt_days,
+            "dispatched_debt": current_debt,
+            "current_debt": current_debt,
+            "available_credit": 0,
+            "order_unpaid_amount": order_unpaid,
+            "excess_amount": excess,
+            "overdue_days": 0,
+            "overdue_order_code": None,
+            "approval_reason": approval_msg,
+        }
+
+    # Trường hợp 3b: Vượt hạn mức công nợ
+    if total_debt_after > profile.credit_limit:
+        excess = total_debt_after - profile.credit_limit
+        approval_msg = (
+            f"Tổng công nợ sau đơn ({total_debt_after:,} đ = Dư nợ hiện tại {current_debt:,} đ + Đơn này {order_unpaid:,} đ) "
+            f"vượt hạn mức công nợ được cấp ({profile.credit_limit:,} đ) là {excess:,} đ. "
+            f"Đơn hàng được chuyển sang trạng thái Chờ duyệt bởi Quản lý kinh doanh."
+        )
+        return {
+            "allowed": True,
+            "action": "REQUIRE_APPROVAL",
+            "requires_approval": True,
+            "is_blocked": False,
+            "error_message": None,
+            "warning_message": approval_msg,
+            "credit_limit": profile.credit_limit,
+            "max_debt_days": profile.max_debt_days,
+            "dispatched_debt": current_debt,
+            "current_debt": current_debt,
+            "available_credit": available_credit,
+            "order_unpaid_amount": order_unpaid,
+            "excess_amount": excess,
+            "overdue_days": 0,
+            "overdue_order_code": None,
+            "approval_reason": approval_msg,
+        }
+
+    # Trường hợp 3c: Hợp lệ trong hạn mức
+    return {
+        "allowed": True,
+        "action": "ALLOW",
+        "requires_approval": False,
+        "is_blocked": False,
+        "error_message": None,
+        "warning_message": None,
+        "credit_limit": profile.credit_limit,
+        "max_debt_days": profile.max_debt_days,
+        "dispatched_debt": current_debt,
+        "current_debt": current_debt,
+        "available_credit": max(0, profile.credit_limit - total_debt_after),
+        "order_unpaid_amount": order_unpaid,
+        "excess_amount": 0,
+        "overdue_days": 0,
+        "overdue_order_code": None,
+        "approval_reason": None,
     }
 
 

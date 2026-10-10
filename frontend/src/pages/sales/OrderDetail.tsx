@@ -14,6 +14,7 @@ import {
   Phone,
   Calendar,
   AlertCircle,
+  ShieldAlert,
 } from 'lucide-react';
 import { PageContainer } from '../../components/layout/PageContainer';
 import { Button } from '../../components/common/Button';
@@ -33,12 +34,33 @@ export const OrderDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { showToast } = useToast();
-  const { user } = useAuth();
+  const { user, role } = useAuth();
 
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
   const [isCustomerLocked, setIsCustomerLocked] = useState(false);
+
+  // Phân quyền theo vai trò (RBAC S4-05, SCRUM-203, SCRUM-498):
+  const isManagerOrAdmin = ['Admin', 'Director', 'SalesManager', 'Manager', 'Accountant'].includes(role);
+  const isWarehouseRole = ['Admin', 'Director', 'WarehouseManager', 'WarehouseStaff'].includes(role);
+  const isSalesStaff = role === 'SalesStaff' || role === 'Staff';
+
+  // 1. Phê duyệt đơn vượt hạn mức (pending_approval): Chỉ Quản lý kinh doanh, Ban giám đốc, Kế toán, Admin
+  const canApproveCredit = isManagerOrAdmin;
+
+  // 2. Xác nhận đơn hàng thông thường (pending): Quản lý kinh doanh, Giám đốc, Admin, Quản lý kho
+  const canConfirmOrder = ['Admin', 'Director', 'SalesManager', 'Manager', 'WarehouseManager'].includes(role);
+
+  // 3. Xuất kho & Bắt đầu giao hàng (confirmed -> shipping): Bộ phận Kho, Quản lý, Admin
+  const canShipOrder = isWarehouseRole || ['Admin', 'Director', 'SalesManager'].includes(role);
+
+  // 4. Xác nhận giao thành công (shipping -> completed): Bộ phận Kho, Kế toán, Quản lý
+  const canCompleteOrder = isWarehouseRole || isManagerOrAdmin;
+
+  // 5. Hủy đơn hàng: Quản lý hoặc Nhân viên lập đơn (chỉ khi đơn chưa xuất kho)
+  const isOrderOwner = Boolean(user && (user.name === order?.staffName || String(user.id) === String(order?.staffId)));
+  const canCancelOrder = isManagerOrAdmin || (isSalesStaff && isOrderOwner && ['draft', 'pending', 'pending_approval'].includes(order?.status || ''));
 
   const loadOrder = async () => {
     if (!id) return;
@@ -72,8 +94,8 @@ export const OrderDetail: React.FC = () => {
       const updated = await orderService.updateStatus(order.id, nextStatus);
       setOrder(updated);
       showToast(`Đã chuyển trạng thái đơn hàng sang "${nextStatus}"`, 'success');
-    } catch {
-      showToast('Lỗi cập nhật trạng thái', 'error');
+    } catch (err: any) {
+      showToast(err?.message || 'Lỗi cập nhật trạng thái', 'error');
     }
   };
 
@@ -84,8 +106,8 @@ export const OrderDetail: React.FC = () => {
       setOrder(updated);
       showToast('Đã hủy đơn hàng thành công', 'success');
       setIsCancelModalOpen(false);
-    } catch {
-      showToast('Lỗi khi hủy đơn hàng', 'error');
+    } catch (err: any) {
+      showToast(err?.message || 'Lỗi khi hủy đơn hàng', 'error');
     }
   };
 
@@ -102,6 +124,9 @@ export const OrderDetail: React.FC = () => {
   }
 
   const steps: { key: OrderStatus; label: string; icon: any }[] = [
+    ...(order.status === 'pending_approval' || order.requiresApproval
+      ? [{ key: 'pending_approval' as OrderStatus, label: 'Chờ duyệt công nợ', icon: ShieldAlert }]
+      : []),
     { key: 'pending', label: 'Chờ xử lý', icon: Clock },
     { key: 'confirmed', label: 'Đã xác nhận', icon: CheckCircle2 },
     { key: 'shipping', label: 'Đang giao hàng', icon: Truck },
@@ -137,7 +162,7 @@ export const OrderDetail: React.FC = () => {
           >
             Xuất PDF
           </Button>
-          {order.status !== 'cancelled' && order.status !== 'completed' && (
+          {canCancelOrder && order.status !== 'cancelled' && order.status !== 'completed' && (
             <Button
               variant="danger"
               size="sm"
@@ -150,6 +175,28 @@ export const OrderDetail: React.FC = () => {
         </div>
       }
     >
+      {/* Banner Cảnh báo đơn chờ duyệt do vượt hạn mức công nợ (S4-02 / SCRUM-498 / SCRUM-501) */}
+      {(order.status === 'pending_approval' || order.requiresApproval) && (
+        <div
+          id="order-credit-approval-alert"
+          className="mb-6 p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-100 flex items-start gap-3.5 shadow-sm"
+        >
+          <ShieldAlert className="w-6 h-6 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+          <div className="flex-1 text-xs sm:text-sm">
+            <h4 className="font-bold text-amber-900 dark:text-amber-100 flex items-center gap-2">
+              ⚠️ ĐƠN HÀNG CẦN PHÊ DUYỆT CÔNG NỢ (S4-02)
+              <span className="text-xs px-2 py-0.5 rounded-full bg-amber-200 dark:bg-amber-900/60 font-semibold text-amber-800 dark:text-amber-200">
+                Vượt hạn mức tín dụng
+              </span>
+            </h4>
+            <p className="mt-1 text-amber-800 dark:text-amber-200">
+              {order.approvalReason ||
+                'Đơn hàng này khiến tổng dư nợ của đại lý vượt quá hạn mức công nợ được cấp. Đơn đang ở trạng thái Chờ duyệt trước khi được xác nhận và xuất kho.'}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Banner Cảnh báo đại lý bị khoá giao dịch (SC-228 Subtask 6) */}
       {(order.customerIsLocked || isCustomerLocked) && (
         <div
@@ -191,7 +238,9 @@ export const OrderDetail: React.FC = () => {
                   <div
                     className={`w-10 h-10 rounded-full flex items-center justify-center transition-all shadow-md ${
                       isPast
-                        ? 'bg-indigo-600 text-white ring-4 ring-indigo-100 dark:ring-indigo-950'
+                        ? step.key === 'pending_approval'
+                          ? 'bg-amber-500 text-white ring-4 ring-amber-100 dark:ring-amber-950'
+                          : 'bg-indigo-600 text-white ring-4 ring-indigo-100 dark:ring-indigo-950'
                         : 'bg-slate-100 dark:bg-slate-800 text-slate-400'
                     }`}
                   >
@@ -200,7 +249,9 @@ export const OrderDetail: React.FC = () => {
                   <span
                     className={`text-xs mt-2 font-bold whitespace-nowrap ${
                       isCurrent
-                        ? 'text-indigo-600 dark:text-indigo-400'
+                        ? step.key === 'pending_approval'
+                          ? 'text-amber-600 dark:text-amber-400'
+                          : 'text-indigo-600 dark:text-indigo-400'
                         : isPast
                         ? 'text-slate-800 dark:text-slate-200'
                         : 'text-slate-400'
@@ -213,34 +264,93 @@ export const OrderDetail: React.FC = () => {
             })}
           </div>
 
-          {/* Quick status change buttons */}
-          <div className="flex items-center justify-center gap-3 mt-6 pt-4 border-t border-slate-100 dark:border-slate-800">
+          {/* Quick status change buttons & Role Notice */}
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mt-6 pt-4 border-t border-slate-100 dark:border-slate-800 text-xs">
+            {order.status === 'pending_approval' && (
+              canApproveCredit ? (
+                <div className="flex items-center gap-3">
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={() => handleUpdateStatus('confirmed')}
+                    leftIcon={<CheckCircle2 className="w-4 h-4" />}
+                  >
+                    Phê duyệt đơn hàng (Vượt hạn mức)
+                  </Button>
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    onClick={() => setIsCancelModalOpen(true)}
+                    leftIcon={<Ban className="w-4 h-4" />}
+                  >
+                    Từ chối duyệt / Hủy đơn
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200 font-medium">
+                  <ShieldAlert className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span>Đơn hàng vượt hạn mức công nợ, đang chờ Quản lý kinh doanh hoặc Ban giám đốc phê duyệt.</span>
+                </div>
+              )
+            )}
+
             {order.status === 'pending' && (
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={() => handleUpdateStatus('confirmed')}
-              >
-                Xác nhận đơn hàng
-              </Button>
+              canConfirmOrder ? (
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => handleUpdateStatus('confirmed')}
+                >
+                  Xác nhận đơn hàng
+                </Button>
+              ) : (
+                <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 text-blue-800 dark:text-blue-200 font-medium">
+                  <Clock className="w-4 h-4 text-blue-600 shrink-0" />
+                  <span>Đơn hàng đã được tạo thành công, đang chờ Quản lý xác nhận để tiến hành xuất kho.</span>
+                </div>
+              )
             )}
+
             {order.status === 'confirmed' && (
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={() => handleUpdateStatus('shipping')}
-              >
-                Bắt đầu giao hàng
-              </Button>
+              canShipOrder ? (
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => handleUpdateStatus('shipping')}
+                  leftIcon={<Truck className="w-4 h-4" />}
+                >
+                  Bắt đầu giao hàng
+                </Button>
+              ) : (
+                <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 text-indigo-800 dark:text-indigo-200 font-medium">
+                  <CheckCircle2 className="w-4 h-4 text-indigo-600 shrink-0" />
+                  <span>Đơn hàng đã được xác nhận, đang chờ bộ phận Kho xuất kho và giao hàng.</span>
+                </div>
+              )
             )}
+
             {order.status === 'shipping' && (
-              <Button
-                variant="success"
-                size="sm"
-                onClick={() => handleUpdateStatus('completed')}
-              >
-                Xác nhận đã giao thành công
-              </Button>
+              canCompleteOrder ? (
+                <Button
+                  variant="success"
+                  size="sm"
+                  onClick={() => handleUpdateStatus('completed')}
+                >
+                  Xác nhận đã giao thành công
+                </Button>
+              ) : (
+                <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800 text-purple-800 dark:text-purple-200 font-medium">
+                  <Truck className="w-4 h-4 text-purple-600 shrink-0" />
+                  <span>Đơn hàng đang trong quá trình vận chuyển đến đại lý.</span>
+                </div>
+              )
+            )}
+
+            {order.status === 'completed' && (
+              <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 font-medium">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>Đơn hàng đã hoàn thành giao nhận thành công.</span>
+              </div>
             )}
           </div>
         </div>

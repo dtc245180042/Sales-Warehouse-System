@@ -41,6 +41,11 @@ class CreditProfileResponse(BaseModel):
     updated_by: Optional[str] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+    has_overdue: bool = False
+    overdue_days: int = 0
+    overdue_order_code: Optional[str] = None
+    is_blocked: bool = False
+    block_reason: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -63,6 +68,26 @@ class CreditProfileResponse(BaseModel):
     @computed_field
     def availableCredit(self) -> int:
         return max(0, self.credit_limit - self.current_debt)
+
+    @computed_field
+    def hasOverdue(self) -> bool:
+        return self.has_overdue
+
+    @computed_field
+    def overdueDays(self) -> int:
+        return self.overdue_days
+
+    @computed_field
+    def overdueOrderCode(self) -> Optional[str]:
+        return self.overdue_order_code
+
+    @computed_field
+    def isBlocked(self) -> bool:
+        return self.is_blocked
+
+    @computed_field
+    def blockReason(self) -> Optional[str]:
+        return self.block_reason
 
     @computed_field
     def updatedBy(self) -> Optional[str]:
@@ -136,18 +161,68 @@ class CreditHistoryResponse(BaseModel):
 class CreditCheckRequest(BaseModel):
     unpaid_amount: float = Field(0.0, ge=0, description="Số tiền nợ còn thiếu của đơn hàng")
     order_id: Optional[str] = Field(None, description="Mã đơn hàng (nếu đang kiểm tra đơn cụ thể)")
+    context: Optional[str] = Field("dispatch", description="Ngữ cảnh kiểm tra: 'order' (tạo/chốt đơn) hoặc 'dispatch' (xuất kho)")
 
 
 class CreditCheckResponse(BaseModel):
-    allowed: bool = Field(..., description="Có được phép xuất kho hay không")
+    allowed: bool = Field(..., description="Có được phép tiếp tục hay không")
+    action: str = Field("ALLOW", description="Hành động: ALLOW, REQUIRE_APPROVAL, BLOCK")
+    requires_approval: bool = Field(False, description="Đơn hàng có cần quản lý duyệt không")
+    is_blocked: bool = Field(False, description="Có bị chặn tạo/chốt đơn hoàn toàn do nợ quá hạn không")
     error_message: Optional[str] = None
     warning_message: Optional[str] = None
     credit_limit: int = 0
     max_debt_days: int = 0
     dispatched_debt: int = 0
+    current_debt: int = 0
+    available_credit: int = 0
     order_unpaid_amount: int = 0
     excess_amount: int = 0
     overdue_days: int = 0
     overdue_order_code: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
+
+    @computed_field
+    def requiresApproval(self) -> bool:
+        return self.requires_approval
+
+    @computed_field
+    def isBlocked(self) -> bool:
+        return self.is_blocked
+
+    @computed_field
+    def currentDebt(self) -> int:
+        return self.current_debt
+
+    @computed_field
+    def availableCredit(self) -> int:
+        return self.available_credit
+
+    @computed_field
+    def creditLimit(self) -> int:
+        return self.credit_limit
+
+    @computed_field
+    def maxDebtDays(self) -> int:
+        return self.max_debt_days
+
+    @computed_field
+    def dispatchedDebt(self) -> int:
+        return self.dispatched_debt
+
+    @computed_field
+    def orderUnpaidAmount(self) -> int:
+        return self.order_unpaid_amount
+
+    @computed_field
+    def excessAmount(self) -> int:
+        return self.excess_amount
+
+    @computed_field
+    def overdueDays(self) -> int:
+        return self.overdue_days
+
+    @computed_field
+    def overdueOrderCode(self) -> Optional[str]:
+        return self.overdue_order_code

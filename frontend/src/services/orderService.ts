@@ -45,6 +45,8 @@ function mapApiOrder(o: any): Order {
     staffId: String(o.staffId || o.staff_id || ''),
     staffName: o.staffName || o.staff_name || '',
     note: o.note || undefined,
+    requiresApproval: Boolean(o.requiresApproval ?? o.requires_approval ?? false),
+    approvalReason: o.approvalReason || o.approval_reason || undefined,
     deliveryAddressId: o.deliveryAddressId ?? o.delivery_address_id ?? undefined,
     deliveryAddressName: o.deliveryAddressName ?? o.delivery_address_name ?? undefined,
     deliveryReceiverName: o.deliveryReceiverName ?? o.delivery_receiver_name ?? undefined,
@@ -90,7 +92,7 @@ export const orderService = {
         customer_name: orderData.customerName,
         customer_phone: orderData.customerPhone,
         customer_address: orderData.customerAddress,
-        items: orderData.items.map((i) => ({
+        items: orderData.items.map((i: any) => ({
           product_id: i.productId || i.product_id,
           sku: i.sku,
           name: i.name,
@@ -246,8 +248,9 @@ export const orderService = {
     );
     return filtered.slice(0, 20).map((p) => {
       const available_units = [p.unit || 'cái'];
-      if (p.packagingSpec) {
-        const specLower = p.packagingSpec.toLowerCase();
+      const spec = p.packagingSpecification || p.packagingSpec;
+      if (spec) {
+        const specLower = spec.toLowerCase();
         for (const u of ['hộp', 'thùng', 'lon', 'gói', 'chai', 'bộ', 'cặp', 'kg', 'cái']) {
           if (specLower.includes(u) && !available_units.includes(u)) {
             available_units.push(u);
@@ -258,15 +261,16 @@ export const orderService = {
           if (!available_units.includes(u)) available_units.push(u);
         });
       }
+      const itemPrice = p.salePrice || p.price || (p.costPrice ? Math.round(p.costPrice * 1.2) : 0);
       return {
-        id: typeof p.id === 'number' ? p.id : parseInt(p.id, 10) || 1,
+        id: p.id,
         sku: p.sku,
         name: p.name,
-        price: p.salePrice || p.price || 0,
-        sale_price: p.salePrice || p.price || 0,
+        price: itemPrice,
+        sale_price: itemPrice,
         stock: p.stock ?? 100,
         unit: p.unit || 'cái',
-        packaging_spec: p.packagingSpec,
+        packaging_spec: spec,
         available_units,
       };
     });
@@ -321,20 +325,11 @@ export const orderService = {
         setStorageItem(STORAGE_KEY, [...orders]);
       }
       return updated;
-    } catch (err) {
-      console.warn('[orderService] Backend error, updating locally:', err);
-      const orders = getStorageItem<Order[]>(STORAGE_KEY, initialOrders);
-      const index = orders.findIndex((o) => o.id === id || o.code === id);
-      if (index === -1) throw new Error('Không tìm thấy đơn hàng');
-
-      const updated = {
-        ...orders[index],
-        status,
-        updatedAt: new Date().toISOString().replace('T', ' ').slice(0, 16),
-      };
-      orders[index] = updated;
-      setStorageItem(STORAGE_KEY, [...orders]);
-      return updated;
+    } catch (err: any) {
+      if (err.response?.data?.detail) {
+        throw new Error(err.response.data.detail);
+      }
+      throw err;
     }
   },
 
@@ -349,20 +344,11 @@ export const orderService = {
         setStorageItem(STORAGE_KEY, [...orders]);
       }
       return updated;
-    } catch (err) {
-      console.warn('[orderService] Backend error, updating order locally:', err);
-      const orders = getStorageItem<Order[]>(STORAGE_KEY, initialOrders);
-      const index = orders.findIndex((o) => o.id === id || o.code === id);
-      if (index === -1) throw new Error('Không tìm thấy đơn hàng');
-
-      const updated = {
-        ...orders[index],
-        ...partialData,
-        updatedAt: new Date().toISOString().replace('T', ' ').slice(0, 16),
-      };
-      orders[index] = updated;
-      setStorageItem(STORAGE_KEY, [...orders]);
-      return updated;
+    } catch (err: any) {
+      if (err.response?.data?.detail) {
+        throw new Error(err.response.data.detail);
+      }
+      throw err;
     }
   },
 
@@ -377,26 +363,11 @@ export const orderService = {
         setStorageItem(STORAGE_KEY, [...orders]);
       }
       return updated;
-    } catch (err) {
-      console.warn('[orderService] Backend error, cancelling locally:', err);
-      const orders = getStorageItem<Order[]>(STORAGE_KEY, initialOrders);
-      const index = orders.findIndex((o) => o.id === id || o.code === id);
-      if (index === -1) throw new Error('Không tìm thấy đơn hàng');
-
-      if (orders[index].status !== 'cancelled') {
-        for (const item of orders[index].items) {
-          try {
-            await productService.updateStock(item.productId, item.quantity);
-          } catch (e) {
-            console.warn(e);
-          }
-        }
+    } catch (err: any) {
+      if (err.response?.data?.detail) {
+        throw new Error(err.response.data.detail);
       }
-
-      orders[index].status = 'cancelled';
-      orders[index].updatedAt = new Date().toISOString().replace('T', ' ').slice(0, 16);
-      setStorageItem(STORAGE_KEY, [...orders]);
-      return orders[index];
+      throw err;
     }
   }
 };

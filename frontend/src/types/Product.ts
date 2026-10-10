@@ -29,10 +29,12 @@ export interface Product {
   supplierName: string;
   costPrice: number;
   salePrice: number;
+  price?: number;
   stock: number;
   minStock: number;
   unit: string;
   packagingSpecification?: string; // Quy cách đóng gói (SCRUM-220)
+  packagingSpec?: string;
   image: string;
   description: string;
   status: ProductStatus;

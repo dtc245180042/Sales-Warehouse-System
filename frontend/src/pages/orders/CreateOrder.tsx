@@ -655,7 +655,7 @@ export const CreateOrder: React.FC = () => {
 
     const selectedAddr = deliveryAddresses.find((a) => a.id === selectedAddressId);
 
-    const willRequireApproval = hasBelowFloor || Boolean(creditStatus?.isExceeded);
+    const willRequireApproval = hasBelowFloor || Boolean(creditStatus?.requiresApproval);
     const finalStatus = (status === 'draft') ? 'draft' : (willRequireApproval ? 'pending_approval' : status);
 
     return {
@@ -689,8 +689,8 @@ export const CreateOrder: React.FC = () => {
       requiresApproval: willRequireApproval,
       approvalReason: hasBelowFloor
         ? 'Có sản phẩm bán dưới giá sàn quy định'
-        : creditStatus?.isExceeded
-        ? 'Vượt hạn mức công nợ đại lý'
+        : creditStatus?.requiresApproval
+        ? (creditStatus.approvalReason || 'Vượt hạn mức công nợ đại lý')
         : undefined,
       staffId: user?.id ? String(user.id) : '1',
       staffName: user?.name || user?.username || user?.fullName || 'Nhân viên kinh doanh',

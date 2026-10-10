@@ -110,6 +110,7 @@ export const ProductDetail: React.FC = () => {
       {/* Main Product Card */}
       <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-8 border border-slate-200 dark:border-slate-800 shadow-soft grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
         {/* Left: Big Product Image */}
+        <div className="lg:col-span-6 bg-slate-100 dark:bg-slate-800/60 rounded-3xl overflow-hidden border border-slate-200 dark:border-slate-700/80 aspect-square relative group">
           {product.image ? (
             <img
               src={product.image}

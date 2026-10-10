@@ -30,7 +30,6 @@ def ghi_de_lay_phien_db():
         phien_db.close()
 
 
-app.dependency_overrides[lay_phien_db] = ghi_de_lay_phien_db
 client = TestClient(app)
 
 
@@ -54,6 +53,7 @@ def thiet_lap_database():
     phien_db.close()
     yield
     Base.metadata.drop_all(bind=engine)
+    app.dependency_overrides.pop(lay_phien_db, None)
 
 
 

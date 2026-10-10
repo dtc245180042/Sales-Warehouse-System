@@ -200,7 +200,7 @@ export const OrderDetailPage: React.FC = () => {
             <div className="text-sm text-slate-700 dark:text-slate-300">
               Phương thức:{' '}
               <strong className="text-slate-900 dark:text-white">
-                {order.paymentMethod === 'cash' ? '💵 Tiền mặt' : order.paymentMethod === 'transfer' ? '🏦 Chuyển khoản' : '📱 Ví điện tử'}
+                {order.paymentMethod === 'cash' ? 'Tiền mặt' : order.paymentMethod === 'transfer' ? 'Chuyển khoản' : 'Ví điện tử'}
               </strong>
             </div>
             <div className="text-sm text-slate-700 dark:text-slate-300">

@@ -596,7 +596,7 @@ export const CreateOrderPage: React.FC = () => {
               <div className="bg-slate-50 dark:bg-slate-800/60 p-4 rounded-xl space-y-2 border border-slate-200 dark:border-slate-700">
                 <div className="text-xs font-bold uppercase text-slate-400">Phương thức thanh toán</div>
                 <div className="font-semibold text-slate-900 dark:text-white">
-                  {paymentMethod === 'cash' ? '💵 Tiền mặt' : paymentMethod === 'transfer' ? '🏦 Chuyển khoản ngân hàng' : '📱 Ví điện tử'}
+                  {paymentMethod === 'cash' ? 'Tiền mặt' : paymentMethod === 'transfer' ? 'Chuyển khoản ngân hàng' : 'Ví điện tử'}
                 </div>
                 <div className="text-sm text-slate-600 dark:text-slate-300">
                   Tình trạng:{' '}

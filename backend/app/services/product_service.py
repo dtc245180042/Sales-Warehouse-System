@@ -1,5 +1,5 @@
 import math
-from typing import Optional
+from typing import Optional, Union
 from fastapi import HTTPException, status
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
@@ -268,9 +268,16 @@ class ProductService:
         return product
 
     @classmethod
-    def get_product(cls, db: Session, product_id: int) -> Product:
-        """Lấy chi tiết một sản phẩm theo ID (SCRUM-376)."""
-        product = db.query(Product).filter(Product.id == product_id).first()
+    def get_product(cls, db: Session, product_id: Union[int, str]) -> Product:
+        """Lấy chi tiết một sản phẩm theo ID hoặc SKU (SCRUM-376)."""
+        pid_str = str(product_id).strip()
+        product = db.query(Product).filter(
+            or_(
+                Product.id == product_id,
+                Product.id == pid_str,
+                Product.sku == pid_str
+            )
+        ).first()
         if not product:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,

@@ -12,9 +12,18 @@ export interface OrderItem {
   quantity: number;
   discount: number;
   subtotal: number;
+  floorPrice?: number;
+  floor_price?: number;
+  isBelowFloor?: boolean;
+  is_below_floor?: boolean;
   appliedDiscountPolicyName?: string;
+  applied_discount_policy_name?: string;
+  appliedDiscountPolicyId?: number;
+  applied_discount_policy_id?: number;
   discountRate?: number;
+  discount_rate?: number;
   discountAmount?: number;
+  discount_amount?: number;
 }
 
 export interface Order {

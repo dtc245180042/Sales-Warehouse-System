@@ -29,6 +29,8 @@ import { CustomerCreditBanner, CustomerCreditStatusInfo } from '../../components
 import { customerService } from '../../services/customerService';
 import { deliveryAddressService } from '../../services/deliveryAddressService';
 import { orderService } from '../../services/orderService';
+import { pricingService } from '../../services/pricingService';
+import { EffectivePriceListResponse } from '../../types/Pricing';
 import { Customer } from '../../types/Customer';
 import { DeliveryAddress } from '../../types/DeliveryAddress';
 import {
@@ -46,6 +48,9 @@ interface FormItem {
   name: string;
   unit: string;
   price: number;
+  originalPrice?: number;
+  floorPrice?: number;
+  isBelowFloor?: boolean;
   quantity: number;
   discount: number;
   subtotal: number;
@@ -74,6 +79,8 @@ export const CreateOrder: React.FC = () => {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [creditStatus, setCreditStatus] = useState<CustomerCreditStatusInfo | null>(null);
+  const [effectivePriceList, setEffectivePriceList] = useState<EffectivePriceListResponse | null>(null);
+  const [isLoadingPriceList, setIsLoadingPriceList] = useState(false);
 
   // Delivery Addresses
   const [deliveryAddresses, setDeliveryAddresses] = useState<DeliveryAddress[]>([]);
@@ -217,6 +224,32 @@ export const CreateOrder: React.FC = () => {
     }
   }, [selectedCustomer]);
 
+  // S4-01: Tải Bảng giá hiệu lực của khách hàng
+  useEffect(() => {
+    if (selectedCustomer) {
+      setIsLoadingPriceList(true);
+      pricingService
+        .getEffectivePriceList(selectedCustomer.id)
+        .then((res) => {
+          setEffectivePriceList(res);
+        })
+        .catch((err) => {
+          console.warn('Lỗi lấy bảng giá hiệu lực:', err);
+          setEffectivePriceList(null);
+        })
+        .finally(() => {
+          setIsLoadingPriceList(false);
+        });
+    } else {
+      setEffectivePriceList(null);
+    }
+  }, [selectedCustomer?.id]);
+
+  // Kiểm tra xem đơn hàng có dòng nào bán dưới giá sàn không (SCRUM-490 & SCRUM-495)
+  const hasBelowFloor = useMemo(() => {
+    return items.some((i) => i.isBelowFloor);
+  }, [items]);
+
   // Handle address select change
   const handleAddressChange = (addrIdStr: string) => {
     if (addrIdStr === 'custom' || !addrIdStr) {
@@ -342,45 +375,124 @@ export const CreateOrder: React.FC = () => {
     };
   }, [items.length, items.map((i) => `${i.productId}-${i.quantity}-${i.unit}`).join('|'), selectedCustomer?.id]);
 
-  // Add product to items
-  const handleAddProduct = (prod: ProductSearchForOrder) => {
-    const existingIndex = items.findIndex((i) => String(i.productId) === String(prod.id));
-    if (existingIndex !== -1) {
-      // Increase qty
-      const updated = [...items];
-      updated[existingIndex].quantity += 1;
-      updated[existingIndex].subtotal = updated[existingIndex].price * updated[existingIndex].quantity;
-      setItems(updated);
-    } else {
-      // Add new
-      const defaultUnit = prod.unit || (prod.available_units?.[0] ?? 'cái');
-      const newItem: FormItem = {
-        productId: String(prod.id),
-        sku: prod.sku,
-        name: prod.name,
-        unit: defaultUnit,
-        price: prod.sale_price || prod.price,
-        quantity: 1,
-        discount: 0,
-        subtotal: prod.sale_price || prod.price,
-        availableUnits: prod.available_units || [defaultUnit],
-        stock: prod.stock,
-      };
-      setItems((prev) => [newItem, ...prev]);
+  // Add product to items (SCRUM-488, SCRUM-489, SCRUM-492, SCRUM-493)
+  const handleAddProduct = async (prod: ProductSearchForOrder) => {
+    if (!selectedCustomer) {
+      showToast('Vui lòng chọn đại lý / khách hàng trước khi thêm sản phẩm để áp đúng bảng giá', 'warning');
+      return;
     }
+
+    try {
+      const pricing = await pricingService.lookupLinePricing({
+        customer_id: selectedCustomer.id,
+        product_id: String(prod.id),
+        sku: prod.sku,
+        quantity: 1,
+      });
+
+      // SCRUM-492: Chặn thêm dòng hàng khi SKU không có bảng giá hiệu lực và trả thông báo lỗi
+      if (!pricing.success && pricing.message) {
+        showToast(pricing.message, 'error');
+        return;
+      }
+
+      const existingIndex = items.findIndex((i) => String(i.productId) === String(prod.id));
+      if (existingIndex !== -1) {
+        // Tăng số lượng và tính lại chiết khấu
+        const currentQty = items[existingIndex].quantity + 1;
+        await handleUpdateQty(String(prod.id), currentQty);
+      } else {
+        // Thêm dòng mới với giá tự động và giá sàn
+        const defaultUnit = prod.unit || (prod.available_units?.[0] ?? 'cái');
+        const newItem: FormItem = {
+          productId: String(prod.id),
+          sku: prod.sku,
+          name: prod.name,
+          unit: defaultUnit,
+          price: pricing.applied_unit_price,
+          originalPrice: pricing.default_price,
+          floorPrice: pricing.floor_price,
+          isBelowFloor: pricing.is_below_floor,
+          quantity: 1,
+          discount: pricing.total_discount,
+          subtotal: pricing.line_total,
+          availableUnits: prod.available_units || [defaultUnit],
+          stock: prod.stock,
+          appliedDiscountName: pricing.applied_discount_policy_name || undefined,
+        };
+        setItems((prev) => [newItem, ...prev]);
+        showToast(`Đã áp giá tự động cho "${prod.name}": ${formatCurrency(pricing.applied_unit_price)}`, 'success');
+      }
+    } catch (err: any) {
+      const msg = err.response?.data?.detail || err.message || 'Lỗi áp giá sản phẩm';
+      showToast(msg, 'error');
+      return;
+    }
+
     setProductQuery('');
     setIsProductDropdownOpen(false);
   };
 
-  // Update item quantity
-  const handleUpdateQty = (productId: string, newQty: number) => {
+  // Update item quantity (SCRUM-491: Tính lại chiết khấu theo sản lượng khi đổi số lượng)
+  const handleUpdateQty = async (productId: string, newQty: number) => {
     if (newQty < 1) return;
+    const itm = items.find((i) => i.productId === productId);
+    if (!itm) return;
+
+    if (selectedCustomer) {
+      try {
+        const pricing = await pricingService.lookupLinePricing({
+          customer_id: selectedCustomer.id,
+          product_id: productId,
+          sku: itm.sku,
+          quantity: newQty,
+          custom_price: itm.price,
+        });
+
+        setItems((prev) =>
+          prev.map((i) =>
+            i.productId === productId
+              ? {
+                  ...i,
+                  quantity: newQty,
+                  discount: pricing.total_discount,
+                  subtotal: pricing.line_total,
+                  appliedDiscountName: pricing.applied_discount_policy_name || undefined,
+                  isBelowFloor: pricing.is_below_floor,
+                }
+              : i
+          )
+        );
+        return;
+      } catch (err) {
+        console.warn('Lỗi tính chiết khấu khi đổi số lượng:', err);
+      }
+    }
+
     setItems((prev) =>
       prev.map((i) =>
         i.productId === productId
-          ? { ...i, quantity: newQty, subtotal: i.price * newQty - i.discount }
+          ? { ...i, quantity: newQty, subtotal: Math.max(0, i.price * newQty - i.discount) }
           : i
       )
+    );
+  };
+
+  // S4-01: Update item price manually & kiểm tra giá sàn (SCRUM-490 & SCRUM-495)
+  const handleUpdatePrice = (productId: string, newPrice: number) => {
+    setItems((prev) =>
+      prev.map((i) => {
+        if (i.productId === productId) {
+          const belowFloor = Boolean(i.floorPrice && i.floorPrice > 0 && newPrice < i.floorPrice);
+          return {
+            ...i,
+            price: newPrice,
+            isBelowFloor: belowFloor,
+            subtotal: Math.max(0, newPrice * i.quantity - i.discount),
+          };
+        }
+        return i;
+      })
     );
   };
 
@@ -407,6 +519,9 @@ export const CreateOrder: React.FC = () => {
 
     const selectedAddr = deliveryAddresses.find((a) => a.id === selectedAddressId);
 
+    const willRequireApproval = hasBelowFloor || Boolean(creditStatus?.isExceeded);
+    const finalStatus = (status === 'draft') ? 'draft' : (willRequireApproval ? 'pending_approval' : status);
+
     return {
       customerId: selectedCustomer.id,
       customerName: selectedCustomer.name,
@@ -421,6 +536,8 @@ export const CreateOrder: React.FC = () => {
         quantity: i.quantity,
         discount: i.discount,
         subtotal: i.subtotal,
+        floor_price: i.floorPrice,
+        is_below_floor: i.isBelowFloor,
       })),
       subtotal: calculatedSubtotal,
       discount: calculatedDiscount,
@@ -428,7 +545,13 @@ export const CreateOrder: React.FC = () => {
       paidAmount: 0,
       paymentMethod: 'transfer' as const,
       paymentStatus: 'unpaid' as const,
-      status: status,
+      status: finalStatus as any,
+      requiresApproval: willRequireApproval,
+      approvalReason: hasBelowFloor
+        ? 'Có sản phẩm bán dưới giá sàn quy định'
+        : creditStatus?.isExceeded
+        ? 'Vượt hạn mức công nợ đại lý'
+        : undefined,
       staffId: user?.id ? String(user.id) : '1',
       staffName: user?.name || user?.username || user?.fullName || 'Nhân viên kinh doanh',
       note: note.trim() || undefined,
@@ -800,7 +923,7 @@ export const CreateOrder: React.FC = () => {
               )}
             </div>
           ) : (
-            <div className="p-3 bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200/70 dark:border-blue-800/60 rounded-xl">
+            <div className="p-3 bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200/70 dark:border-blue-800/60 rounded-xl space-y-2">
               <div className="flex items-start justify-between gap-2">
                 <div>
                   <h3 className="font-bold text-sm text-blue-950 dark:text-blue-100">
@@ -811,9 +934,36 @@ export const CreateOrder: React.FC = () => {
                       {selectedCustomer.code}
                     </span>
                     <span>{selectedCustomer.phone}</span>
+                    {selectedCustomer.customerGroup && (
+                      <span className="bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 px-1.5 py-0.5 rounded text-[10px] font-bold">
+                        {effectivePriceList?.customer?.customer_group_label || selectedCustomer.customerGroup}
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
+
+              {/* S4-01: Hiển thị thông tin Bảng giá hiệu lực */}
+              {isLoadingPriceList ? (
+                <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
+                  <RefreshCw className="w-3 h-3 animate-spin" />
+                  Đang kiểm tra bảng giá áp dụng...
+                </div>
+              ) : effectivePriceList?.has_effective_price_list && effectivePriceList.price_list ? (
+                <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 text-[11px] text-emerald-800 dark:text-emerald-300 font-medium">
+                  <Sparkles className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                  <span>
+                    Bảng giá hiệu lực: <strong className="font-bold">{effectivePriceList.price_list.name}</strong> ({effectivePriceList.price_list.code}) &bull; Tự động áp giá khi thêm SKU
+                  </span>
+                </div>
+              ) : selectedCustomer.customerGroup && selectedCustomer.customerGroup !== 'RETAIL' ? (
+                <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-amber-50 dark:bg-amber-950/50 border border-amber-300 dark:border-amber-800 text-[11px] text-amber-800 dark:text-amber-200 font-medium">
+                  <ShieldAlert className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                  <span>
+                    Nhóm đại lý chưa có bảng giá hiệu lực. Hệ thống sẽ chặn thêm dòng hàng theo quy định SCRUM-492.
+                  </span>
+                </div>
+              ) : null}
             </div>
           )}
 
@@ -1022,19 +1172,27 @@ export const CreateOrder: React.FC = () => {
               {items.map((item) => (
                 <div
                   key={item.productId}
-                  className="p-3 bg-slate-50/80 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/70 rounded-xl space-y-2"
+                  className={`p-3 rounded-xl space-y-2 border transition-all ${
+                    item.isBelowFloor
+                      ? 'bg-amber-50/70 dark:bg-amber-950/40 border-amber-300 dark:border-amber-700/80 shadow-xs'
+                      : 'bg-slate-50/80 dark:bg-slate-800/50 border-slate-200/80 dark:border-slate-700/70'
+                  }`}
                 >
-                  {/* Row 1: Name, SKU & Delete */}
+                  {/* Row 1: Name, SKU, Floor Price & Delete */}
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 flex-1">
                       <h4 className="font-semibold text-xs text-slate-900 dark:text-white leading-tight">
                         {item.name}
                       </h4>
-                      <div className="flex items-center gap-2 mt-0.5 text-[10px] text-slate-500">
+                      <div className="flex flex-wrap items-center gap-2 mt-0.5 text-[10px] text-slate-500">
                         <span className="font-mono bg-white dark:bg-slate-800 px-1 py-0.5 rounded border border-slate-200 dark:border-slate-700">
                           {item.sku}
                         </span>
-                        <span>Đơn giá: {formatCurrency(item.price)}</span>
+                        {item.floorPrice && item.floorPrice > 0 ? (
+                          <span className="text-slate-500 dark:text-slate-400">
+                            Giá sàn: <strong className="font-semibold text-slate-700 dark:text-slate-300">{formatCurrency(item.floorPrice)}</strong>
+                          </span>
+                        ) : null}
                       </div>
                     </div>
                     <button
@@ -1047,8 +1205,8 @@ export const CreateOrder: React.FC = () => {
                     </button>
                   </div>
 
-                  {/* Row 2: Unit selector & Stepper Quantity & Subtotal */}
-                  <div className="flex items-center justify-between gap-2 pt-1">
+                  {/* Row 2: Price editor, Unit selector & Stepper Quantity & Subtotal */}
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-200/50 dark:border-slate-700/50">
                     {/* Unit Selector */}
                     <div className="flex items-center gap-1.5">
                       <label className="text-[11px] text-slate-500 shrink-0">ĐVT:</label>
@@ -1063,6 +1221,25 @@ export const CreateOrder: React.FC = () => {
                           </option>
                         ))}
                       </select>
+                    </div>
+
+                    {/* Price Input with Floor validation (SCRUM-490 & SCRUM-495) */}
+                    <div className="flex items-center gap-1">
+                      <label className="text-[11px] text-slate-500 shrink-0">Giá:</label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={item.price}
+                        onChange={(e) =>
+                          handleUpdatePrice(item.productId, parseFloat(e.target.value) || 0)
+                        }
+                        className={`w-24 px-2 py-1 text-xs font-bold rounded-lg border text-right transition-colors ${
+                          item.isBelowFloor
+                            ? 'bg-amber-100 dark:bg-amber-950/80 border-amber-500 text-amber-950 dark:text-amber-200 ring-2 ring-amber-400/30'
+                            : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500'
+                        }`}
+                        title={item.floorPrice ? `Giá sàn: ${formatCurrency(item.floorPrice)}` : 'Đơn giá bán'}
+                      />
                     </div>
 
                     {/* Stepper Quantity (Touch friendly >= 44px) */}
@@ -1101,7 +1278,17 @@ export const CreateOrder: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Volume Discount Badge (S3-01) */}
+                  {/* Warning below floor price (SCRUM-495) */}
+                  {item.isBelowFloor && (
+                    <div className="flex items-center gap-1.5 text-[11px] font-semibold text-amber-800 dark:text-amber-300 bg-amber-100/80 dark:bg-amber-950/70 px-2.5 py-1.5 rounded-lg border border-amber-300 dark:border-amber-700">
+                      <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                      <span>
+                        ⚠️ Giá nhập {formatCurrency(item.price)} thấp hơn giá sàn ({formatCurrency(item.floorPrice || 0)}) &bull; Đơn hàng sẽ chuyển sang <strong>Cần duyệt</strong>
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Volume Discount Badge (S3-01 & SCRUM-491) */}
                   {item.appliedDiscountName && (
                     <div className="flex items-center gap-1.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 px-2 py-1 rounded-md border border-emerald-200/80 dark:border-emerald-800/60">
                       <Sparkles className="w-3 h-3 text-emerald-600 shrink-0" />
@@ -1117,7 +1304,22 @@ export const CreateOrder: React.FC = () => {
         </section>
 
         {/* SECTION 3: Tóm tắt thanh toán theo thời gian thực */}
-        <section className="bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-2xl p-3.5 shadow-sm space-y-2 text-xs">
+        <section className="bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-2xl p-3.5 shadow-sm space-y-2.5 text-xs">
+          {/* Cảnh báo giá sàn đơn hàng (SCRUM-495) */}
+          {hasBelowFloor && (
+            <div className="p-3 bg-amber-50 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-700/80 rounded-xl flex items-start gap-2.5 text-xs text-amber-900 dark:text-amber-200">
+              <ShieldAlert className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-bold text-amber-800 dark:text-amber-300">
+                  Cảnh báo: Có dòng sản phẩm bán dưới giá sàn quy định (SCRUM-490 & SCRUM-495)
+                </p>
+                <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-0.5 leading-relaxed">
+                  Khi tạo đơn hoặc chốt đơn, hệ thống sẽ tự động gán trạng thái <strong>"Chờ duyệt" (Pending Approval)</strong> để Quản lý kinh doanh xem xét duyệt đơn.
+                </p>
+              </div>
+            </div>
+          )}
+
           <div className="flex items-center justify-between text-slate-600 dark:text-slate-400">
             <span>Tạm tính tiền hàng:</span>
             <span className="font-semibold text-slate-800 dark:text-slate-200">

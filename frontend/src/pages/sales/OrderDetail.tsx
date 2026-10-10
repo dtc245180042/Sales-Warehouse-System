@@ -289,7 +289,11 @@ export const OrderDetail: React.FC = () => {
               ) : (
                 <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200 font-medium">
                   <ShieldAlert className="w-4 h-4 text-amber-600 shrink-0" />
-                  <span>Đơn hàng vượt hạn mức công nợ, đang chờ Quản lý kinh doanh hoặc Ban giám đốc phê duyệt.</span>
+                  <span>
+                    {order.approvalReason
+                      ? `Lý do cần duyệt: ${order.approvalReason}`
+                      : 'Đơn hàng có sản phẩm dưới giá sàn hoặc vượt hạn mức công nợ, đang chờ Quản lý kinh doanh hoặc Ban giám đốc phê duyệt.'}
+                  </span>
                 </div>
               )
             )}
@@ -384,9 +388,23 @@ export const OrderDetail: React.FC = () => {
                     <tr key={idx}>
                       <td className="py-3">
                         <p className="font-bold text-slate-900 dark:text-slate-100">{it.name}</p>
-                        <span className="text-[11px] text-slate-400 font-mono">SKU: {it.sku}</span>
+                        <div className="flex flex-wrap items-center gap-2 mt-0.5">
+                          <span className="text-[11px] text-slate-400 font-mono">SKU: {it.sku}</span>
+                          {(it.isBelowFloor || it.is_below_floor) && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700">
+                              ⚠️ Dưới giá sàn {it.floorPrice || it.floor_price ? `(${formatCurrency(it.floorPrice || it.floor_price || 0)})` : ''}
+                            </span>
+                          )}
+                        </div>
                       </td>
-                      <td className="py-3 text-center font-medium">{formatCurrency(it.price)}</td>
+                      <td className="py-3 text-center font-medium">
+                        <div>{formatCurrency(it.price)}</div>
+                        {(it.floorPrice || it.floor_price) ? (
+                          <div className="text-[10px] text-slate-400 font-normal">
+                            Sàn: {formatCurrency(it.floorPrice || it.floor_price || 0)}
+                          </div>
+                        ) : null}
+                      </td>
                       <td className="py-3 text-center font-bold">{it.quantity}</td>
                       <td className="py-3 text-right font-black text-slate-900 dark:text-white">
                         {formatCurrency(it.subtotal)}

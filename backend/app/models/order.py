@@ -9,6 +9,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Text,
+    Boolean,
 )
 from sqlalchemy.orm import relationship
 from app.core.database import Base
@@ -41,8 +42,12 @@ class Order(Base):
     # Phương thức thanh toán & trạng thái
     payment_method = Column(String(50), default="cash", nullable=False)  # cash, transfer, card
     payment_status = Column(String(50), default="paid", nullable=False)  # paid, unpaid, partial
-    status = Column(String(50), default="pending", nullable=False, index=True)  # pending, confirmed, shipping, completed, cancelled
+    status = Column(String(50), default="pending", nullable=False, index=True)  # pending, pending_approval, confirmed, shipping, completed, cancelled
     
+    # Đánh dấu đơn cần duyệt khi giá bán dưới giá sàn hoặc vượt hạn mức (SCRUM-490, SCRUM-495)
+    requires_approval = Column(Boolean, default=False, nullable=True)
+    approval_reason = Column(Text, nullable=True)
+
     # Nhân viên tạo / phụ trách đơn (SCRUM-364 nhận diện avatar nhân viên tạo)
     staff_id = Column(String(50), nullable=True, index=True)
     staff_name = Column(String(255), nullable=True)
@@ -81,6 +86,10 @@ class OrderItem(Base):
     # Đơn vị tính (S3-09: cái, hộp, thùng...)
     unit = Column(String(50), nullable=True, default="cái")
 
+    # Giá sàn và cờ bán dưới sàn (S4-01 / SCRUM-490)
+    floor_price = Column(Float, nullable=True)
+    is_below_floor = Column(Boolean, default=False, nullable=True)
+
     # Snapshot chính sách chiết khấu sản lượng lúc chốt đơn (S3-01)
     applied_discount_policy_id = Column(Integer, nullable=True, index=True)
     applied_discount_policy_name = Column(String(255), nullable=True)
@@ -90,7 +99,7 @@ class OrderItem(Base):
     order = relationship("Order", back_populates="items")
 
 
-# Đảm bảo các cột mới của order_items tự động tồn tại trong CSDL hiện hữu
+# Đảm bảo các cột mới của order_items và orders tự động tồn tại trong CSDL hiện hữu
 try:
     from app.core.database import engine
     from sqlalchemy import inspect, text
@@ -107,6 +116,17 @@ try:
                 _conn.execute(text("ALTER TABLE order_items ADD COLUMN discount_rate NUMERIC(5, 2)"))
             if "discount_amount" not in _cols:
                 _conn.execute(text("ALTER TABLE order_items ADD COLUMN discount_amount BIGINT"))
-            _conn.commit()
+            if "floor_price" not in _cols:
+                _conn.execute(text("ALTER TABLE order_items ADD COLUMN floor_price FLOAT"))
+            if "is_below_floor" not in _cols:
+                _conn.execute(text("ALTER TABLE order_items ADD COLUMN is_below_floor BOOLEAN DEFAULT 0"))
+
+        _order_cols = [c["name"] for c in inspect(_conn).get_columns("orders")]
+        if _order_cols:
+            if "requires_approval" not in _order_cols:
+                _conn.execute(text("ALTER TABLE orders ADD COLUMN requires_approval BOOLEAN DEFAULT 0"))
+            if "approval_reason" not in _order_cols:
+                _conn.execute(text("ALTER TABLE orders ADD COLUMN approval_reason TEXT"))
+        _conn.commit()
 except Exception:
     pass

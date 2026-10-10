@@ -29,6 +29,14 @@ export interface Customer {
   assignedStaffPhone?: string;
   assigned_at?: string;
   assignedAt?: string;
+  credit_limit?: number;
+  creditLimit?: number;
+  current_debt?: number;
+  currentDebt?: number;
+  max_debt_days?: number;
+  maxDebtDays?: number;
+  available_credit?: number;
+  availableCredit?: number;
 }
 
 export interface SalesRep {

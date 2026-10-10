@@ -108,3 +108,9 @@ export const volumeDiscountService = {
     };
   },
 };
+
+export const VOLUME_DISCOUNT_TIERS: DiscountTier[] = volumeDiscountService.getTiers();
+
+export function getVolumeDiscountInfo(qty: number, tiers?: DiscountTier[]) {
+  return volumeDiscountService.calculateDiscount(qty, tiers);
+}

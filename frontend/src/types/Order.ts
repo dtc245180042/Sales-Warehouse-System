@@ -1,9 +1,10 @@
-export type OrderStatus = 'draft' | 'pending' | 'confirmed' | 'shipping' | 'completed' | 'cancelled';
+export type OrderStatus = 'draft' | 'pending' | 'pending_approval' | 'confirmed' | 'shipping' | 'completed' | 'cancelled';
 export type PaymentMethod = 'cash' | 'transfer' | 'card';
 export type PaymentStatus = 'paid' | 'unpaid' | 'partial';
 
 export interface OrderItem {
   productId: string;
+  product_id?: string | number;
   sku: string;
   name: string;
   unit?: string;
@@ -36,6 +37,8 @@ export interface Order {
   staffId: string;
   staffName: string;
   note?: string;
+  requiresApproval?: boolean;
+  approvalReason?: string;
   customerIsLocked?: boolean;
   customerLockWarning?: string;
   deliveryAddressId?: number;
@@ -83,7 +86,7 @@ export interface OrderCalculateResponse {
 }
 
 export interface ProductSearchForOrder {
-  id: number;
+  id: number | string;
   sku: string;
   name: string;
   price: number;

@@ -22,7 +22,10 @@ import {
   ChevronDown,
   RefreshCw,
   Boxes,
+  ShieldAlert,
+  Ban,
 } from 'lucide-react';
+import { CustomerCreditBanner, CustomerCreditStatusInfo } from '../../components/orders/CustomerCreditBanner';
 import { customerService } from '../../services/customerService';
 import { deliveryAddressService } from '../../services/deliveryAddressService';
 import { orderService } from '../../services/orderService';
@@ -70,6 +73,7 @@ export const CreateOrder: React.FC = () => {
   const [isCustomerDropdownOpen, setIsCustomerDropdownOpen] = useState(false);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [creditStatus, setCreditStatus] = useState<CustomerCreditStatusInfo | null>(null);
 
   // Delivery Addresses
   const [deliveryAddresses, setDeliveryAddresses] = useState<DeliveryAddress[]>([]);
@@ -426,7 +430,7 @@ export const CreateOrder: React.FC = () => {
       paymentStatus: 'unpaid' as const,
       status: status,
       staffId: user?.id ? String(user.id) : '1',
-      staffName: user?.username || user?.fullName || 'Nhân viên kinh doanh',
+      staffName: user?.name || user?.username || user?.fullName || 'Nhân viên kinh doanh',
       note: note.trim() || undefined,
       deliveryAddressId: selectedAddressId,
       deliveryAddressName: selectedAddr?.name,
@@ -515,6 +519,15 @@ export const CreateOrder: React.FC = () => {
         return;
       }
 
+      // S4-02: Kiểm tra nợ quá hạn - Chặn tạo/chốt đơn hoàn toàn
+      if (creditStatus?.isBlocked) {
+        showToast(
+          creditStatus.blockReason || 'Đại lý đang có khoản nợ quá hạn. Hệ thống chặn tạo đơn hoàn toàn theo quy định!',
+          'error'
+        );
+        return;
+      }
+
       setIsSubmitting(true);
 
       if (currentDraftId) {
@@ -549,13 +562,21 @@ export const CreateOrder: React.FC = () => {
 
         // 2. Chốt đơn
         const submitted = await orderService.submitDraft(currentDraftId);
-        showToast(`Đã chốt đơn hàng thành công! Mã đơn: ${submitted.code}`, 'success');
+        if (submitted.status === 'pending_approval' || submitted.requiresApproval) {
+          showToast(`Đơn hàng vượt hạn mức công nợ [${submitted.code}] đã được gửi Chờ duyệt!`, 'info');
+        } else {
+          showToast(`Đã chốt đơn hàng thành công! Mã đơn: ${submitted.code}`, 'success');
+        }
         navigate('/orders');
       } else {
         // Tạo trực tiếp đơn chính thức
         const payload = buildPayload('pending');
         const created = await orderService.create(payload);
-        showToast(`Đã tạo đơn hàng thành công! Mã đơn: ${created.code}`, 'success');
+        if (created.status === 'pending_approval' || created.requiresApproval) {
+          showToast(`Đơn hàng vượt hạn mức công nợ [${created.code}] đã được tạo ở trạng thái Chờ duyệt!`, 'info');
+        } else {
+          showToast(`Đã tạo đơn hàng thành công! Mã đơn: ${created.code}`, 'success');
+        }
         navigate('/orders');
       }
     } catch (err: any) {
@@ -794,6 +815,16 @@ export const CreateOrder: React.FC = () => {
                 </div>
               </div>
             </div>
+          )}
+
+          {/* S4-02: Khối Hiển thị Công nợ hiện tại, Hạn mức & Cảnh báo vượt hạn mức / Chặn quá hạn */}
+          {selectedCustomer && (
+            <CustomerCreditBanner
+              customerId={selectedCustomer.id}
+              customerName={selectedCustomer.name}
+              newOrderAmount={calculatedTotal}
+              onStatusChange={setCreditStatus}
+            />
           )}
 
           {/* Delivery Address Pick (S3-04) */}
@@ -1148,11 +1179,38 @@ export const CreateOrder: React.FC = () => {
             <button
               type="button"
               onClick={handleSubmitOrder}
-              disabled={isSubmitting || isSavingDraft || items.length === 0}
-              className="flex items-center gap-1.5 px-3.5 py-2.5 text-xs font-bold rounded-xl bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-500/20 disabled:opacity-50 active:scale-95 transition-all"
+              disabled={isSubmitting || isSavingDraft || items.length === 0 || Boolean(creditStatus?.isBlocked)}
+              className={`flex items-center gap-1.5 px-3.5 py-2.5 text-xs font-bold rounded-xl text-white shadow-md transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed ${
+                creditStatus?.isBlocked
+                  ? 'bg-rose-600 hover:bg-rose-700 shadow-rose-500/20'
+                  : creditStatus?.requiresApproval
+                  ? 'bg-amber-600 hover:bg-amber-700 shadow-amber-500/20'
+                  : 'bg-blue-600 hover:bg-blue-700 shadow-blue-500/20'
+              }`}
+              title={
+                creditStatus?.isBlocked
+                  ? 'Bị chặn do đại lý có nợ quá hạn'
+                  : creditStatus?.requiresApproval
+                  ? 'Đơn vượt hạn mức - Sẽ chuyển sang Chờ duyệt'
+                  : 'Chốt đơn hàng'
+              }
             >
-              <Send className="w-3.5 h-3.5" />
-              <span>{isSubmitting ? 'Đang gửi...' : 'Chốt đơn'}</span>
+              {creditStatus?.isBlocked ? (
+                <>
+                  <Ban className="w-3.5 h-3.5" />
+                  <span>Bị chặn quá hạn</span>
+                </>
+              ) : creditStatus?.requiresApproval ? (
+                <>
+                  <AlertCircle className="w-3.5 h-3.5" />
+                  <span>{isSubmitting ? 'Đang gửi...' : 'Gửi chờ duyệt'}</span>
+                </>
+              ) : (
+                <>
+                  <Send className="w-3.5 h-3.5" />
+                  <span>{isSubmitting ? 'Đang gửi...' : 'Chốt đơn'}</span>
+                </>
+              )}
             </button>
           </div>
         </div>

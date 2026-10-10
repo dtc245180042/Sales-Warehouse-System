@@ -22,9 +22,10 @@ import {
   CheckCircle2,
   AlertCircle,
   ExternalLink,
-  ChevronLeft,
-  ChevronRight,
   ShoppingCart,
+  Store,
+  CreditCard,
+  Building2,
 } from 'lucide-react';
 import { PageContainer } from '../../components/layout/PageContainer';
 import { DataTable, Column } from '../../components/common/DataTable';
@@ -537,6 +538,51 @@ export const CustomerList: React.FC = () => {
       ),
     },
     {
+      key: 'creditLimit',
+      header: 'Hạn Mức Cấp',
+      sortable: true,
+      className: 'text-right',
+      render: (c) => {
+        const limit = c.creditLimit ?? c.credit_limit ?? 50000000;
+        const maxDays = c.maxDebtDays ?? c.max_debt_days ?? 30;
+        return (
+          <div className="text-right">
+            <span className="font-bold text-xs text-purple-600 dark:text-purple-400 block">
+              {formatCurrency(limit)}
+            </span>
+            <span className="text-[11px] text-slate-400">
+              Tối đa {maxDays} ngày
+            </span>
+          </div>
+        );
+      },
+    },
+    {
+      key: 'currentDebt',
+      header: 'Công Nợ & Khả Dụng',
+      sortable: true,
+      className: 'text-right',
+      render: (c) => {
+        const debt = c.currentDebt ?? c.current_debt ?? 0;
+        const limit = c.creditLimit ?? c.credit_limit ?? 50000000;
+        const avail = c.availableCredit ?? Math.max(0, limit - debt);
+        return (
+          <div className="text-right space-y-0.5">
+            <span
+              className={`font-bold text-xs block ${
+                debt > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'
+              }`}
+            >
+              {debt > 0 ? formatCurrency(debt) : '0 đ'}
+            </span>
+            <span className="text-[11px] text-slate-400">
+              Còn: {formatCurrency(avail)}
+            </span>
+          </div>
+        );
+      },
+    },
+    {
       key: 'status',
       header: 'Trạng Thái',
       sortable: true,
@@ -590,10 +636,21 @@ export const CustomerList: React.FC = () => {
     },
   ];
 
+  // Thống kê nhanh tổng quan (EP-03: Đại lý & Hạn mức công nợ)
+  const stats = useMemo(() => {
+    const total = totalCount || customers.length;
+    const active = customers.filter((c) => c.status === 'active').length;
+    const locked = customers.filter((c) => c.status === 'locked').length;
+    const totalCredit = customers.reduce((acc, c) => acc + Number(c.creditLimit ?? c.credit_limit ?? 50000000), 0);
+    const totalDebt = customers.reduce((acc, c) => acc + Number(c.currentDebt ?? c.current_debt ?? 0), 0);
+    const totalRevenue = customers.reduce((acc, c) => acc + Number(c.totalSpent ?? c.total_spent ?? 0), 0);
+    return { total, active, locked, totalCredit, totalDebt, totalRevenue };
+  }, [customers, totalCount]);
+
   return (
     <PageContainer
-      title="Tra Cứu & Quản Lý Đại Lý"
-      subtitle={`Hệ thống quản lý ${totalCount} đại lý và khách hàng trong tuyến bán hàng`}
+      title="Đại Lý & Hạn Mức Công Nợ"
+      subtitle={`Hệ thống quản lý ${totalCount} đại lý và khách hàng trong tuyến phân phối (EP-03)`}
       actions={
         <div className="flex items-center gap-2">
           {/* Nút chuyển đổi View Mode: Bảng vs Thẻ Ngoài Hiện Trường */}
@@ -643,11 +700,67 @@ export const CustomerList: React.FC = () => {
           )}
 
           <Button variant="primary" icon={<Plus className="w-4 h-4" />} onClick={handleOpenCreate}>
-            Thêm đại lý
+            Thêm đại lý mới
           </Button>
         </div>
       }
     >
+      {/* ── 5 THẺ THỐNG KÊ TỔNG QUAN ĐẠI LÝ & CÔNG NỢ (EP-03) ── */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-6">
+        <div className="p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl flex items-center gap-3.5 shadow-sm hover:border-indigo-200 dark:hover:border-indigo-800 transition">
+          <div className="w-11 h-11 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
+            <Building2 className="w-5 h-5" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-xs font-medium text-slate-500 dark:text-slate-400 truncate">Tổng đại lý & khách</p>
+            <p className="text-xl font-black text-slate-900 dark:text-white mt-0.5">{stats.total}</p>
+          </div>
+        </div>
+
+        <div className="p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl flex items-center gap-3.5 shadow-sm hover:border-emerald-200 dark:hover:border-emerald-800 transition">
+          <div className="w-11 h-11 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+            <CheckCircle2 className="w-5 h-5" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-xs font-medium text-slate-500 dark:text-slate-400 truncate">Đang hoạt động</p>
+            <p className="text-xl font-black text-emerald-600 dark:text-emerald-400 mt-0.5">{stats.active}</p>
+          </div>
+        </div>
+
+        <div className="p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl flex items-center gap-3.5 shadow-sm hover:border-purple-200 dark:hover:border-purple-800 transition">
+          <div className="w-11 h-11 rounded-xl bg-purple-50 dark:bg-purple-950/50 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0">
+            <CreditCard className="w-5 h-5" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-xs font-medium text-slate-500 dark:text-slate-400 truncate">Hạn mức được cấp</p>
+            <p className="text-sm font-black text-purple-600 dark:text-purple-400 truncate mt-0.5" title={formatCurrency(stats.totalCredit)}>
+              {formatCurrency(stats.totalCredit)}
+            </p>
+          </div>
+        </div>
+
+        <div className="p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl flex items-center gap-3.5 shadow-sm hover:border-rose-200 dark:hover:border-rose-800 transition">
+          <div className="w-11 h-11 rounded-xl bg-rose-50 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0">
+            <DollarSign className="w-5 h-5" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-xs font-medium text-slate-500 dark:text-slate-400 truncate">Tổng dư nợ</p>
+            <p className="text-sm font-black text-rose-600 dark:text-rose-400 truncate mt-0.5" title={formatCurrency(stats.totalDebt)}>
+              {formatCurrency(stats.totalDebt)}
+            </p>
+          </div>
+        </div>
+
+        <div className="p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl flex items-center gap-3.5 shadow-sm hover:border-amber-200 dark:hover:border-amber-800 transition col-span-2 sm:col-span-1">
+          <div className="w-11 h-11 rounded-xl bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+            <Lock className="w-5 h-5" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-xs font-medium text-slate-500 dark:text-slate-400 truncate">Khoá giao dịch</p>
+            <p className="text-xl font-black text-amber-600 dark:text-amber-400 mt-0.5">{stats.locked}</p>
+          </div>
+        </div>
+      </div>
       {/* THANH TÌM KIẾM & BỘ LỌC ĐA TIÊU CHÍ (SCRUM-229) */}
       <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm mb-6 space-y-4">
         {/* Hàng 1: Ô tìm nhanh toàn cục */}
@@ -875,6 +988,16 @@ export const CustomerList: React.FC = () => {
                           {formatCurrency(c.totalSpent)}
                         </span>
                       </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-400">Hạn mức / Nợ:</span>
+                        <span className="font-bold text-slate-800 dark:text-slate-200">
+                          <span className="text-purple-600 dark:text-purple-400">{formatCurrency(c.creditLimit || c.credit_limit || 50000000)}</span>
+                          {' | '}
+                          <span className={(c.currentDebt || 0) > 0 ? 'text-rose-600' : 'text-emerald-600'}>
+                            Nợ: {formatCurrency(c.currentDebt || 0)}
+                          </span>
+                        </span>
+                      </div>
                     </div>
                   </div>
 
@@ -916,58 +1039,6 @@ export const CustomerList: React.FC = () => {
           )}
         </div>
       )}
-
-      {/* THANH PHÂN TRANG CHUẨN SCRUM-229 */}
-      <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4 p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm text-xs text-slate-500">
-        <div className="flex items-center gap-2">
-          <span>Tổng số đại lý: <strong className="text-slate-900 dark:text-slate-100">{totalCount}</strong></span>
-          <span className="text-slate-300">•</span>
-          <span>Trang {urlPage} / {Math.max(1, totalPages)}</span>
-        </div>
-
-        <div className="flex items-center gap-1">
-          <button
-            onClick={() => updateParams({ page: String(Math.max(1, urlPage - 1)) })}
-            disabled={urlPage <= 1}
-            className="p-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed"
-            title="Trang trước"
-          >
-            <ChevronLeft className="w-4 h-4" />
-          </button>
-
-          {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => {
-            if (p === 1 || p === totalPages || (p >= urlPage - 1 && p <= urlPage + 1)) {
-              return (
-                <button
-                  key={p}
-                  onClick={() => updateParams({ page: String(p) })}
-                  className={`w-8 h-8 rounded-xl font-bold transition-all ${
-                    urlPage === p
-                      ? 'bg-indigo-600 text-white shadow-sm'
-                      : 'border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
-                  }`}
-                >
-                  {p}
-                </button>
-              );
-            }
-            if (p === urlPage - 2 || p === urlPage + 2) {
-              return <span key={p} className="px-1 text-slate-400">...</span>;
-            }
-            return null;
-          })}
-
-          <button
-            onClick={() => updateParams({ page: String(Math.min(totalPages, urlPage + 1)) })}
-            disabled={urlPage >= totalPages}
-            className="p-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed"
-            title="Trang tiếp"
-          >
-            <ChevronRight className="w-4 h-4" />
-          </button>
-        </div>
-      </div>
-
       {/* Modal Phân công người phụ trách đơn lẻ */}
       <Modal
         isOpen={assignModalOpen}

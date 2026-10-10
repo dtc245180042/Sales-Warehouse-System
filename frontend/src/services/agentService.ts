@@ -6,12 +6,30 @@ const STORAGE_KEY = 'kv_agents';
 
 export const agentService = {
   getAll: async (): Promise<Agent[]> => {
-    return getStorageItem<Agent[]>(STORAGE_KEY, initialAgents);
+    const list = getStorageItem<Agent[]>(STORAGE_KEY, initialAgents);
+    return list.map((a) => {
+      const defaultLimit =
+        a.customerGroup === 'platinum'
+          ? 200000000
+          : a.customerGroup === 'gold'
+          ? 100000000
+          : a.customerGroup === 'silver'
+          ? 50000000
+          : 30000000;
+      const creditLimit = a.creditLimit ?? defaultLimit;
+      const outstandingDebt = a.outstandingDebt ?? 0;
+      return {
+        ...a,
+        creditLimit,
+        maxDebtDays: a.maxDebtDays ?? 30,
+        availableCredit: a.availableCredit ?? Math.max(0, creditLimit - outstandingDebt),
+      };
+    });
   },
 
   getById: async (id: string): Promise<Agent | undefined> => {
-    const agents = getStorageItem<Agent[]>(STORAGE_KEY, initialAgents);
-    return agents.find((a) => a.id === id || a.code === id);
+    const all = await agentService.getAll();
+    return all.find((a) => a.id === id || a.code === id);
   },
 
   create: async (data: Omit<Agent, 'id' | 'code' | 'createdAt' | 'totalOrders' | 'totalSpent' | 'outstandingDebt'>): Promise<Agent> => {

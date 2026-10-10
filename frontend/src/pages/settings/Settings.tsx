@@ -202,7 +202,7 @@ export const Settings: React.FC = () => {
                         Thay đổi ảnh đại diện
                       </Button>
                       <span className="text-[11px] text-slate-400">
-                        Hỗ trợ ảnh JPG/PNG tối đa 2MB (SCRUM-363)
+                        Hỗ trợ ảnh JPG/PNG tối đa 2MB
                       </span>
                     </div>
                   </div>

@@ -946,7 +946,7 @@ export const CreateOrder: React.FC = () => {
                 Tạo Đơn Hàng Hiện Trường
               </h1>
               <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
-                Tối ưu di động 360px &bull; S3-09
+                Tối ưu hiển thị thiết bị di động
               </p>
             </div>
           </div>
@@ -1090,7 +1090,7 @@ export const CreateOrder: React.FC = () => {
                 </div>
               )}
 
-              {/* Gợi ý chọn nhanh đại lý để test SCRUM-501 */}
+              {/* Gợi ý chọn nhanh đại lý */}
               <div className="flex items-center gap-1.5 flex-wrap pt-2">
                 <span className="text-[11px] text-slate-400 font-medium">Test nhanh:</span>
                 <button
@@ -1102,7 +1102,7 @@ export const CreateOrder: React.FC = () => {
                   className="px-2 py-1 text-xs font-semibold rounded-lg bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 hover:bg-rose-100 active:scale-95 transition-all"
                   title="Test kịch bản nợ quá hạn -> Bị chặn tạo đơn"
                 >
-                  🚫 CUS-ROLL-2 (Bị chặn quá hạn)
+                  CUS-ROLL-2 (Bị chặn quá hạn)
                 </button>
                 <button
                   type="button"
@@ -1113,7 +1113,7 @@ export const CreateOrder: React.FC = () => {
                   className="px-2 py-1 text-xs font-semibold rounded-lg bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 hover:bg-amber-100 active:scale-95 transition-all"
                   title="Test kịch bản vượt hạn mức công nợ -> Cần duyệt"
                 >
-                  ⚠️ CUS-ROLL-1 (Vượt hạn mức)
+                  CUS-ROLL-1 (Vượt hạn mức)
                 </button>
                 <button
                   type="button"
@@ -1124,7 +1124,7 @@ export const CreateOrder: React.FC = () => {
                   className="px-2 py-1 text-xs font-semibold rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 active:scale-95 transition-all"
                   title="Test kịch bản công nợ an toàn trong hạn mức"
                 >
-                  ✓ CUS-003 (F-Soft • An toàn)
+                  CUS-003 (F-Soft - An toàn)
                 </button>
               </div>
 
@@ -1132,7 +1132,7 @@ export const CreateOrder: React.FC = () => {
               <div className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-dashed border-slate-200 dark:border-slate-700 text-[11px] text-slate-500">
                 <CreditCard className="w-4 h-4 text-blue-500 shrink-0" />
                 <span>
-                  Chọn đại lý ở trên để hệ thống tự động kiểm tra: <strong>Hạn mức công nợ</strong>, <strong>Cảnh báo quá hạn</strong> & <strong>Bảng giá áp dụng (SCRUM-501)</strong>.
+                  Chọn đại lý ở trên để hệ thống tự động kiểm tra: <strong>Hạn mức công nợ</strong>, <strong>Cảnh báo quá hạn</strong> & <strong>Bảng giá áp dụng</strong>.
                 </span>
               </div>
             </div>
@@ -1174,7 +1174,7 @@ export const CreateOrder: React.FC = () => {
                 <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-amber-50 dark:bg-amber-950/50 border border-amber-300 dark:border-amber-800 text-[11px] text-amber-800 dark:text-amber-200 font-medium">
                   <ShieldAlert className="w-3.5 h-3.5 text-amber-600 shrink-0" />
                   <span>
-                    Nhóm đại lý chưa có bảng giá hiệu lực. Hệ thống sẽ chặn thêm dòng hàng theo quy định SCRUM-492.
+                    Nhóm đại lý chưa có bảng giá hiệu lực. Hệ thống sẽ chặn thêm dòng hàng theo quy định.
                   </span>
                 </div>
               ) : null}
@@ -1422,7 +1422,7 @@ export const CreateOrder: React.FC = () => {
               <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
               <div className="flex-1">
                 <p className="font-bold text-rose-800 dark:text-rose-300">
-                  ⚠️ Cảnh báo: Có {exceedingStockItems.length} mặt hàng vượt tồn khả dụng (SCRUM-506 & SCRUM-508)
+                  Cảnh báo: Có {exceedingStockItems.length} mặt hàng vượt tồn khả dụng
                 </p>
                 <p className="text-[11px] text-rose-700 dark:text-rose-400 mt-0.5 leading-relaxed">
                   Hệ thống không thể chốt đơn khi số lượng vượt tồn khả dụng tại kho phục vụ ({servicingWarehouse?.warehouse_name || 'Kho Tổng Hà Nội'}). Vui lòng bấm <strong>"Đặt tối đa"</strong> trên từng dòng hàng hoặc giảm số lượng về mức cho phép.
@@ -1608,7 +1608,7 @@ export const CreateOrder: React.FC = () => {
                       <div className="flex items-center gap-1.5 min-w-0">
                         <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
                         <span className="truncate">
-                          ⚠️ Vượt tồn khả dụng! Còn <strong>{item.availableStock} {item.unit}</strong> khả dụng (yêu cầu {item.quantity}).
+                          Vượt tồn khả dụng! Còn <strong>{item.availableStock} {item.unit}</strong> khả dụng (yêu cầu {item.quantity}).
                         </span>
                       </div>
                       <button
@@ -1626,7 +1626,7 @@ export const CreateOrder: React.FC = () => {
                     <div className="flex items-center gap-1.5 text-[11px] font-semibold text-amber-800 dark:text-amber-300 bg-amber-100/80 dark:bg-amber-950/70 px-2.5 py-1.5 rounded-lg border border-amber-300 dark:border-amber-700">
                       <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
                       <span>
-                        ⚠️ Giá nhập {formatCurrency(item.price)} thấp hơn giá sàn ({formatCurrency(item.floorPrice || 0)}) &bull; Đơn hàng sẽ chuyển sang <strong>Cần duyệt</strong>
+                        Giá nhập {formatCurrency(item.price)} thấp hơn giá sàn ({formatCurrency(item.floorPrice || 0)}) &bull; Đơn hàng sẽ chuyển sang <strong>Cần duyệt</strong>
                       </span>
                     </div>
                   )}
@@ -1648,13 +1648,13 @@ export const CreateOrder: React.FC = () => {
 
         {/* SECTION 3: Thanh toán & Quyết toán công nợ tại hiện trường */}
         <section className="bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-2xl p-4 shadow-sm space-y-4 text-xs">
-          {/* Cảnh báo giá sàn đơn hàng (SCRUM-495) */}
+          {/* Cảnh báo giá sàn đơn hàng */}
           {hasBelowFloor && (
             <div className="p-3 bg-amber-50 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-700/80 rounded-xl flex items-start gap-2.5 text-xs text-amber-900 dark:text-amber-200">
               <ShieldAlert className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
               <div>
                 <p className="font-bold text-amber-800 dark:text-amber-300">
-                  Cảnh báo: Có dòng sản phẩm bán dưới giá sàn quy định (SCRUM-490 & SCRUM-495)
+                  Cảnh báo: Có dòng sản phẩm bán dưới giá sàn quy định
                 </p>
                 <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-0.5 leading-relaxed">
                   Khi tạo đơn hoặc chốt đơn, hệ thống sẽ tự động gán trạng thái <strong>"Chờ duyệt" (Pending Approval)</strong> để Quản lý kinh doanh xem xét duyệt đơn.
@@ -1684,7 +1684,7 @@ export const CreateOrder: React.FC = () => {
               </span>
             ) : calculatedTotal > 0 ? (
               <span className="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                ✓ Đã thu đủ 100%
+                Đã thu đủ 100%
               </span>
             ) : null}
           </div>

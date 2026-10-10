@@ -147,7 +147,7 @@ export const CreateOrderPage: React.FC = () => {
           </div>
 
           <h2 className="text-3xl font-extrabold text-slate-900 dark:text-white mb-2">
-            ✓ Tạo đơn hàng thành công!
+            Tạo đơn hàng thành công!
           </h2>
           <p className="text-slate-500 dark:text-slate-400 mb-6">
             Đơn hàng đã được lưu vào hệ thống và sẵn sàng để đóng gói, xử lý giao hàng.
@@ -548,7 +548,7 @@ export const CreateOrderPage: React.FC = () => {
                       : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
                   }`}
                 >
-                  ✓ Đã thanh toán
+                  Đã thanh toán
                 </button>
                 <button
                   type="button"

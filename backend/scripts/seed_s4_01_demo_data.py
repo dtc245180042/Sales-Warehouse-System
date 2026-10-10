@@ -5,7 +5,7 @@
 """
 import sys
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 if sys.platform == "win32":
     try:
@@ -22,6 +22,7 @@ from app.models.product import Product
 from app.models.customer import Customer
 from app.models.customer_assignment import CustomerAssignment
 from app.models.auth import User
+from app.models.order import Order
 
 def run_seed():
     db = SessionLocal()
@@ -224,6 +225,27 @@ def run_seed():
                     asgn.assigned_staff_id = rep_user.id
                 else:
                     db.add(CustomerAssignment(customer_id=cid, assigned_staff_id=rep_user.id))
+
+        # 6. Đơn nợ quá hạn mẫu cho CUS-ROLL-2 để test trạng thái BỊ CHẶN (SCRUM-501)
+        overdue_order = db.query(Order).filter(Order.code == "DH-QUAHAN-ROLL2").first()
+        overdue_dt = datetime.now(timezone.utc) - timedelta(days=45)
+        if not overdue_order:
+            overdue_order = Order(
+                id="ORD-OVERDUE-ROLL2",
+                code="DH-QUAHAN-ROLL2",
+                customer_id="CUS-ROLL-2",
+                customer_name="CUS-ROLL-2",
+                total=15000000.0,
+                paid_amount=0.0,
+                payment_status="unpaid",
+                status="completed",
+                created_at=overdue_dt,
+            )
+            db.add(overdue_order)
+        else:
+            overdue_order.created_at = overdue_dt
+            overdue_order.status = "completed"
+            overdue_order.paid_amount = 0.0
 
         db.commit()
         print("✓ Khởi tạo dữ liệu Demo S4-01 thành công!")

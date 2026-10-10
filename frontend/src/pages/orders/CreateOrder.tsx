@@ -314,6 +314,24 @@ export const CreateOrder: React.FC = () => {
     return () => clearTimeout(timer);
   }, [productQuery]);
 
+  // Tự động nạp gợi ý sản phẩm khi focus vào ô tìm kiếm
+  const handleFocusProductSearch = async () => {
+    if (productResults.length === 0) {
+      setIsSearchingProduct(true);
+      try {
+        const res = await orderService.searchProductsForOrder(productQuery.trim());
+        setProductResults(res);
+        setIsProductDropdownOpen(true);
+      } catch {
+        setProductResults([]);
+      } finally {
+        setIsSearchingProduct(false);
+      }
+    } else {
+      setIsProductDropdownOpen(true);
+    }
+  };
+
   // Close dropdowns when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -1133,13 +1151,35 @@ export const CreateOrder: React.FC = () => {
               <input
                 type="text"
                 value={productQuery}
+                onFocus={handleFocusProductSearch}
                 onChange={(e) => setProductQuery(e.target.value)}
-                placeholder="Tìm sản phẩm theo mã SKU hoặc tên..."
+                placeholder="Tìm sản phẩm theo mã SKU hoặc tên (hoặc click để xem gợi ý)..."
                 className="w-full pl-9 pr-8 py-2.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
               />
               {isSearchingProduct && (
                 <RefreshCw className="w-4 h-4 absolute right-3 top-3 text-slate-400 animate-spin" />
               )}
+            </div>
+
+            {/* Gợi ý thêm nhanh sản phẩm (Quick-Add Chips) */}
+            <div className="flex flex-wrap items-center gap-1.5 pt-2">
+              <span className="text-[11px] font-semibold text-slate-500 shrink-0">Thêm nhanh:</span>
+              {[
+                { id: 'PRD-001', name: 'iPhone 15 Pro', sku: 'IP15P-128-TI', price: 26990000, unit: 'cái', stock: 100 },
+                { id: 'PRD-002', name: 'Samsung S24 Ultra', sku: 'SAM-S24U-512', price: 29990000, unit: 'cái', stock: 100 },
+                { id: 'PRD-005', name: 'Tai nghe Sony', sku: 'SN-WH1000XM5-BK', price: 7990000, unit: 'cái', stock: 100 },
+                { id: 'PRD-006', name: 'AirPods Pro 2', sku: 'AP-PRO-2-USBC', price: 5690000, unit: 'hộp', stock: 100 },
+              ].map((quick) => (
+                <button
+                  key={quick.id}
+                  type="button"
+                  onClick={() => handleAddProduct(quick as any)}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/80 hover:bg-blue-100 dark:hover:bg-blue-900 active:scale-95 transition-all shadow-2xs"
+                >
+                  <Plus className="w-3 h-3 text-blue-500" />
+                  <span>{quick.name}</span>
+                </button>
+              ))}
             </div>
 
             {/* Product Suggestions Dropdown */}
@@ -1191,12 +1231,33 @@ export const CreateOrder: React.FC = () => {
 
           {/* Items List */}
           {items.length === 0 ? (
-            <div className="py-8 text-center text-slate-400 dark:text-slate-500 border border-dashed border-slate-200 dark:border-slate-800 rounded-xl space-y-2">
+            <div className="py-6 px-4 text-center text-slate-400 dark:text-slate-500 border border-dashed border-slate-200 dark:border-slate-800 rounded-xl space-y-3">
               <Boxes className="w-8 h-8 mx-auto text-slate-300 dark:text-slate-600" />
-              <p className="text-xs font-medium">Chưa có mặt hàng nào trong đơn</p>
-              <p className="text-[11px] text-slate-400">
-                Tìm kiếm theo mã SKU hoặc tên ở trên để thêm sản phẩm
-              </p>
+              <div>
+                <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                  Chưa có mặt hàng nào trong đơn
+                </p>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  Bấm một trong các nút bên dưới để thêm nhanh sản phẩm vào đơn:
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
+                {[
+                  { id: 'PRD-001', name: 'iPhone 15 Pro 128GB', sku: 'IP15P-128-TI', price: 26990000, unit: 'cái', stock: 100 },
+                  { id: 'PRD-002', name: 'Samsung Galaxy S24 Ultra', sku: 'SAM-S24U-512', price: 29990000, unit: 'cái', stock: 100 },
+                  { id: 'PRD-005', name: 'Tai nghe Sony WH-1000XM5', sku: 'SN-WH1000XM5-BK', price: 7990000, unit: 'cái', stock: 100 },
+                ].map((quick) => (
+                  <button
+                    key={quick.id}
+                    type="button"
+                    onClick={() => handleAddProduct(quick as any)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-blue-600 text-white shadow-xs hover:bg-blue-700 active:scale-95 transition-all"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>+ Thêm {quick.name}</span>
+                  </button>
+                ))}
+              </div>
             </div>
           ) : (
             <div className="space-y-2.5">
@@ -1376,6 +1437,21 @@ export const CreateOrder: React.FC = () => {
               </span>
             ) : null}
           </div>
+
+          {/* Nhắc nhở nếu chưa có mặt hàng */}
+          {items.length === 0 && (
+            <div className="p-3 rounded-xl bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 text-[11px] text-blue-800 dark:text-blue-200 flex items-start gap-2.5">
+              <Sparkles className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold text-blue-900 dark:text-blue-100">
+                  Đơn hàng hiện chưa có sản phẩm (Tổng tiền: 0 đ)
+                </p>
+                <p className="text-[10px] text-blue-700 dark:text-blue-300 mt-0.5 leading-relaxed">
+                  Bạn đang chọn <strong>"Trả đủ 100%"</strong>. Vui lòng bấm thêm sản phẩm ở mục <strong>(2) Mặt Hàng</strong> phía trên, hệ thống sẽ tự động cập nhật tổng tiền thu ngay và kích hoạt nút chốt đơn!
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* 3 Chế độ thanh toán (Segmented Control) */}
           <div className="space-y-1.5">
@@ -1614,21 +1690,30 @@ export const CreateOrder: React.FC = () => {
               onClick={handleSubmitOrder}
               disabled={isSubmitting || isSavingDraft || items.length === 0 || Boolean(creditStatus?.isBlocked)}
               className={`flex items-center gap-1.5 px-3.5 py-2.5 text-xs font-bold rounded-xl text-white shadow-md transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed ${
-                creditStatus?.isBlocked
+                items.length === 0
+                  ? 'bg-slate-400 dark:bg-slate-700'
+                  : creditStatus?.isBlocked
                   ? 'bg-rose-600 hover:bg-rose-700 shadow-rose-500/20'
                   : creditStatus?.requiresApproval
                   ? 'bg-amber-600 hover:bg-amber-700 shadow-amber-500/20'
                   : 'bg-blue-600 hover:bg-blue-700 shadow-blue-500/20'
               }`}
               title={
-                creditStatus?.isBlocked
+                items.length === 0
+                  ? 'Vui lòng thêm sản phẩm vào mục (2) Mặt Hàng để chốt đơn'
+                  : creditStatus?.isBlocked
                   ? 'Bị chặn do đại lý có nợ quá hạn'
                   : creditStatus?.requiresApproval
                   ? 'Đơn vượt hạn mức - Sẽ chuyển sang Chờ duyệt'
                   : 'Chốt đơn hàng'
               }
             >
-              {creditStatus?.isBlocked ? (
+              {items.length === 0 ? (
+                <>
+                  <Boxes className="w-3.5 h-3.5" />
+                  <span>Chưa có sản phẩm</span>
+                </>
+              ) : creditStatus?.isBlocked ? (
                 <>
                   <Ban className="w-3.5 h-3.5" />
                   <span>Bị chặn quá hạn</span>

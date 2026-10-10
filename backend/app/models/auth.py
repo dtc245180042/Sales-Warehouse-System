@@ -90,6 +90,8 @@ class User(Base):
     full_name = Column(String(100), nullable=True)
     phone_number = Column(String(20), nullable=True)
     assigned_warehouse = Column(String(100), nullable=True)
+    # Khóa liên kết tài khoản đại lý với hồ sơ đại lý (S4-10, SCRUM-242)
+    customer_id = Column(String(50), nullable=True, index=True)
 
     # Đếm số lần đăng nhập thất bại liên tiếp (SCRUM-287)
     failed_login_attempts = Column(Integer, default=0, nullable=False)
@@ -156,3 +158,17 @@ class User(Base):
 
     def __repr__(self):
         return f"<User username={self.username} email={self.email}>"
+
+
+# Đảm bảo cột customer_id tự động tồn tại trong CSDL hiện hữu
+try:
+    from app.core.database import engine
+    from sqlalchemy import inspect, text
+    with engine.connect() as _conn:
+        _cols = [c["name"] for c in inspect(_conn).get_columns("users")]
+        if _cols and "customer_id" not in _cols:
+            _conn.execute(text("ALTER TABLE users ADD COLUMN customer_id VARCHAR(50) NULL"))
+            _conn.commit()
+except Exception:
+    pass
+

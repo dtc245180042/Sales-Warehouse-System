@@ -177,6 +177,7 @@ class OrderResponse(BaseModel):
     customer_is_locked: bool = False
     customer_lock_warning: Optional[str] = None
     expected_delivery_date: Optional[str] = None
+    copied_from_order_id: Optional[str] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
@@ -274,6 +275,10 @@ class OrderResponse(BaseModel):
     @computed_field
     def approvalReason(self) -> Optional[str]:
         return self.approval_reason
+
+    @computed_field
+    def copiedFromOrderId(self) -> Optional[str]:
+        return self.copied_from_order_id
 
 
 # ============================================================================
@@ -437,4 +442,10 @@ class MergeItemsResponse(BaseModel):
     items: List[OrderItemCreate] = []
     merged_count: int = 0
     added_count: int = 0
+
+
+class OrderCopyResponse(BaseModel):
+    order: OrderResponse
+    warnings: List[str] = Field(default_factory=list, description="Cảnh báo sản phẩm ngừng kinh doanh không được sao chép")
+    message: str = Field("Sao chép đơn hàng thành công sang đơn nháp mới.", description="Thông báo trạng thái")
 

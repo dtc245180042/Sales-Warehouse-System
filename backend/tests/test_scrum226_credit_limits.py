@@ -460,8 +460,16 @@ def test_max_debt_days_zero_logic():
     - Đơn nợ xuất hôm qua (1 ngày > 0) -> Quá hạn ngay ngày hôm sau.
     """
     db = SessionLocal()
-    cust = db.query(Customer).first()
-    cust_id = cust.id
+    unique_suffix = f"{int(datetime.now().timestamp() * 1000)}_zero"
+    cust_id = f"TEST-CUST-ZERO-{unique_suffix}"
+    cust = Customer(
+        id=cust_id,
+        code=f"KH-ZERO-{unique_suffix}",
+        name=f"Khách hàng Test Zero {unique_suffix}",
+        status="active"
+    )
+    db.add(cust)
+    db.commit()
 
     prof = get_or_create_credit_profile(db, cust_id)
     prof.credit_limit = 500000000
@@ -470,7 +478,6 @@ def test_max_debt_days_zero_logic():
 
     # Đơn xuất ngày hôm nay (0 ngày)
     today_disp = datetime.now(timezone.utc)
-    unique_suffix = f"{int(datetime.now().timestamp() * 1000)}_zero"
     order_id_today = f"TEST-ZERO-TODAY-{unique_suffix}"
     order_today = Order(
         id=order_id_today,
@@ -513,6 +520,8 @@ def test_max_debt_days_zero_logic():
         db2 = SessionLocal()
         db2.query(OrderDeliveryProfile).filter(OrderDeliveryProfile.order_id == order_id_today).delete()
         db2.query(Order).filter(Order.id == order_id_today).delete()
+        db2.query(CustomerCreditProfile).filter(CustomerCreditProfile.customer_id == cust_id).delete()
+        db2.query(Customer).filter(Customer.id == cust_id).delete()
         db2.commit()
         db2.close()
 

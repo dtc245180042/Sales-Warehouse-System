@@ -65,8 +65,15 @@ export interface Order {
   deliveryAddress?: string;
   deliveryNotes?: string;
   expectedDeliveryDate?: string;
+  copiedFromOrderId?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface OrderCopyResponse {
+  order: Order;
+  warnings: string[];
+  message: string;
 }
 
 export interface OrderCalculateItem {

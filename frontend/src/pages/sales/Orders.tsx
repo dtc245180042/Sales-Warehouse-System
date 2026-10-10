@@ -7,6 +7,8 @@ import {
   ShoppingCart,
   Download,
   Calendar,
+  CreditCard,
+  Printer,
   Filter,
   X,
   MapPin,
@@ -34,6 +36,7 @@ import { Order, OrderStatus } from '../../types/Order';
 import { Agent } from '../../types/Agent';
 import { useToast } from '../../contexts/ToastContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { OrderPrintModal } from '../../components/orders/OrderPrintModal';
 
 const REGION_OPTIONS = ['all', 'Miền Nam', 'Miền Bắc', 'Miền Trung'];
 
@@ -96,6 +99,7 @@ export const Orders: React.FC = () => {
   const [startDate, setStartDate] = useState<string>(urlStartDate);
   const [endDate, setEndDate] = useState<string>(urlEndDate);
   const [cancelOrderId, setCancelOrderId] = useState<string | null>(null);
+  const [printOrder, setPrintOrder] = useState<Order | null>(null);
 
   // SCRUM-239 / SCRUM-612: Đồng bộ trạng thái bộ lọc với sessionStorage & URL
   // Khi mở màn hình lần đầu: nếu URL không có query params, khôi phục từ sessionStorage nếu có
@@ -627,6 +631,13 @@ export const Orders: React.FC = () => {
           >
             <Eye className="w-4 h-4" />
           </Link>
+          <button
+            onClick={() => setPrintOrder(o)}
+            className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            title="In / Lưu PDF đơn hàng"
+          >
+            <Printer className="w-4 h-4" />
+          </button>
           {!['shipping', 'completed', 'closed', 'cancelled'].includes(o.status) && (
             <button
               onClick={() => setCancelOrderId(o.id)}
@@ -1053,6 +1064,13 @@ export const Orders: React.FC = () => {
         message="Bạn có chắc chắn muốn hủy đơn hàng này? Số lượng sản phẩm đã bán trong đơn sẽ được hoàn trả lại vào tồn kho."
         confirmText="Hủy đơn hàng"
         variant="danger"
+      />
+
+      <OrderPrintModal
+        isOpen={!!printOrder}
+        onClose={() => setPrintOrder(null)}
+        orderId={printOrder?.id || null}
+        orderCode={printOrder?.code}
       />
     </PageContainer>
   );

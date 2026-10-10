@@ -4,6 +4,9 @@ export const getHomePathForRole = (role?: UserRole): string => {
   switch (role) {
     case 'Admin':
       return '/users'; // Trung tâm quản trị người dùng & phân quyền Sprint 1
+    case 'Customer':
+    case 'User':
+      return '/portal/order';
     case 'SalesManager':
     case 'SalesStaff':
     case 'WarehouseManager':
@@ -35,6 +38,7 @@ export const getRoleDisplayName = (role?: UserRole): string => {
       return 'Quản lý';
     case 'Staff':
       return 'Nhân viên';
+    case 'Customer':
     case 'User':
       return 'Đại lý / Khách hàng';
     default:

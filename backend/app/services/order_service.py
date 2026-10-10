@@ -856,6 +856,249 @@ def get_draft_orders(
     return orders
 
 
+def copy_order_to_draft(
+    db: Session,
+    order_id: str,
+    current_user: Optional[User] = None
+) -> dict:
+    """Sao chép đơn hàng cũ thành đơn nháp mới, tự động tính lại giá & chiết khấu theo bảng giá hiện hành (S4-09, SCRUM-241)."""
+    ensure_seed_orders(db)
+
+    # 1. Kiểm tra quyền hạn theo vai trò (RBAC)
+    ALLOWED_ROLES = [UserRole.ADMIN.value, UserRole.SALES_MANAGER.value, UserRole.SALES_REP.value]
+    if current_user and current_user.role not in ALLOWED_ROLES:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Bạn không có quyền sao chép đơn hàng."
+        )
+
+    # 2. Tìm đơn hàng nguồn
+    source_order = db.query(Order).filter(
+        (Order.id == order_id) | (Order.code == order_id)
+    ).first()
+    if not source_order:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Không tìm thấy đơn hàng nguồn '{order_id}'."
+        )
+
+    # 3. Scope Guard: Kiểm tra phạm vi phụ trách đại lý nếu người dùng là Sales Rep
+    if current_user and current_user.role == UserRole.SALES_REP.value:
+        assignment = db.query(CustomerAssignment).filter(
+            CustomerAssignment.customer_id == source_order.customer_id,
+            CustomerAssignment.assigned_staff_id == current_user.id
+        ).first()
+        if not assignment:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Không tìm thấy thông tin đại lý '{source_order.customer_id}' trong phạm vi phụ trách của bạn."
+            )
+
+    # 4. Kiểm tra trạng thái khoá giao dịch của đại lý (SC-228)
+    from app.services.customer_lock_service import check_customer_order_allowed
+    allowed, lock_msg = check_customer_order_allowed(source_order.customer_id, db)
+    if not allowed:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=lock_msg
+        )
+
+    # 5. Kiểm tra danh sách mặt hàng của đơn cũ
+    if not source_order.items:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Đơn hàng nguồn không có sản phẩm nào để sao chép."
+        )
+
+    # 6. Lọc và chuẩn bị dữ liệu sản phẩm, loại bỏ sản phẩm ngừng kinh doanh (inactive / deleted)
+    from app.services.volume_discount_service import calculate_volume_discount
+    from app.models.price_list import PriceListItem
+    from app.models.order_delivery_profile import OrderDeliveryProfile
+
+    warnings: List[str] = []
+    valid_items = []
+
+    for old_item in source_order.items:
+        prod = None
+        str_pid = str(old_item.product_id).strip()
+        if str_pid.isdigit():
+            prod = db.query(Product).filter(Product.id == int(str_pid)).first()
+        if not prod and old_item.sku:
+            prod = db.query(Product).filter(Product.sku == old_item.sku).first()
+        if not prod:
+            prod = db.query(Product).filter((Product.sku == str_pid) | (Product.name == str_pid)).first()
+
+        # Kiểm tra nếu sản phẩm bị xóa hoặc ngừng kinh doanh
+        if not prod or (prod.status and prod.status.lower() == "inactive"):
+            p_name = prod.name if prod else (old_item.name or f"Mã #{old_item.product_id}")
+            warnings.append(f"Sản phẩm '{p_name}' đã ngừng kinh doanh nên không được sao chép sang đơn mới.")
+            continue
+
+        valid_items.append((old_item, prod))
+
+    if not valid_items:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Không thể sao chép do tất cả sản phẩm trong đơn đã ngừng kinh doanh."
+        )
+
+    # 7. Sinh mã đơn mới
+    count = db.query(Order).count() + 1
+    new_order_id = f"ORD-{str(count).zfill(3)}"
+    while db.query(Order).filter(Order.id == new_order_id).first():
+        count += 1
+        new_order_id = f"ORD-{str(count).zfill(3)}"
+
+    new_order_code = f"DH-2026-{str(count).zfill(3)}"
+    while db.query(Order).filter(Order.code == new_order_code).first():
+        count += 1
+        new_order_code = f"DH-2026-{str(count).zfill(3)}"
+
+    # 8. Nhân viên phụ trách (gán cho người thực hiện thao tác sao chép)
+    if current_user:
+        staff_id = str(current_user.id)
+        staff_name = current_user.full_name or current_user.username
+    else:
+        staff_id = source_order.staff_id
+        staff_name = source_order.staff_name
+
+    # 9. Tính lại giá & chiết khấu theo bảng giá hiện hành (SCRUM-622)
+    price_list_id = source_order.price_list_id
+    if price_list_id:
+        pl = db.query(PriceList).filter(PriceList.id == price_list_id, PriceList.status == "active").first()
+        if not pl:
+            price_list_id = None
+
+    subtotal = 0.0
+    total_discount = 0.0
+    new_order_items: List[OrderItem] = []
+
+    for old_item, prod in valid_items:
+        qty = int(old_item.quantity or 1)
+        unit = old_item.unit or prod.unit or "cái"
+
+        # Lấy giá hiện hành từ bảng giá hoặc giá niêm yết sản phẩm
+        base_price = float(prod.price or 0.0)
+        if price_list_id:
+            pli = db.query(PriceListItem).filter(
+                PriceListItem.price_list_id == price_list_id,
+                PriceListItem.product_id == prod.id
+            ).first()
+            if pli and pli.sale_price is not None:
+                base_price = float(pli.sale_price)
+
+        line_subtotal = base_price * qty
+        subtotal += line_subtotal
+
+        # Tính chiết khấu sản lượng hiện hành
+        vol_calc = calculate_volume_discount(
+            db=db,
+            product_id=str(prod.id),
+            quantity=qty,
+            customer_id=source_order.customer_id,
+            current_user=current_user
+        )
+        line_discount = float(vol_calc.total_discount or 0.0)
+        total_discount += line_discount
+
+        item_subtotal = max(0.0, line_subtotal - line_discount)
+
+        new_item = OrderItem(
+            order_id=new_order_id,
+            product_id=str(prod.id),
+            sku=prod.sku,
+            name=prod.name,
+            unit=unit,
+            price=base_price,
+            quantity=qty,
+            discount=line_discount,
+            subtotal=item_subtotal,
+            applied_discount_policy_id=vol_calc.applied_policy_id,
+            applied_discount_policy_name=vol_calc.applied_discount_policy_name,
+            discount_rate=vol_calc.discount_rate,
+            discount_amount=vol_calc.total_discount,
+        )
+        new_order_items.append(new_item)
+
+    final_total = max(0.0, subtotal - total_discount)
+
+    # 10. Tạo đơn hàng mới với status='draft' và reset các trường tài chính / vận chuyển (SCRUM-625)
+    note_prefix = f"[Sao chép từ đơn {source_order.code}]"
+    old_note = source_order.note or ""
+    clean_old_note = old_note
+    if clean_old_note.startswith("[Sao chép từ đơn"):
+        idx = clean_old_note.find("]")
+        if idx != -1:
+            clean_old_note = clean_old_note[idx + 1:].strip()
+
+    new_note = f"{note_prefix} {clean_old_note}".strip()
+
+    new_order = Order(
+        id=new_order_id,
+        code=new_order_code,
+        customer_id=source_order.customer_id,
+        customer_name=source_order.customer_name,
+        customer_phone=source_order.customer_phone,
+        customer_address=source_order.customer_address,
+        price_list_id=price_list_id,
+        subtotal=subtotal,
+        discount=total_discount,
+        tax=0.0,
+        total=final_total,
+        paid_amount=0.0,
+        change_amount=0.0,
+        payment_method=source_order.payment_method or "cash",
+        payment_status="unpaid",
+        status="draft",
+        staff_id=staff_id,
+        staff_name=staff_name,
+        note=new_note,
+        copied_from_order_id=source_order.id,
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+    for itm in new_order_items:
+        new_order.items.append(itm)
+
+    db.add(new_order)
+    db.flush()
+
+    # 11. Tạo hồ sơ giao hàng mới độc lập (OrderDeliveryProfile), reset expected_delivery_date
+    old_profile = db.query(OrderDeliveryProfile).filter(OrderDeliveryProfile.order_id == source_order.id).first()
+    if old_profile:
+        new_delivery_profile = OrderDeliveryProfile(
+            order_id=new_order.id,
+            delivery_address_id=old_profile.delivery_address_id,
+            delivery_address_name=old_profile.delivery_address_name,
+            delivery_receiver_name=old_profile.delivery_receiver_name,
+            delivery_phone=old_profile.delivery_phone,
+            delivery_address=old_profile.delivery_address,
+            delivery_notes=old_profile.delivery_notes,
+            expected_delivery_date=None,
+        )
+        db.add(new_delivery_profile)
+    elif source_order.customer_address:
+        new_delivery_profile = OrderDeliveryProfile(
+            order_id=new_order.id,
+            delivery_address=source_order.customer_address,
+            delivery_receiver_name=source_order.customer_name,
+            delivery_phone=source_order.customer_phone,
+            expected_delivery_date=None,
+        )
+        db.add(new_delivery_profile)
+
+    db.commit()
+    db.refresh(new_order)
+    new_order = _attach_delivery_profile(new_order, db)
+    new_order = _enrich_order_lock_warning(db, new_order)
+
+    return {
+        "order": new_order,
+        "warnings": warnings,
+        "message": f"Đã sao chép đơn {source_order.code} sang đơn nháp mới {new_order.code}."
+    }
+
+
 
 def update_order_status(db: Session, order_id: str, new_status: str) -> Order:
     order = get_order_by_id(db, order_id)

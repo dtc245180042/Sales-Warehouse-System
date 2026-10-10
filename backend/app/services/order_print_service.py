@@ -265,9 +265,9 @@ def get_order_print_payload(db: Session, order_id_or_code: str, user: User) -> D
             "id": order.customer_id,
             "code": customer.code if customer else order.customer_id,
             "name": order.customer_name,
-            "phone": order.customer_phone or (customer.phone if customer else "-"),
-            "tax_code": customer.tax_code if customer else "-",
-            "address": order.customer_address or (customer.address if customer else "-"),
+            "phone": order.customer_phone or (customer.phone if customer else "-") or "-",
+            "tax_code": customer.tax_code if (customer and customer.tax_code and str(customer.tax_code).strip() not in ["None", ""]) else "-",
+            "address": (order.customer_address or (customer.address if customer and str(customer.address).strip() not in ["None", ""] else None)) or "Theo điểm giao hàng",
         },
         "delivery": {
             "receiver_name": receiver_name,

@@ -9,6 +9,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Text,
+    Boolean,
 )
 from sqlalchemy.orm import relationship
 from app.core.database import Base
@@ -61,6 +62,14 @@ class Order(Base):
         nullable=False
     )
 
+    # Tham chiếu đơn hàng gốc khi sao chép đơn (S4-09, SCRUM-241)
+    copied_from_order_id = Column(String(50), nullable=True, index=True)
+
+    # Nguồn tạo đơn hàng: 'internal' (Backoffice/POS/NVKD) hoặc 'portal' (Đại lý tự đặt qua Cổng đại lý) (S4-10, SCRUM-242)
+    source = Column(String(50), default="internal", nullable=False, index=True)
+    # Cờ đánh dấu đơn chưa được phân công NVKD phụ trách (S4-10, SCRUM-242)
+    is_unassigned = Column(Boolean, default=False, nullable=False, index=True)
+
     items = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan", lazy="joined")
 
 
@@ -107,6 +116,16 @@ try:
                 _conn.execute(text("ALTER TABLE order_items ADD COLUMN discount_rate NUMERIC(5, 2)"))
             if "discount_amount" not in _cols:
                 _conn.execute(text("ALTER TABLE order_items ADD COLUMN discount_amount BIGINT"))
+            _conn.commit()
+
+        _order_cols = [c["name"] for c in inspect(_conn).get_columns("orders")]
+        if _order_cols:
+            if "copied_from_order_id" not in _order_cols:
+                _conn.execute(text("ALTER TABLE orders ADD COLUMN copied_from_order_id VARCHAR(50)"))
+            if "source" not in _order_cols:
+                _conn.execute(text("ALTER TABLE orders ADD COLUMN source VARCHAR(50) DEFAULT 'internal'"))
+            if "is_unassigned" not in _order_cols:
+                _conn.execute(text("ALTER TABLE orders ADD COLUMN is_unassigned BOOLEAN DEFAULT FALSE"))
             _conn.commit()
 except Exception:
     pass

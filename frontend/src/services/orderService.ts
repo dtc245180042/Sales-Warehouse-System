@@ -52,6 +52,7 @@ function mapApiOrder(o: any): Order {
     deliveryAddress: o.deliveryAddress ?? o.delivery_address ?? undefined,
     deliveryNotes: o.deliveryNotes ?? o.delivery_notes ?? undefined,
     expectedDeliveryDate: o.expectedDeliveryDate || o.expected_delivery_date || undefined,
+    copiedFromOrderId: o.copiedFromOrderId || o.copied_from_order_id || undefined,
     createdAt: o.createdAt || (o.created_at ? o.created_at.replace('T', ' ').slice(0, 16) : new Date().toISOString().replace('T', ' ').slice(0, 16)),
     updatedAt: o.updatedAt || (o.updated_at ? o.updated_at.replace('T', ' ').slice(0, 16) : new Date().toISOString().replace('T', ' ').slice(0, 16)),
   };
@@ -398,5 +399,27 @@ export const orderService = {
       setStorageItem(STORAGE_KEY, [...orders]);
       return orders[index];
     }
-  }
+  },
+
+  copyOrder: async (id: string): Promise<{ order: Order; warnings: string[]; message?: string }> => {
+    try {
+      const res = await apiClient.post(`/orders/${encodeURIComponent(id)}/copy`);
+      const mappedOrder = mapApiOrder(res.data.order || res.data);
+      const warnings = Array.isArray(res.data.warnings) ? res.data.warnings : [];
+      const message = res.data.message || 'Sao chép đơn hàng thành công sang đơn nháp mới.';
+
+      // Lưu vào local storage cache
+      const orders = getStorageItem<Order[]>(STORAGE_KEY, initialOrders);
+      setStorageItem(STORAGE_KEY, [mappedOrder, ...orders]);
+
+      return {
+        order: mappedOrder,
+        warnings,
+        message,
+      };
+    } catch (err: any) {
+      const errorMsg = err?.response?.data?.detail || err?.message || 'Lỗi khi sao chép đơn hàng';
+      throw new Error(errorMsg);
+    }
+  },
 };

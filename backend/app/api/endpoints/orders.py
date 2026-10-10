@@ -12,6 +12,7 @@ from app.schemas.order import (
     OrderCalculateRequest,
     OrderCalculateResponse,
     ProductSearchForOrderResponse,
+    OrderCopyResponse,
 )
 from app.services import order_service
 
@@ -135,6 +136,20 @@ def submit_draft_order(
 ):
     """Chốt đơn hàng nháp thành đơn hàng chính thức (trừ kho và tính doanh số) (S3-09, SCRUM-230)."""
     return order_service.submit_draft_order(
+        db=db,
+        order_id=order_id,
+        current_user=current_user,
+    )
+
+
+@router.post("/{order_id}/copy", response_model=OrderCopyResponse, status_code=status.HTTP_201_CREATED)
+def copy_order_to_draft(
+    order_id: str,
+    db: Session = Depends(lay_phien_db),
+    current_user: Optional[User] = Depends(lay_nguoi_dung_tuy_chon),
+):
+    """Sao chép đơn hàng cũ thành đơn nháp mới, tự động tính lại giá & chiết khấu theo bảng giá hiện hành (S4-09, SCRUM-241)."""
+    return order_service.copy_order_to_draft(
         db=db,
         order_id=order_id,
         current_user=current_user,

@@ -87,7 +87,14 @@ def copy_test_data():
         customer_id=customer.id,
         assigned_staff_id=sales_rep_1.id
     )
-    db.add(assign)
+    from app.models.customer_credit_profile import CustomerCreditProfile
+    credit_prof = CustomerCreditProfile(
+        customer_id=customer.id,
+        credit_limit=50_000_000,
+        current_debt=0,
+        max_debt_days=30
+    )
+    db.add_all([assign, credit_prof])
     db.commit()
 
     # 3. Sản phẩm

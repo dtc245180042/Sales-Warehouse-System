@@ -37,7 +37,12 @@ def cancel_order_service(order_id: str, reason: str, user_name: str, db: Session
             detail="Đơn hàng này đã bị hủy trước đó."
         )
 
-    # 3. Hoàn trả / Nhả tồn kho giữ chỗ (SCRUM-597)
+    # 3. Hoàn trả / Nhả tồn kho giữ chỗ (SCRUM-597, SCRUM-504)
+    try:
+        from app.services.inventory_reservation_service import release_stock_reservations_for_order
+        release_stock_reservations_for_order(db, order.id)
+    except Exception:
+        pass
     if Inventory and hasattr(order, 'items') and order.items:
         for item in order.items:
             inventory = db.query(Inventory).filter(Inventory.product_id == item.product_id).first()

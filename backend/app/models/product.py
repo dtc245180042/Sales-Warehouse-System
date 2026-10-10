@@ -12,6 +12,12 @@ from sqlalchemy import (
 from app.core.database import Base
 
 
+import uuid
+
+def generate_product_id():
+    return f"PRD-{uuid.uuid4().hex[:8].upper()}"
+
+
 class ProductStatus:
     """Các trạng thái kinh doanh của sản phẩm."""
     ACTIVE = "ACTIVE"          # Đang kinh doanh
@@ -26,16 +32,18 @@ class Product(Base):
     """
     __tablename__ = "products"
 
-    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    id = Column(String(50), primary_key=True, index=True, default=generate_product_id)
     sku = Column(String(50), unique=True, nullable=False, index=True)
     name = Column(String(255), nullable=False, index=True)
-    category = Column(String(100), nullable=True, index=True)         # Tên nhóm hàng (text)
+    category = Column(String(100), nullable=False, default="Mặc định", index=True)         # Tên nhóm hàng (text)
     category_id = Column(Integer, ForeignKey("categories.id", ondelete="SET NULL"), nullable=True, index=True) # Cây nhóm hàng đa cấp (SCRUM-214)
     unit = Column(String(50), nullable=False, default="cái")          # Đơn vị tính cơ sở (Cái, Hộp, Kg,...)
     packaging_spec = Column(String(255), nullable=True)               # Quy cách đóng gói (vd: 12 hộp/thùng)
     cost_price = Column(Float, nullable=True, default=0.0)            # Giá vốn (Chỉ Quản lý kinh doanh xem/sửa)
     price = Column(Float, nullable=True, default=0.0)                 # Giá bán niêm yết (SCRUM-214)
     sale_price = Column(Float, nullable=True, default=0.0)            # Giá bán niêm yết (tương thích ngược)
+    stock = Column(Integer, nullable=True, default=100)               # Số lượng tồn kho
+    min_stock = Column(Integer, nullable=True, default=10)            # Tồn kho tối thiểu
     description = Column(String(255), nullable=True)                  # Mô tả sản phẩm
     image_url = Column(String(500), nullable=True)                   # Đường dẫn ảnh sản phẩm
     status = Column(String(50), nullable=False, default=ProductStatus.ACTIVE, index=True)  # Trạng thái kinh doanh

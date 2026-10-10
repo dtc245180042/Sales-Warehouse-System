@@ -45,6 +45,7 @@ class Order(Base):
     status = Column(String(50), default="pending", nullable=False, index=True)  # pending, pending_approval, confirmed, shipping, completed, cancelled
     
     # S4-02: Đánh dấu đơn cần duyệt khi vượt hạn mức công nợ (SCRUM-498)
+    # Đánh dấu đơn cần duyệt khi giá bán dưới giá sàn hoặc vượt hạn mức (SCRUM-490, SCRUM-495)
     requires_approval = Column(Boolean, default=False, nullable=True)
     approval_reason = Column(Text, nullable=True)
 
@@ -86,6 +87,10 @@ class OrderItem(Base):
     # Đơn vị tính (S3-09: cái, hộp, thùng...)
     unit = Column(String(50), nullable=True, default="cái")
 
+    # Giá sàn và cờ bán dưới sàn (S4-01 / SCRUM-490)
+    floor_price = Column(Float, nullable=True)
+    is_below_floor = Column(Boolean, default=False, nullable=True)
+
     # Snapshot chính sách chiết khấu sản lượng lúc chốt đơn (S3-01)
     applied_discount_policy_id = Column(Integer, nullable=True, index=True)
     applied_discount_policy_name = Column(String(255), nullable=True)
@@ -112,6 +117,10 @@ try:
                 _conn.execute(text("ALTER TABLE order_items ADD COLUMN discount_rate NUMERIC(5, 2)"))
             if "discount_amount" not in _cols:
                 _conn.execute(text("ALTER TABLE order_items ADD COLUMN discount_amount BIGINT"))
+            if "floor_price" not in _cols:
+                _conn.execute(text("ALTER TABLE order_items ADD COLUMN floor_price FLOAT"))
+            if "is_below_floor" not in _cols:
+                _conn.execute(text("ALTER TABLE order_items ADD COLUMN is_below_floor BOOLEAN DEFAULT 0"))
 
         _order_cols = [c["name"] for c in inspect(_conn).get_columns("orders")]
         if _order_cols:

@@ -379,6 +379,9 @@ def calculate_volume_discount(
         prod = db.query(Product).filter(Product.id == int(str_pid)).first()
     if not prod:
         prod = db.query(Product).filter(or_(Product.sku == str_pid, Product.id == str_pid)).first()
+        prod = db.query(Product).filter(
+            or_(Product.id == str_pid, Product.sku == str_pid)
+        ).first()
     if not prod:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

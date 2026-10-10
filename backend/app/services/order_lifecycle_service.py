@@ -1,8 +1,13 @@
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
 from app.models.order import Order
-from app.models.inventory import Inventory
 from app.models.order_status import OrderStatus, ALLOWED_TRANSITIONS, OrderStatusHistory
+
+# Xử lý an toàn import Inventory để không bị lỗi server khi khác tên
+try:
+    from app.models.inventory import Inventory
+except ImportError:
+    Inventory = None
 
 def cancel_order_service(order_id: str, reason: str, user_name: str, db: Session):
     # 1. Bắt buộc nhập lý do (SCRUM-594)
@@ -33,7 +38,7 @@ def cancel_order_service(order_id: str, reason: str, user_name: str, db: Session
         )
 
     # 3. Hoàn trả / Nhả tồn kho giữ chỗ (SCRUM-597)
-    if hasattr(order, 'items') and order.items:
+    if Inventory and hasattr(order, 'items') and order.items:
         for item in order.items:
             inventory = db.query(Inventory).filter(Inventory.product_id == item.product_id).first()
             if inventory and hasattr(inventory, 'reserved_quantity'):

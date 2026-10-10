@@ -27,6 +27,8 @@ import { Order, OrderStatus } from '../../types/Order';
 import { useToast } from '../../contexts/ToastContext';
 import { useAuth } from '../../contexts/AuthContext';
 
+import { customerLockService } from '../../services/customerLockService';
+
 export const OrderDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -36,12 +38,25 @@ export const OrderDetail: React.FC = () => {
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
+  const [isCustomerLocked, setIsCustomerLocked] = useState(false);
 
   const loadOrder = async () => {
     if (!id) return;
     try {
       const data = await orderService.getById(id);
-      if (data) setOrder(data);
+      if (data) {
+        setOrder(data);
+        if (data.customerIsLocked) {
+          setIsCustomerLocked(true);
+        } else if (data.customerId) {
+          try {
+            const lockStatus = await customerLockService.getStatus(data.customerId);
+            if (lockStatus?.isLocked) {
+              setIsCustomerLocked(true);
+            }
+          } catch {}
+        }
+      }
     } finally {
       setLoading(false);
     }
@@ -51,19 +66,14 @@ export const OrderDetail: React.FC = () => {
     loadOrder();
   }, [id]);
 
-  const [statusError, setStatusError] = useState<string | null>(null);
-
   const handleUpdateStatus = async (nextStatus: OrderStatus) => {
     if (!order) return;
-    setStatusError(null);
     try {
       const updated = await orderService.updateStatus(order.id, nextStatus);
       setOrder(updated);
       showToast(`Đã chuyển trạng thái đơn hàng sang "${nextStatus}"`, 'success');
-    } catch (err: any) {
-      const msg = err?.response?.data?.detail || err?.message || 'Lỗi cập nhật trạng thái';
-      setStatusError(msg);
-      showToast(msg, 'error', 'Cảnh Báo Chặn Xuất Kho', 7000);
+    } catch {
+      showToast('Lỗi cập nhật trạng thái', 'error');
     }
   };
 
@@ -140,6 +150,28 @@ export const OrderDetail: React.FC = () => {
         </div>
       }
     >
+      {/* Banner Cảnh báo đại lý bị khoá giao dịch (SC-228 Subtask 6) */}
+      {(order.customerIsLocked || isCustomerLocked) && (
+        <div
+          id="order-customer-locked-alert"
+          className="mb-6 p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-100 flex items-start gap-3.5 shadow-sm"
+        >
+          <AlertCircle className="w-6 h-6 text-amber-600 shrink-0 mt-0.5" />
+          <div className="flex-1 text-xs sm:text-sm">
+            <h4 className="font-bold text-amber-900 dark:text-amber-100 flex items-center gap-2">
+              ⚠️ CẢNH BÁO: ĐẠI LÝ ĐANG BỊ KHOÁ GIAO DỊCH
+              <span className="text-xs px-2 py-0.5 rounded-full bg-amber-200 dark:bg-amber-900/60 font-semibold text-amber-800 dark:text-amber-200">
+                Đơn dở vẫn được xử lý tiếp
+              </span>
+            </h4>
+            <p className="mt-1 text-amber-800 dark:text-amber-200">
+              {order.customerLockWarning ||
+                `Đại lý '${order.customerName}' hiện đang bị khoá giao dịch. Theo quy định SC-228, đơn hàng đã tạo này vẫn được phép tiếp tục đóng gói, giao hàng hoặc hoàn tất, nhưng không thể tạo đơn mới.`}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Order Status Timeline Tracker */}
       {order.status !== 'cancelled' ? (
         <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-card mb-6">
@@ -181,19 +213,6 @@ export const OrderDetail: React.FC = () => {
             })}
           </div>
 
-          {/* Cảnh báo lỗi chặn xuất kho do vi phạm công nợ */}
-          {statusError && (
-            <div className="mt-4 p-4 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-300 dark:border-rose-800 flex items-start gap-3 text-rose-700 dark:text-rose-300 text-sm">
-              <AlertCircle className="w-5 h-5 shrink-0 text-rose-600 mt-0.5" />
-              <div className="flex-1">
-                <div className="font-bold text-rose-800 dark:text-rose-200">
-                  Hệ thống chặn xuất kho!
-                </div>
-                <div className="mt-0.5 font-medium">{statusError}</div>
-              </div>
-            </div>
-          )}
-
           {/* Quick status change buttons */}
           <div className="flex items-center justify-center gap-3 mt-6 pt-4 border-t border-slate-100 dark:border-slate-800">
             {order.status === 'pending' && (
@@ -211,7 +230,7 @@ export const OrderDetail: React.FC = () => {
                 size="sm"
                 onClick={() => handleUpdateStatus('shipping')}
               >
-                Điều phối / Phê duyệt xuất kho
+                Bắt đầu giao hàng
               </Button>
             )}
             {order.status === 'shipping' && (
@@ -304,33 +323,23 @@ export const OrderDetail: React.FC = () => {
             </div>
           </div>
 
-          {/* Customer & Delivery point info */}
+          {/* Customer info */}
           <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-card space-y-3">
             <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
               <User className="w-4 h-4 text-indigo-500" />
-              Thông Tin Khách Hàng & Điểm Giao Hàng
+              Thông Tin Khách Hàng
             </h3>
             <div>
               <p className="text-sm font-bold text-slate-900 dark:text-white">{order.customerName}</p>
-              <div className="mt-2 space-y-1.5 text-xs text-slate-500 dark:text-slate-400">
+              <div className="mt-2 space-y-1 text-xs text-slate-500 dark:text-slate-400">
                 <p className="flex items-center gap-2">
                   <Phone className="w-3.5 h-3.5 text-slate-400" />
                   <span>{order.customerPhone}</span>
                 </p>
                 <p className="flex items-start gap-2">
                   <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
-                  <span>{order.deliveryAddress || order.customerAddress || 'Nhận tại quầy'}</span>
+                  <span>{order.customerAddress || 'Nhận tại quầy'}</span>
                 </p>
-                {order.deliveryReceiverName && (
-                  <p className="text-indigo-600 dark:text-indigo-400 font-semibold pt-1">
-                    Người nhận tại kho: {order.deliveryReceiverName} {order.deliveryPhone ? `(${order.deliveryPhone})` : ''}
-                  </p>
-                )}
-                {order.deliveryNotes && (
-                  <p className="text-amber-600 dark:text-amber-400 text-[11px] bg-amber-50 dark:bg-amber-950/30 p-2 rounded-lg">
-                    Chỉ dẫn: {order.deliveryNotes}
-                  </p>
-                )}
               </div>
             </div>
           </div>

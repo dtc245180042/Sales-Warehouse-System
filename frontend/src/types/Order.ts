@@ -36,6 +36,8 @@ export interface Order {
   staffId: string;
   staffName: string;
   note?: string;
+  customerIsLocked?: boolean;
+  customerLockWarning?: string;
   deliveryAddressId?: number;
   deliveryAddressName?: string;
   deliveryReceiverName?: string;

@@ -338,6 +338,34 @@ export const orderService = {
     }
   },
 
+  update: async (id: string, partialData: Partial<Order>): Promise<Order> => {
+    try {
+      const res = await apiClient.put(`/orders/${encodeURIComponent(id)}`, partialData);
+      const updated = mapApiOrder(res.data);
+      const orders = getStorageItem<Order[]>(STORAGE_KEY, initialOrders);
+      const idx = orders.findIndex((o) => o.id === id || o.code === id);
+      if (idx !== -1) {
+        orders[idx] = updated;
+        setStorageItem(STORAGE_KEY, [...orders]);
+      }
+      return updated;
+    } catch (err) {
+      console.warn('[orderService] Backend error, updating order locally:', err);
+      const orders = getStorageItem<Order[]>(STORAGE_KEY, initialOrders);
+      const index = orders.findIndex((o) => o.id === id || o.code === id);
+      if (index === -1) throw new Error('Không tìm thấy đơn hàng');
+
+      const updated = {
+        ...orders[index],
+        ...partialData,
+        updatedAt: new Date().toISOString().replace('T', ' ').slice(0, 16),
+      };
+      orders[index] = updated;
+      setStorageItem(STORAGE_KEY, [...orders]);
+      return updated;
+    }
+  },
+
   cancelOrder: async (id: string): Promise<Order> => {
     try {
       const res = await apiClient.post(`/orders/${encodeURIComponent(id)}/cancel`);

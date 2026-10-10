@@ -11,7 +11,7 @@ class CustomerBase(BaseModel):
     address: Optional[str] = Field(None, description="Địa chỉ")
     customer_group: str = Field("RETAIL", description="Nhóm khách hàng (TIER_1, TIER_2, WHOLESALE, VIP, RETAIL)")
     tax_code: Optional[str] = Field(None, description="Mã số thuế đại lý (10 hoặc 13 số)")
-    region: Optional[str] = Field(None, description="Khu vực / Tỉnh thành phụ trách")
+    region: Optional[str] = Field(None, description="Khu vực địa bàn / Tỉnh thành phụ trách (ví dụ: Miền Bắc, Miền Trung, Miền Nam)")
     assigned_sales_rep: Optional[str] = Field(None, description="Nhân viên kinh doanh phụ trách")
     status: str = Field("active", description="Trạng thái (active, inactive, locked)")
 
@@ -151,7 +151,7 @@ class CustomerResponse(CustomerBase):
 
     @computed_field
     def assignedSalesRep(self) -> Optional[str]:
-        return self.assigned_sales_rep
+        return self.assigned_sales_rep or self.assigned_staff_name
 
     @computed_field
     def customerGroup(self) -> str:

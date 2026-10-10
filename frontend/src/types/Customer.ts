@@ -17,6 +17,10 @@ export interface Customer {
   lastOrderDate?: string;
   createdAt: string;
   status: 'active' | 'inactive' | 'locked' | string;
+  isLocked?: boolean;
+  lockReason?: string;
+  lockedAt?: string;
+  lockedBy?: string;
   assigned_staff_id?: string;
   assignedStaffId?: string;
   assigned_staff_name?: string;

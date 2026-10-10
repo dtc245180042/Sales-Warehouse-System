@@ -90,13 +90,12 @@ class OrderItem(Base):
     order = relationship("Order", back_populates="items")
 
 
-# Đảm bảo các cột mới của order_items tự động tồn tại trong CSDL SQLite hiện hữu
+# Đảm bảo các cột mới của order_items tự động tồn tại trong CSDL hiện hữu
 try:
     from app.core.database import engine
-    from sqlalchemy import text
+    from sqlalchemy import inspect, text
     with engine.connect() as _conn:
-        _res = _conn.execute(text("PRAGMA table_info(order_items)")).fetchall()
-        _cols = [r[1] for r in _res]
+        _cols = [c["name"] for c in inspect(_conn).get_columns("order_items")]
         if _cols:
             if "unit" not in _cols:
                 _conn.execute(text("ALTER TABLE order_items ADD COLUMN unit VARCHAR(50)"))

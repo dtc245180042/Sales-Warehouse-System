@@ -41,13 +41,12 @@ class OrderDeliveryProfile(Base):
     )
 
 
-# Đảm bảo các cột mới tự động tồn tại trong CSDL SQLite hiện hữu
+# Đảm bảo các cột mới tự động tồn tại trong CSDL hiện hữu
 try:
     from app.core.database import engine
-    from sqlalchemy import text
+    from sqlalchemy import inspect, text
     with engine.connect() as _conn:
-        _res = _conn.execute(text("PRAGMA table_info(order_delivery_profiles)")).fetchall()
-        _cols = [r[1] for r in _res]
+        _cols = [c["name"] for c in inspect(_conn).get_columns("order_delivery_profiles")]
         if _cols and "expected_delivery_date" not in _cols:
             _conn.execute(text("ALTER TABLE order_delivery_profiles ADD COLUMN expected_delivery_date VARCHAR(50)"))
             _conn.commit()

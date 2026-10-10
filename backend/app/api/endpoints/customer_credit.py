@@ -28,7 +28,7 @@ def get_customer_credit_profile(
     db: Session = Depends(lay_phien_db),
     current_user: Optional[User] = Depends(lay_nguoi_dung_tuy_chon),
 ):
-    """Xem hạn mức công nợ tối đa, số ngày nợ tối đa và dư nợ hiện tại của đại lý."""
+    """Xem hạn mức công nợ tối đa, số ngày nợ tối đa và dư nợ hiện tại của đại lý (S4-02, SCRUM-499)."""
     check_sales_rep_customer_scope(db=db, customer_id=customer_id, current_user=current_user)
     profile = customer_credit_service.get_or_create_credit_profile(db=db, customer_id=customer_id)
     # Tự động đồng bộ dư nợ thực tế
@@ -37,7 +37,29 @@ def get_customer_credit_profile(
         profile.current_debt = actual_debt
         db.commit()
         db.refresh(profile)
+
+    # Đính kèm thông tin nợ quá hạn và trạng thái chặn nợ (S4-02)
+    overdue_info = customer_credit_service.check_customer_overdue_debt(db=db, customer_id=customer_id)
+    profile.has_overdue = overdue_info["has_overdue"]
+    profile.overdue_days = overdue_info["overdue_days"]
+    profile.overdue_order_code = overdue_info["overdue_order_code"]
+    profile.is_blocked = overdue_info["is_blocked"]
+    profile.block_reason = overdue_info["block_reason"]
     return profile
+
+
+@router.get(
+    "/customers/{customer_id}/credit-summary",
+    response_model=CreditProfileResponse,
+    summary="Lấy tóm tắt công nợ và hạn mức cho màn hình tạo đơn (SCRUM-499)"
+)
+def get_customer_credit_summary(
+    customer_id: str,
+    db: Session = Depends(lay_phien_db),
+    current_user: Optional[User] = Depends(lay_nguoi_dung_tuy_chon),
+):
+    """Cung cấp API lấy công nợ hiện tại, hạn mức và phần còn lại cho màn hình tạo đơn."""
+    return get_customer_credit_profile(customer_id=customer_id, db=db, current_user=current_user)
 
 
 @router.put(
@@ -91,8 +113,15 @@ def check_customer_credit(
     db: Session = Depends(lay_phien_db),
     current_user: Optional[User] = Depends(lay_nguoi_dung_tuy_chon),
 ):
-    """Kiểm tra xem đơn hàng có giá trị nợ tương ứng có đủ điều kiện xuất kho hay không."""
+    """Kiểm tra xem đơn hàng có giá trị nợ tương ứng có đủ điều kiện xuất kho hay tạo đơn hay không (SCRUM-497)."""
     check_sales_rep_customer_scope(db=db, customer_id=customer_id, current_user=current_user)
+    if getattr(data, "context", None) == "order":
+        return customer_credit_service.check_credit_for_order_placement(
+            db=db,
+            customer_id=customer_id,
+            unpaid_amount=data.unpaid_amount,
+            order_id=data.order_id,
+        )
     return customer_credit_service.check_credit_for_dispatch(
         db=db,
         customer_id=customer_id,

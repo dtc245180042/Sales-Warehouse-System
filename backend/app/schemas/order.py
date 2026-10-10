@@ -12,6 +12,8 @@ class OrderItemBase(BaseModel):
     quantity: int = Field(1, ge=1, description="Số lượng")
     discount: float = Field(0.0, ge=0, description="Giảm giá sản phẩm")
     subtotal: float = Field(0.0, ge=0, description="Thành tiền")
+    floor_price: Optional[float] = Field(None, description="Giá sàn tối thiểu quy định trong bảng giá")
+    is_below_floor: Optional[bool] = Field(False, description="Cờ cảnh báo giá bán dưới giá sàn")
 
 
 class OrderItemCreate(OrderItemBase):
@@ -54,6 +56,8 @@ class OrderCreate(BaseModel):
     delivery_address: Optional[str] = None
     delivery_notes: Optional[str] = None
     expected_delivery_date: Optional[str] = None  # S3-09: Ngày giao hàng mong muốn
+    requires_approval: Optional[bool] = False
+    approval_reason: Optional[str] = None
 
 
 class OrderDraftUpdate(BaseModel):
@@ -77,6 +81,8 @@ class OrderDraftUpdate(BaseModel):
     delivery_address: Optional[str] = None
     delivery_notes: Optional[str] = None
     expected_delivery_date: Optional[str] = None
+    requires_approval: Optional[bool] = None
+    approval_reason: Optional[str] = None
 
 
 class OrderCalculateItem(BaseModel):
@@ -98,11 +104,15 @@ class OrderCalculateItemResponse(BaseModel):
     name: str
     unit: Optional[str] = "cái"
     unit_price: float
+    floor_price: Optional[float] = None
+    is_below_floor: bool = False
+    requires_approval: bool = False
     quantity: int
     discount_amount: float = 0.0
     discount_rate: Optional[float] = 0.0
     subtotal: float
     applied_discount_name: Optional[str] = None
+    warning_message: Optional[str] = None
 
 
 class OrderCalculateResponse(BaseModel):
@@ -110,10 +120,13 @@ class OrderCalculateResponse(BaseModel):
     discount: float
     total: float
     items: List[OrderCalculateItemResponse] = []
+    requires_approval: bool = False
+    approval_reasons: List[str] = []
+    warning_message: Optional[str] = None
 
 
 class ProductSearchForOrderResponse(BaseModel):
-    id: int
+    id: Union[int, str]
     sku: str
     name: str
     price: float
@@ -125,7 +138,7 @@ class ProductSearchForOrderResponse(BaseModel):
 
 
 class OrderStatusUpdate(BaseModel):
-    status: str = Field(..., description="Trạng thái mới: draft, pending, confirmed, shipping, completed, cancelled")
+    status: str = Field(..., description="Trạng thái mới: draft, pending, pending_approval, confirmed, shipping, completed, cancelled")
 
 
 class OrderResponse(BaseModel):
@@ -146,6 +159,8 @@ class OrderResponse(BaseModel):
     payment_method: str
     payment_status: str
     status: str
+    requires_approval: bool = False
+    approval_reason: Optional[str] = None
     staff_id: Optional[str] = None
     staff_name: Optional[str] = None
     note: Optional[str] = None
@@ -247,3 +262,11 @@ class OrderResponse(BaseModel):
     @computed_field
     def customerLockWarning(self) -> Optional[str]:
         return self.customer_lock_warning
+
+    @computed_field
+    def requiresApproval(self) -> bool:
+        return bool(self.requires_approval)
+
+    @computed_field
+    def approvalReason(self) -> Optional[str]:
+        return self.approval_reason

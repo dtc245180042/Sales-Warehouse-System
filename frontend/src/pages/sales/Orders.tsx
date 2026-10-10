@@ -107,8 +107,10 @@ export const Orders: React.FC = () => {
     showToast(`Đã xuất ${filteredOrders.length} đơn hàng sang CSV thành công!`, 'success');
   };
 
-  const statusConfigs: Record<OrderStatus, { label: string; variant: 'success' | 'warning' | 'danger' | 'info' | 'primary' }> = {
+  const statusConfigs: Record<string, { label: string; variant: 'success' | 'warning' | 'danger' | 'info' | 'primary' }> = {
+    draft: { label: 'Bản nháp', variant: 'info' },
     pending: { label: 'Chờ xử lý', variant: 'warning' },
+    pending_approval: { label: 'Chờ duyệt', variant: 'warning' },
     confirmed: { label: 'Đã xác nhận', variant: 'primary' },
     shipping: { label: 'Đang giao', variant: 'info' },
     completed: { label: 'Hoàn thành', variant: 'success' },
@@ -179,9 +181,16 @@ export const Orders: React.FC = () => {
       render: (o) => {
         const conf = statusConfigs[o.status] || { label: o.status, variant: 'neutral' };
         return (
-          <Badge variant={conf.variant as any} size="sm" dot>
-            {conf.label}
-          </Badge>
+          <div className="flex flex-col gap-0.5">
+            <Badge variant={conf.variant as any} size="sm" dot>
+              {conf.label}
+            </Badge>
+            {o.requiresApproval && (
+              <span className="text-[10px] font-semibold text-amber-600 dark:text-amber-400">
+                Vượt hạn mức
+              </span>
+            )}
+          </div>
         );
       },
     },
@@ -260,6 +269,49 @@ export const Orders: React.FC = () => {
         </div>
       }
     >
+      {/* ── Quick Filter Tabs (S4-02: Nổi bật Chờ duyệt công nợ) ── */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-2 mb-4 scrollbar-none">
+        {[
+          { key: 'all', label: 'Tất cả đơn', count: orders.length },
+          {
+            key: 'pending_approval',
+            label: 'Chờ duyệt công nợ',
+            count: orders.filter((o) => o.status === 'pending_approval' || (o as any).requiresApproval).length,
+            badgeColor: 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300',
+          },
+          { key: 'pending', label: 'Chờ xử lý', count: orders.filter((o) => o.status === 'pending').length },
+          { key: 'confirmed', label: 'Đã xác nhận', count: orders.filter((o) => o.status === 'confirmed').length },
+          { key: 'shipping', label: 'Đang giao', count: orders.filter((o) => o.status === 'shipping').length },
+          { key: 'completed', label: 'Hoàn thành', count: orders.filter((o) => o.status === 'completed').length },
+          { key: 'cancelled', label: 'Đã hủy', count: orders.filter((o) => o.status === 'cancelled').length },
+        ].map((tab) => {
+          const isActive = statusFilter === tab.key;
+          return (
+            <button
+              key={tab.key}
+              type="button"
+              onClick={() => handleStatusChange(tab.key)}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 border ${
+                isActive
+                  ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                  : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-800 hover:border-indigo-400'
+              }`}
+            >
+              <span>{tab.label}</span>
+              <span
+                className={`px-1.5 py-0.5 rounded-full text-[10px] font-black ${
+                  isActive
+                    ? 'bg-white/20 text-white'
+                    : tab.badgeColor || 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                }`}
+              >
+                {tab.count}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
       <DataTable
         data={filteredOrders}
         columns={columns}
@@ -283,6 +335,7 @@ export const Orders: React.FC = () => {
               className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs sm:text-sm text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
             >
               <option value="all">Tất cả trạng thái</option>
+              <option value="pending_approval">Chờ duyệt (Vượt hạn mức)</option>
               <option value="pending">Chờ xử lý</option>
               <option value="confirmed">Đã xác nhận</option>
               <option value="shipping">Đang giao</option>

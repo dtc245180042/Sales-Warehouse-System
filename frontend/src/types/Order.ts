@@ -1,9 +1,10 @@
-export type OrderStatus = 'draft' | 'pending' | 'confirmed' | 'shipping' | 'completed' | 'cancelled';
+export type OrderStatus = 'draft' | 'pending' | 'pending_approval' | 'confirmed' | 'shipping' | 'completed' | 'cancelled';
 export type PaymentMethod = 'cash' | 'transfer' | 'card';
 export type PaymentStatus = 'paid' | 'unpaid' | 'partial';
 
 export interface OrderItem {
   productId: string;
+  product_id?: string | number;
   sku: string;
   name: string;
   unit?: string;
@@ -11,9 +12,18 @@ export interface OrderItem {
   quantity: number;
   discount: number;
   subtotal: number;
+  floorPrice?: number;
+  floor_price?: number;
+  isBelowFloor?: boolean;
+  is_below_floor?: boolean;
   appliedDiscountPolicyName?: string;
+  applied_discount_policy_name?: string;
+  appliedDiscountPolicyId?: number;
+  applied_discount_policy_id?: number;
   discountRate?: number;
+  discount_rate?: number;
   discountAmount?: number;
+  discount_amount?: number;
 }
 
 export interface Order {
@@ -36,6 +46,8 @@ export interface Order {
   staffId: string;
   staffName: string;
   note?: string;
+  requiresApproval?: boolean;
+  approvalReason?: string;
   customerIsLocked?: boolean;
   customerLockWarning?: string;
   deliveryAddressId?: number;
@@ -83,7 +95,7 @@ export interface OrderCalculateResponse {
 }
 
 export interface ProductSearchForOrder {
-  id: number;
+  id: number | string;
   sku: string;
   name: string;
   price: number;

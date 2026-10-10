@@ -173,6 +173,24 @@ class CustomerResponse(CustomerBase):
     def assignedAt(self) -> Optional[str]:
         return self.assigned_at
 
+    @computed_field
+    def creditLimit(self) -> int:
+        return self.credit_limit if self.credit_limit is not None else 50000000
+
+    @computed_field
+    def currentDebt(self) -> int:
+        return self.current_debt if self.current_debt is not None else 0
+
+    @computed_field
+    def maxDebtDays(self) -> int:
+        return self.max_debt_days if self.max_debt_days is not None else 30
+
+    @computed_field
+    def availableCredit(self) -> int:
+        limit = self.credit_limit if self.credit_limit is not None else 50000000
+        debt = self.current_debt if self.current_debt is not None else 0
+        return max(0, limit - debt)
+
 
 class CustomerPaginationResponse(BaseModel):
     """Schema danh sách đại lý phân trang theo chuẩn SCRUM-229."""

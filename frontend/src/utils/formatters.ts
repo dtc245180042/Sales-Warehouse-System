@@ -49,7 +49,7 @@ export const generateId = (prefix: string = 'ID'): string => {
  */
 export const formatCurrencyInput = (value: number | string | undefined | null): string => {
   if (value === undefined || value === null || value === '') return '';
-  const clean = value.toString().replace(/\D/g, '');
+  const clean = value.toString().replace(/\D/g, '').replace(/^0+(?=\d)/, '');
   if (!clean) return '';
   return clean.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 };
@@ -59,7 +59,7 @@ export const formatCurrencyInput = (value: number | string | undefined | null): 
  */
 export const parseCurrencyInput = (formattedValue: string | undefined | null): number => {
   if (!formattedValue) return 0;
-  const clean = formattedValue.toString().replace(/\D/g, '');
+  const clean = formattedValue.toString().replace(/\D/g, '').replace(/^0+(?=\d)/, '');
   return clean ? parseInt(clean, 10) : 0;
 };
 

@@ -19,6 +19,8 @@ import {
   DollarSign,
   AlertCircle,
   FileSpreadsheet,
+  Store,
+  CreditCard,
 } from 'lucide-react';
 import { PageContainer } from '../../components/layout/PageContainer';
 import { Button } from '../../components/common/Button';
@@ -361,6 +363,15 @@ export const AgentList: React.FC = () => {
       subtitle={`Quản lý ${agents.length} đại lý và nhà phân phối trong hệ thống`}
       actions={
         <div className="flex items-center gap-2">
+          <Link to="/customers">
+            <Button
+              variant="outline"
+              size="sm"
+              leftIcon={<Users className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />}
+            >
+              DS Khách Hàng (/customers)
+            </Button>
+          </Link>
           <Button
             variant="outline"
             size="sm"
@@ -389,8 +400,25 @@ export const AgentList: React.FC = () => {
         </div>
       }
     >
+      {/* ── Tab Switcher chuyển nhanh Khách hàng ↔ Đại lý ── */}
+      <div className="flex items-center gap-2 mb-4 p-1.5 bg-slate-100 dark:bg-slate-800/80 rounded-2xl w-fit">
+        <Link
+          to="/customers"
+          className="px-4 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 text-slate-600 dark:text-slate-400 hover:text-slate-900 transition"
+        >
+          <Users className="w-4 h-4" />
+          Danh Sách Khách Hàng (/customers)
+        </Link>
+        <div
+          className="px-4 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm"
+        >
+          <Store className="w-4 h-4" />
+          Kênh Quản Lý Đại Lý & Hạn Mức (/agents)
+        </div>
+      </div>
+
       {/* ── Thẻ thống kê nhanh ── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-4">
         <div className="p-3.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl flex items-center gap-3 shadow-sm">
           <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 flex items-center justify-center shrink-0">
             <Building2 className="w-5 h-5" />
@@ -421,6 +449,18 @@ export const AgentList: React.FC = () => {
             <p className="text-xs text-slate-500">Tổng doanh số</p>
             <p className="text-sm font-black text-slate-900 dark:text-white truncate">
               {formatCurrency(agents.reduce((sum, a) => sum + (a.totalSpent || 0), 0))}
+            </p>
+          </div>
+        </div>
+
+        <div className="p-3.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl flex items-center gap-3 shadow-sm">
+          <div className="w-10 h-10 rounded-xl bg-purple-50 dark:bg-purple-950/40 text-purple-600 flex items-center justify-center shrink-0">
+            <CreditCard className="w-5 h-5" />
+          </div>
+          <div>
+            <p className="text-xs text-slate-500">Hạn mức được cấp</p>
+            <p className="text-sm font-black text-purple-600 truncate">
+              {formatCurrency(agents.reduce((sum, a) => sum + (a.creditLimit || 50000000), 0))}
             </p>
           </div>
         </div>
@@ -660,13 +700,16 @@ export const AgentList: React.FC = () => {
                     <span className="font-semibold truncate block">{agent.assignedStaffName || 'Chưa gán'}</span>
                   </div>
                   <div>
-                    <span className="text-[10px] text-slate-400 block">Doanh số</span>
-                    <span className="font-black text-indigo-600">{formatCurrency(agent.totalSpent)}</span>
+                    <span className="text-[10px] text-slate-400 block">Hạn mức được cấp</span>
+                    <span className="font-black text-purple-600">{formatCurrency(agent.creditLimit || 50000000)}</span>
                   </div>
                   <div>
-                    <span className="text-[10px] text-slate-400 block">Công nợ</span>
+                    <span className="text-[10px] text-slate-400 block">Công nợ / Khả dụng</span>
                     <span className={`font-bold ${agent.outstandingDebt > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
                       {agent.outstandingDebt > 0 ? formatCurrency(agent.outstandingDebt) : '0 đ'}
+                    </span>
+                    <span className="text-[10px] text-slate-400 block">
+                      Còn: {formatCurrency(agent.availableCredit || Math.max(0, (agent.creditLimit || 50000000) - agent.outstandingDebt))}
                     </span>
                   </div>
                 </div>
@@ -681,6 +724,13 @@ export const AgentList: React.FC = () => {
                   </a>
 
                   <div className="flex items-center gap-1.5">
+                    <Link
+                      to={`/customers/${agent.id}`}
+                      className="p-2 text-slate-500 hover:text-indigo-600 bg-slate-100 dark:bg-slate-800 rounded-xl transition"
+                      title="Xem chi tiết & Hạn mức"
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                    </Link>
                     <Link
                       to={`/agents/orders/new?agent=${agent.id}`}
                       className="flex items-center gap-1 px-3 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-sm transition"
@@ -721,6 +771,7 @@ export const AgentList: React.FC = () => {
                 <th className="px-4 py-3 text-left text-[11px] font-bold text-slate-500 uppercase tracking-wider">Người Phụ Trách</th>
                 <th className="px-4 py-3 text-right text-[11px] font-bold text-slate-500 uppercase tracking-wider">Tổng Đơn</th>
                 <th className="px-4 py-3 text-right text-[11px] font-bold text-slate-500 uppercase tracking-wider">Doanh Số</th>
+                <th className="px-4 py-3 text-right text-[11px] font-bold text-slate-500 uppercase tracking-wider">Hạn Mức Cấp</th>
                 <th className="px-4 py-3 text-right text-[11px] font-bold text-slate-500 uppercase tracking-wider">Công Nợ</th>
                 <th className="px-4 py-3 text-left text-[11px] font-bold text-slate-500 uppercase tracking-wider">Trạng Thái</th>
                 <th className="px-4 py-3 text-right text-[11px] font-bold text-slate-500 uppercase tracking-wider">Thao Tác</th>
@@ -729,7 +780,7 @@ export const AgentList: React.FC = () => {
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {isLoading ? (
                 <tr>
-                  <td colSpan={10} className="py-16 text-center text-xs text-slate-500">
+                  <td colSpan={11} className="py-16 text-center text-xs text-slate-500">
                     <div className="w-7 h-7 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
                     Đang tải danh sách đại lý...
                   </td>
@@ -831,16 +882,29 @@ export const AgentList: React.FC = () => {
                         </span>
                       </td>
 
+                      {/* Hạn mức cấp */}
+                      <td className="px-4 py-3 text-right">
+                        <span className="text-sm font-black text-purple-600 dark:text-purple-400 block">
+                          {formatCurrency(agent.creditLimit || 50000000)}
+                        </span>
+                        <span className="text-[11px] text-slate-400">
+                          Tối đa {agent.maxDebtDays || 30} ngày
+                        </span>
+                      </td>
+
                       {/* Công nợ */}
                       <td className="px-4 py-3 text-right">
                         <span
-                          className={`text-sm font-bold ${
+                          className={`text-sm font-bold block ${
                             agent.outstandingDebt > 0
                               ? 'text-rose-600 dark:text-rose-400'
                               : 'text-emerald-600 dark:text-emerald-400'
                           }`}
                         >
-                          {agent.outstandingDebt > 0 ? formatCurrency(agent.outstandingDebt) : '—'}
+                          {agent.outstandingDebt > 0 ? formatCurrency(agent.outstandingDebt) : '0 đ'}
+                        </span>
+                        <span className="text-[11px] text-slate-400">
+                          Còn: {formatCurrency(agent.availableCredit || Math.max(0, (agent.creditLimit || 50000000) - agent.outstandingDebt))}
                         </span>
                       </td>
 
@@ -854,6 +918,14 @@ export const AgentList: React.FC = () => {
                       {/* Thao tác */}
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-end gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
+                          {/* Nút Xem chi tiết & Hạn mức */}
+                          <Link
+                            to={`/customers/${agent.id}`}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                            title="Xem chi tiết & Hạn mức công nợ"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </Link>
                           {/* Nút Tạo đơn hàng đại lý nhanh */}
                           <Link
                             to={`/agents/orders/new?agent=${agent.id}`}

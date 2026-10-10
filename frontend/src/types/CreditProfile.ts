@@ -5,6 +5,11 @@ export interface CustomerCreditProfile {
   maxDebtDays: number;
   currentDebt: number;
   availableCredit: number;
+  hasOverdue?: boolean;
+  overdueDays?: number;
+  overdueOrderCode?: string | null;
+  isBlocked?: boolean;
+  blockReason?: string | null;
   updatedBy?: string;
   createdAt?: string;
   updatedAt?: string;
@@ -30,10 +35,16 @@ export interface CreditProfileUpdatePayload {
 
 export interface CreditCheckResult {
   allowed: boolean;
+  action?: 'ALLOW' | 'REQUIRE_APPROVAL' | 'BLOCK';
+  requiresApproval?: boolean;
+  isBlocked?: boolean;
   errorMessage?: string | null;
+  warningMessage?: string | null;
   creditLimit: number;
   maxDebtDays: number;
   dispatchedDebt: number;
+  currentDebt?: number;
+  availableCredit?: number;
   orderUnpaidAmount: number;
   excessAmount: number;
   overdueDays: number;

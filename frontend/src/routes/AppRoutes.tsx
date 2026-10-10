@@ -55,9 +55,6 @@ import { SalesReport } from '../pages/reports/SalesReport';
 import { RevenueReport } from '../pages/reports/RevenueReport';
 import { InventoryReport } from '../pages/reports/InventoryReport';
 
-// Agent & Sales Pages (SCRUM-229, SCRUM-230, SCRUM-347)
-import { AgentList } from '../pages/agents/AgentList';
-import { AgentOrderCreate } from '../pages/agents/AgentOrderCreate';
 
 // All 7 business roles allowed in Sprint 1 & 2 backoffice
 const ALL_BACKOFFICE_ROLES: UserRole[] = [
@@ -371,13 +368,21 @@ export const AppRoutes: React.FC = () => {
         />
 
         {/* ============================================================ */}
-        {/* KÊNH ĐẠI LÝ & TẠO ĐƠN (SCRUM-229, SCRUM-230, SCRUM-347)       */}
+        {/* HỢP NHẤT ĐẠI LÝ & KHÁCH HÀNG (EP-03) - REDIRECT TƯƠNG THÍCH   */}
         {/* ============================================================ */}
         <Route
           path="/agents"
           element={
             <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
-              <AgentList />
+              <Navigate to="/customers" replace />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/agents/:id"
+          element={
+            <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
+              <Navigate to="/customers" replace />
             </ProtectedRoute>
           }
         />
@@ -385,7 +390,7 @@ export const AppRoutes: React.FC = () => {
           path="/agents/orders/new"
           element={
             <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
-              <AgentOrderCreate />
+              <Navigate to="/orders/create" replace />
             </ProtectedRoute>
           }
         />

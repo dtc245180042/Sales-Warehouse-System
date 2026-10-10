@@ -21,7 +21,10 @@ import {
   Sparkles,
   Info,
   Layers,
+  Ban,
+  ShieldAlert,
 } from 'lucide-react';
+import { CustomerCreditBanner, CustomerCreditStatusInfo } from '../../components/orders/CustomerCreditBanner';
 import { formatCurrency } from '../../utils/formatters';
 import { agentService } from '../../services/agentService';
 import { productService } from '../../services/productService';
@@ -125,6 +128,7 @@ export const AgentOrderCreate: React.FC = () => {
   // ── Submitting ──
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDraft, setIsDraft] = useState(false);
+  const [creditStatus, setCreditStatus] = useState<CustomerCreditStatusInfo | null>(null);
 
   // Đếm số lượng đơn nháp
   const refreshDraftCount = useCallback(() => {
@@ -185,13 +189,17 @@ export const AgentOrderCreate: React.FC = () => {
             const fallbackProd: Product = matched || {
               id: it.productId,
               sku: it.sku,
+              barcode: it.sku || '',
               name: it.name,
-              salePrice: it.price,
+              supplierId: '',
+              supplierName: '',
               costPrice: 0,
+              salePrice: it.price,
               stock: 999,
               minStock: 0,
               unit: 'Cái',
               image: '',
+              description: '',
               category: 'Chung',
               status: 'active',
               createdAt: '',
@@ -359,6 +367,11 @@ export const AgentOrderCreate: React.FC = () => {
     }
     if (cart.length === 0) {
       showToast('Giỏ hàng đang trống, hãy thêm ít nhất một sản phẩm', 'warning');
+      return;
+    }
+    // S4-02: Chặn tạo đơn khi đại lý có nợ quá hạn
+    if (!draft && creditStatus?.isBlocked) {
+      showToast(creditStatus.blockReason || 'Đại lý có nợ quá hạn. Hệ thống chặn tạo đơn hoàn toàn theo quy định!', 'error');
       return;
     }
     setIsSubmitting(true);
@@ -588,15 +601,13 @@ export const AgentOrderCreate: React.FC = () => {
                 </div>
               </div>
 
-              {/* Cảnh báo công nợ hiện tại nếu có */}
-              {selectedAgent.outstandingDebt > 0 && (
-                <div className="flex items-center gap-1.5 p-2 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg text-xs text-amber-700 dark:text-amber-300">
-                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                  <span>
-                    Công nợ chưa thu: <strong>{formatCurrency(selectedAgent.outstandingDebt)}</strong>
-                  </span>
-                </div>
-              )}
+              {/* S4-02: Khối Hiển thị Công nợ hiện tại, Hạn mức & Cảnh báo vượt hạn mức / Chặn quá hạn */}
+              <CustomerCreditBanner
+                customerId={selectedAgent.id}
+                customerName={selectedAgent.name}
+                newOrderAmount={isDebt ? grandTotal : 0}
+                onStatusChange={setCreditStatus}
+              />
             </div>
           ) : (
             <div className="relative">
@@ -1045,12 +1056,40 @@ export const AgentOrderCreate: React.FC = () => {
           <button
             type="button"
             onClick={() => handleSubmit(false)}
-            disabled={isSubmitting || !selectedAgentId || cart.length === 0}
-            className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-md shadow-indigo-500/20 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
-            title={!selectedAgentId ? 'Vui lòng chọn đại lý trước' : cart.length === 0 ? 'Giỏ hàng đang trống' : isDebt ? 'Tạo đơn ghi nợ' : 'Tạo và gửi đơn hàng'}
+            disabled={isSubmitting || !selectedAgentId || cart.length === 0 || Boolean(creditStatus?.isBlocked)}
+            className={`px-4 py-2 rounded-xl text-white text-xs font-bold shadow-md transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 ${
+              creditStatus?.isBlocked
+                ? 'bg-rose-600 hover:bg-rose-700 shadow-rose-500/20'
+                : creditStatus?.requiresApproval && isDebt
+                ? 'bg-amber-600 hover:bg-amber-700 shadow-amber-500/20'
+                : 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-500/20'
+            }`}
+            title={
+              creditStatus?.isBlocked
+                ? 'Bị chặn do đại lý có nợ quá hạn'
+                : creditStatus?.requiresApproval && isDebt
+                ? 'Đơn vượt hạn mức - Sẽ chuyển sang Chờ duyệt'
+                : !selectedAgentId
+                ? 'Vui lòng chọn đại lý trước'
+                : cart.length === 0
+                ? 'Giỏ hàng đang trống'
+                : isDebt
+                ? 'Tạo đơn ghi nợ'
+                : 'Tạo và gửi đơn hàng'
+            }
           >
             {isSubmitting && !isDraft ? (
               <span>Đang gửi đơn...</span>
+            ) : creditStatus?.isBlocked ? (
+              <>
+                <Ban className="w-3.5 h-3.5 shrink-0" />
+                <span>Bị chặn quá hạn</span>
+              </>
+            ) : creditStatus?.requiresApproval && isDebt ? (
+              <>
+                <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                <span>Gửi chờ duyệt (Vượt hạn mức)</span>
+              </>
             ) : (
               <>
                 <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />

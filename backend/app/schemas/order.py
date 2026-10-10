@@ -135,6 +135,10 @@ class ProductSearchForOrderResponse(BaseModel):
     unit: str
     packaging_spec: Optional[str] = None
     available_units: List[str] = []
+    available_stock: Optional[int] = None
+    warehouse: Optional[str] = None
+    physical_stock: Optional[int] = None
+    reserved_stock: Optional[int] = None
 
 
 class OrderStatusUpdate(BaseModel):

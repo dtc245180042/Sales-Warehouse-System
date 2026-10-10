@@ -314,19 +314,20 @@ def calculate_order_totals(
     }
 
 
-def search_products_for_order(db: Session, query_str: Optional[str] = None) -> List[dict]:
-    """Tìm kiếm hàng hoá và trả về các đơn vị tính hợp lệ khi nhập đơn (S3-09, SCRUM-230)."""
+def search_products_for_order(
+    db: Session,
+    query_str: Optional[str] = None,
+    customer_id: Optional[str] = None
+) -> List[dict]:
+    """Tìm kiếm hàng hoá và trả về các đơn vị tính hợp lệ kèm tồn khả dụng (S3-09, S4-03)."""
     query = db.query(Product).filter(or_(Product.status.ilike("active"), Product.status.is_(None)))
     if query_str and query_str.strip():
         s = f"%{query_str.strip()}%"
         query = query.filter((Product.sku.ilike(s)) | (Product.name.ilike(s)))
     products = query.limit(30).all()
 
-    p_ids = [p.id for p in products]
-    stock_map = {}
-    if p_ids:
-        sps = db.query(ProductStockProfile).filter(ProductStockProfile.product_id.in_(p_ids)).all()
-        stock_map = {sp.product_id: sp.stock for sp in sps}
+    from app.services.inventory_reservation_service import calculate_sku_availability, get_customer_servicing_warehouse
+    servicing_wh, _ = get_customer_servicing_warehouse(db, customer_id) if customer_id else ("Kho Tổng Hà Nội", "WH-HANOI")
 
     results = []
     for p in products:
@@ -341,13 +342,25 @@ def search_products_for_order(db: Session, query_str: Optional[str] = None) -> L
                 if default_u not in available_units:
                     available_units.append(default_u)
 
+        avail_info = calculate_sku_availability(
+            db=db,
+            customer_id=customer_id,
+            product_id=str(p.id),
+            warehouse_name=servicing_wh
+        )
+        item_price = float(p.price or 0.0)
+
         results.append({
             "id": p.id,
             "sku": p.sku,
             "name": p.name,
-            "price": float(p.price or 0.0),
-            "sale_price": float(p.price or 0.0),
-            "stock": stock_map.get(p.id, 100),
+            "price": item_price,
+            "sale_price": item_price,
+            "stock": avail_info.available_stock,
+            "available_stock": avail_info.available_stock,
+            "physical_stock": avail_info.physical_stock,
+            "reserved_stock": avail_info.reserved_stock,
+            "warehouse": servicing_wh,
             "unit": p.unit or "cái",
             "packaging_spec": p.packaging_spec,
             "available_units": available_units,
@@ -398,9 +411,13 @@ def create_order(db: Session, order_in: OrderCreate, current_user: Optional[User
             from app.services.customer_delivery_address_service import validate_delivery_address_for_customer
             validate_delivery_address_for_customer(db, order_in.customer_id, order_in.delivery_address_id)
 
+    from app.models.stock_reservation import StockReservation
     count = db.query(Order).count() + 1
     order_id = f"ORD-{str(count).zfill(3)}"
-    while db.query(Order).filter(Order.id == order_id).first():
+    while (
+        db.query(Order).filter(Order.id == order_id).first() or
+        db.query(StockReservation).filter(StockReservation.order_id == order_id).first()
+    ):
         count += 1
         order_id = f"ORD-{str(count).zfill(3)}"
 
@@ -408,29 +425,6 @@ def create_order(db: Session, order_in: OrderCreate, current_user: Optional[User
     while db.query(Order).filter(Order.code == order_code).first():
         count += 1
         order_code = f"DH-2026-{str(count).zfill(3)}"
-
-    # 1. Trừ tồn kho nếu KHÔNG PHẢI đơn nháp
-    if not is_draft:
-        for item in order_in.items:
-            prod = None
-            str_pid = str(item.product_id).strip()
-            if str_pid.isdigit():
-                prod = db.query(Product).filter(Product.id == int(str_pid)).first()
-            if not prod and item.sku:
-                prod = db.query(Product).filter(Product.sku == item.sku).first()
-
-            if prod:
-                stock_profile = _get_or_create_stock_profile(db, prod, default_stock=100)
-                if stock_profile.stock < item.quantity:
-                    raise HTTPException(
-                        status_code=status.HTTP_400_BAD_REQUEST,
-                        detail=f"Sản phẩm '{prod.name}' không đủ tồn kho (Còn {stock_profile.stock}, yêu cầu {item.quantity})."
-                    )
-                stock_profile.stock = max(0, stock_profile.stock - item.quantity)
-                if stock_profile.stock == 0:
-                    prod.status = "out_of_stock"
-                elif stock_profile.stock <= stock_profile.min_stock:
-                    prod.status = "low_stock"
 
     # 2. Tạo đơn hàng (Chỉ ghi các trường thuộc bảng Order gốc)
     valid_order_cols = {c.name for c in Order.__table__.columns}
@@ -540,6 +534,11 @@ def create_order(db: Session, order_in: OrderCreate, current_user: Optional[User
         new_order.requires_approval = True
         if not is_draft and new_order.status in ["pending", "confirmed"]:
             new_order.status = "pending_approval"
+
+    # Kiểm tra tồn khả dụng & Giữ chỗ tồn kho an toàn nếu KHÔNG PHẢI đơn nháp (SCRUM-504, SCRUM-505, SCRUM-506)
+    if not is_draft:
+        from app.services.inventory_reservation_service import reserve_stock_for_order
+        reserve_stock_for_order(db=db, order=new_order)
 
     db.add(new_order)
 
@@ -732,27 +731,9 @@ def submit_draft_order(
         from app.services.customer_delivery_address_service import validate_delivery_address_for_customer
         validate_delivery_address_for_customer(db, order.customer_id, order.delivery_address_id)
 
-    # 3. Trừ kho
-    for item in order.items:
-        prod = None
-        str_pid = str(item.product_id).strip()
-        if str_pid.isdigit():
-            prod = db.query(Product).filter(Product.id == int(str_pid)).first()
-        if not prod and item.sku:
-            prod = db.query(Product).filter(Product.sku == item.sku).first()
-
-        if prod:
-            stock_profile = _get_or_create_stock_profile(db, prod, default_stock=100)
-            if stock_profile.stock < item.quantity:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Sản phẩm '{prod.name}' không đủ tồn kho (Còn {stock_profile.stock}, yêu cầu {item.quantity})."
-                )
-            stock_profile.stock = max(0, stock_profile.stock - item.quantity)
-            if stock_profile.stock == 0:
-                prod.status = "out_of_stock"
-            elif stock_profile.stock <= stock_profile.min_stock:
-                prod.status = "low_stock"
+    # 3. Kiểm tra tồn khả dụng & Giữ chỗ tồn kho an toàn (SCRUM-504, SCRUM-505, SCRUM-506)
+    from app.services.inventory_reservation_service import reserve_stock_for_order
+    reserve_stock_for_order(db=db, order=order)
 
     # 4. Tăng số lần áp dụng chính sách chiết khấu
     from app.models.volume_discount import VolumeDiscountPolicy
@@ -953,23 +934,14 @@ def update_order_status(
         elif not getattr(prof, "dispatched_at", None):
             prof.dispatched_at = datetime.now(timezone.utc)
 
-    # Nếu chuyển sang hủy từ trạng thái chưa hủy, hoàn lại tồn kho
-    if new_status == "cancelled" and old_status != "cancelled":
-        for itm in order.items:
-            prod = None
-            str_pid = str(itm.product_id).strip()
-            if str_pid.isdigit():
-                prod = db.query(Product).filter(Product.id == int(str_pid)).first()
-            if not prod and itm.sku:
-                prod = db.query(Product).filter(Product.sku == itm.sku).first()
+        # Hoàn tất giữ chỗ và trừ tồn kho vật lý (SCRUM-504)
+        from app.services.inventory_reservation_service import fulfill_stock_reservations_for_order
+        fulfill_stock_reservations_for_order(db, order.id)
 
-            if prod:
-                stock_profile = _get_or_create_stock_profile(db, prod, default_stock=100)
-                stock_profile.stock += itm.quantity
-                if stock_profile.stock > stock_profile.min_stock:
-                    prod.status = "active"
-                elif stock_profile.stock > 0:
-                    prod.status = "low_stock"
+    # Nếu chuyển sang hủy từ trạng thái chưa hủy, giải phóng tồn giữ chỗ (SCRUM-504, S4-06)
+    if new_status == "cancelled" and old_status != "cancelled":
+        from app.services.inventory_reservation_service import release_stock_reservations_for_order
+        release_stock_reservations_for_order(db, order.id)
 
     order.status = new_status
     db.flush()

@@ -136,13 +136,13 @@ const productSchema = z.object({
   category: z.string().min(1, 'Vui lòng chọn danh mục'),
   categoryId: z.number().optional(),
   supplierId: z.string().min(1, 'Vui lòng chọn nhà cung cấp'),
-  costPrice: z.number().min(0, 'Giá nhập phải >= 0').optional().default(0),
+  costPrice: z.number().min(0, 'Giá nhập phải >= 0'),
   salePrice: z.number().min(0, 'Giá bán phải >= 0'),
   stock: z.number().min(0, 'Số lượng tồn kho phải >= 0'),
   minStock: z.number().min(0, 'Mức cảnh báo tồn phải >= 0'),
   unit: z.string().min(1, 'Vui lòng nhập đơn vị tính cơ sở'),
   packagingSpecification: z.string().min(1, 'Vui lòng nhập quy cách đóng gói'),
-  image: z.string().optional().default(''),
+  image: z.string(),
   description: z.string().optional(),
   status: z.enum(['active', 'low_stock', 'out_of_stock', 'inactive']),
 });
@@ -427,8 +427,8 @@ export const ProductForm: React.FC<ProductFormProps> = ({
                   } text-sm text-slate-900 dark:text-slate-100 uppercase font-mono tracking-wide focus:outline-none focus:ring-2 focus:ring-indigo-500`}
                 />
                 {(skuError || errors.sku) && (
-                  <p className="text-xs text-rose-500 mt-1 font-medium flex items-center gap-1">
-                    <span>⚠️</span> {skuError || errors.sku?.message}
+                  <p className="text-xs text-rose-500 mt-1 font-medium">
+                    {skuError || errors.sku?.message}
                   </p>
                 )}
                 <div className="mt-1.5 p-2 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 text-[11px] text-slate-500 dark:text-slate-400 flex items-start gap-1.5">
@@ -642,7 +642,7 @@ export const ProductForm: React.FC<ProductFormProps> = ({
               {/* Hướng dẫn nghiệp vụ thực tế */}
               {!isLeafSelected && selectedCatId && (
                 <div className="mt-2 p-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-xs text-amber-700 dark:text-amber-300 flex items-start gap-1.5 leading-relaxed">
-                  <span className="font-bold shrink-0">⚠️ Lưu ý nghiệp vụ:</span>
+                  <span className="font-bold shrink-0">Lưu ý nghiệp vụ:</span>
                   <span>
                     Bạn đang chọn nhóm hàng cấp cha. Theo chuẩn ERP bán lẻ & kho, bạn nên chọn <strong>Tiểu nhóm con (Cấp lá ★)</strong> để thống kê doanh số và tồn kho chính xác nhất.
                   </span>

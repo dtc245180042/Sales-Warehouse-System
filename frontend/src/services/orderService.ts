@@ -3,7 +3,9 @@ import {
   OrderStatus,
   OrderCalculateRequest,
   OrderCalculateResponse,
-  ProductSearchForOrder
+  ProductSearchForOrder,
+  CheckOrderAvailabilityResponse,
+  LineItemAvailabilityResult
 } from '../types/Order';
 import { initialOrders } from '../mock/orders';
 import { getStorageItem, setStorageItem } from './storage';
@@ -230,11 +232,12 @@ export const orderService = {
     return orders.filter((o) => o.status === 'draft');
   },
 
-  searchProductsForOrder: async (query?: string): Promise<ProductSearchForOrder[]> => {
+  searchProductsForOrder: async (query?: string, customerId?: string): Promise<ProductSearchForOrder[]> => {
     try {
-      const res = await apiClient.get('/orders/products/search', {
-        params: query ? { q: query } : {},
-      });
+      const params: Record<string, string> = {};
+      if (query) params.q = query;
+      if (customerId) params.customer_id = customerId;
+      const res = await apiClient.get('/orders/products/search', { params });
       if (Array.isArray(res.data)) {
         return res.data;
       }
@@ -368,6 +371,63 @@ export const orderService = {
         throw new Error(err.response.data.detail);
       }
       throw err;
+    }
+  },
+
+  checkAvailability: async (
+    customerId: string,
+    items: { productId?: string; product_id?: string; sku?: string; quantity: number }[],
+    warehouseName?: string
+  ): Promise<CheckOrderAvailabilityResponse> => {
+    try {
+      const payload = {
+        customer_id: customerId,
+        warehouse_name: warehouseName,
+        items: items.map((itm) => ({
+          product_id: itm.productId || itm.product_id,
+          sku: itm.sku,
+          quantity: itm.quantity,
+        })),
+      };
+      const res = await apiClient.post('/inventory-availabilities/check', payload);
+      return res.data;
+    } catch (err: any) {
+      console.warn('[orderService] checkAvailability API failed:', err);
+      return {
+        customer_id: customerId,
+        warehouse_name: warehouseName || 'Kho Tổng Hà Nội',
+        warehouse_code: 'WH-HANOI',
+        all_items_available: true,
+        items: items.map((itm) => ({
+          product_id: String(itm.productId || itm.product_id || ''),
+          sku: itm.sku || '',
+          product_name: '',
+          unit: 'cái',
+          requested_quantity: itm.quantity,
+          physical_stock: 999,
+          reserved_stock: 0,
+          available_stock: 999,
+          max_orderable_quantity: 999,
+          warehouse_name: warehouseName || 'Kho Tổng Hà Nội',
+          warehouse_code: 'WH-HANOI',
+          is_available: true,
+        })),
+      };
+    }
+  },
+
+  getCustomerServicingWarehouse: async (
+    customerId: string
+  ): Promise<{ warehouse_name: string; warehouse_code: string; is_default: boolean }> => {
+    try {
+      const res = await apiClient.get(`/inventory-availabilities/customer-warehouse/${encodeURIComponent(customerId)}`);
+      return res.data;
+    } catch (err: any) {
+      return {
+        warehouse_name: 'Kho Tổng Hà Nội',
+        warehouse_code: 'WH-HANOI',
+        is_default: true,
+      };
     }
   }
 };

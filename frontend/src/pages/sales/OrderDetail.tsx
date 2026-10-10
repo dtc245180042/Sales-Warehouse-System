@@ -184,7 +184,7 @@ export const OrderDetail: React.FC = () => {
           <ShieldAlert className="w-6 h-6 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
           <div className="flex-1 text-xs sm:text-sm">
             <h4 className="font-bold text-amber-900 dark:text-amber-100 flex items-center gap-2">
-              ⚠️ ĐƠN HÀNG CẦN PHÊ DUYỆT CÔNG NỢ (S4-02)
+              ĐƠN HÀNG CẦN PHÊ DUYỆT CÔNG NỢ
               <span className="text-xs px-2 py-0.5 rounded-full bg-amber-200 dark:bg-amber-900/60 font-semibold text-amber-800 dark:text-amber-200">
                 Vượt hạn mức tín dụng
               </span>
@@ -197,7 +197,7 @@ export const OrderDetail: React.FC = () => {
         </div>
       )}
 
-      {/* Banner Cảnh báo đại lý bị khoá giao dịch (SC-228 Subtask 6) */}
+      {/* Banner Cảnh báo đại lý bị khoá giao dịch */}
       {(order.customerIsLocked || isCustomerLocked) && (
         <div
           id="order-customer-locked-alert"
@@ -206,14 +206,14 @@ export const OrderDetail: React.FC = () => {
           <AlertCircle className="w-6 h-6 text-amber-600 shrink-0 mt-0.5" />
           <div className="flex-1 text-xs sm:text-sm">
             <h4 className="font-bold text-amber-900 dark:text-amber-100 flex items-center gap-2">
-              ⚠️ CẢNH BÁO: ĐẠI LÝ ĐANG BỊ KHOÁ GIAO DỊCH
+              CẢNH BÁO: ĐẠI LÝ ĐANG BỊ KHOÁ GIAO DỊCH
               <span className="text-xs px-2 py-0.5 rounded-full bg-amber-200 dark:bg-amber-900/60 font-semibold text-amber-800 dark:text-amber-200">
                 Đơn dở vẫn được xử lý tiếp
               </span>
             </h4>
             <p className="mt-1 text-amber-800 dark:text-amber-200">
               {order.customerLockWarning ||
-                `Đại lý '${order.customerName}' hiện đang bị khoá giao dịch. Theo quy định SC-228, đơn hàng đã tạo này vẫn được phép tiếp tục đóng gói, giao hàng hoặc hoàn tất, nhưng không thể tạo đơn mới.`}
+                `Đại lý '${order.customerName}' hiện đang bị khoá giao dịch. Theo quy định, đơn hàng đã tạo này vẫn được phép tiếp tục đóng gói, giao hàng hoặc hoàn tất, nhưng không thể tạo đơn mới.`}
             </p>
           </div>
         </div>
@@ -392,7 +392,7 @@ export const OrderDetail: React.FC = () => {
                           <span className="text-[11px] text-slate-400 font-mono">SKU: {it.sku}</span>
                           {(it.isBelowFloor || it.is_below_floor) && (
                             <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700">
-                              ⚠️ Dưới giá sàn {it.floorPrice || it.floor_price ? `(${formatCurrency(it.floorPrice || it.floor_price || 0)})` : ''}
+                              Dưới giá sàn {it.floorPrice || it.floor_price ? `(${formatCurrency(it.floorPrice || it.floor_price || 0)})` : ''}
                             </span>
                           )}
                         </div>

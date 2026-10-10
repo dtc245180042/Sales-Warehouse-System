@@ -200,13 +200,13 @@ export const OrderDetailPage: React.FC = () => {
             <div className="text-sm text-slate-700 dark:text-slate-300">
               Phương thức:{' '}
               <strong className="text-slate-900 dark:text-white">
-                {order.paymentMethod === 'cash' ? '💵 Tiền mặt' : order.paymentMethod === 'transfer' ? '🏦 Chuyển khoản' : '📱 Ví điện tử'}
+                {order.paymentMethod === 'cash' ? 'Tiền mặt' : order.paymentMethod === 'transfer' ? 'Chuyển khoản' : 'Ví điện tử'}
               </strong>
             </div>
             <div className="text-sm text-slate-700 dark:text-slate-300">
               Tình trạng:{' '}
               <span className={`font-semibold ${order.paymentStatus === 'paid' ? 'text-emerald-600' : 'text-amber-600'}`}>
-                {order.paymentStatus === 'paid' ? '✓ Đã thanh toán đầy đủ' : 'Chưa thanh toán (Công nợ)'}
+                {order.paymentStatus === 'paid' ? 'Đã thanh toán đầy đủ' : 'Chưa thanh toán (Công nợ)'}
               </span>
             </div>
             {order.notes && (

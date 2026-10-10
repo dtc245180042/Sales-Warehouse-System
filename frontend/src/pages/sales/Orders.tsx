@@ -8,6 +8,7 @@ import {
   Download,
   Calendar,
   CreditCard,
+  Printer,
 } from 'lucide-react';
 import { PageContainer } from '../../components/layout/PageContainer';
 import { DataTable, Column } from '../../components/common/DataTable';
@@ -20,6 +21,7 @@ import { orderService } from '../../services/orderService';
 import { Order, OrderStatus } from '../../types/Order';
 import { useToast } from '../../contexts/ToastContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { OrderPrintModal } from '../../components/orders/OrderPrintModal';
 
 export const Orders: React.FC = () => {
   const { showToast } = useToast();
@@ -33,6 +35,7 @@ export const Orders: React.FC = () => {
   const [search, setSearch] = useState(urlSearch);
   const [statusFilter, setStatusFilter] = useState<string>(urlStatus);
   const [cancelOrderId, setCancelOrderId] = useState<string | null>(null);
+  const [printOrder, setPrintOrder] = useState<Order | null>(null);
 
   // Đồng bộ hai chiều từ URL -> State khi người dùng nhấn Back / Forward trên trình duyệt
   useEffect(() => {
@@ -224,6 +227,13 @@ export const Orders: React.FC = () => {
           >
             <Eye className="w-4 h-4" />
           </Link>
+          <button
+            onClick={() => setPrintOrder(o)}
+            className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            title="In / Lưu PDF đơn hàng"
+          >
+            <Printer className="w-4 h-4" />
+          </button>
           {o.status !== 'cancelled' && o.status !== 'completed' && (
             <button
               onClick={() => setCancelOrderId(o.id)}
@@ -301,6 +311,13 @@ export const Orders: React.FC = () => {
         message="Bạn có chắc chắn muốn hủy đơn hàng này? Số lượng sản phẩm đã bán trong đơn sẽ được hoàn trả lại vào tồn kho."
         confirmText="Hủy đơn hàng"
         variant="danger"
+      />
+
+      <OrderPrintModal
+        isOpen={!!printOrder}
+        onClose={() => setPrintOrder(null)}
+        orderId={printOrder?.id || null}
+        orderCode={printOrder?.code}
       />
     </PageContainer>
   );

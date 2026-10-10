@@ -28,6 +28,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { useAuth } from '../../contexts/AuthContext';
 
 import { customerLockService } from '../../services/customerLockService';
+import { OrderPrintModal } from '../../components/orders/OrderPrintModal';
 
 export const OrderDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -39,6 +40,7 @@ export const OrderDetail: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
   const [isCustomerLocked, setIsCustomerLocked] = useState(false);
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
 
   const loadOrder = async () => {
     if (!id) return;
@@ -124,18 +126,10 @@ export const OrderDetail: React.FC = () => {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => window.print()}
-            leftIcon={<Printer className="w-4 h-4" />}
+            onClick={() => setIsPrintModalOpen(true)}
+            leftIcon={<Printer className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />}
           >
-            In phiếu xuất
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => showToast('Đang tạo và tải file PDF đơn hàng...', 'info')}
-            leftIcon={<FileDown className="w-4 h-4" />}
-          >
-            Xuất PDF
+            In / Lưu PDF
           </Button>
           {order.status !== 'cancelled' && order.status !== 'completed' && (
             <Button
@@ -393,6 +387,13 @@ export const OrderDetail: React.FC = () => {
         message="Bạn có chắc chắn muốn hủy đơn hàng này? Toàn bộ số lượng sản phẩm sẽ được hoàn trả về tồn kho."
         confirmText="Hủy đơn"
         variant="danger"
+      />
+
+      <OrderPrintModal
+        isOpen={isPrintModalOpen}
+        onClose={() => setIsPrintModalOpen(false)}
+        orderId={order.id}
+        orderCode={order.code}
       />
     </PageContainer>
   );

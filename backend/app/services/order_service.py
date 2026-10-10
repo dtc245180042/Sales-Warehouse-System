@@ -282,125 +282,6 @@ def calculate_order_totals(
             custom_price=float(req_price) if req_price is not None and req_price > 0 else None,
             strict_block=False
         )
-        line_discount = float(vol_calc.total_discount or 0.0)
-        total_discount += line_discount
-
-        item_responses.append({
-            "product_id": str(prod.id if prod else pid),
-            "sku": sku,
-            "name": name,
-            "unit": unit or (prod.unit if prod else "cái"),
-            "unit_price": base_price,
-            "quantity": qty,
-            "discount_amount": line_discount,
-            "discount_rate": float(vol_calc.discount_rate or 0.0),
-            "subtotal": max(0.0, line_subtotal - line_discount),
-            "applied_discount_name": vol_calc.applied_discount_policy_name
-        })
-
-    final_total = max(0.0, subtotal - total_discount)
-    return {
-        "subtotal": subtotal,
-        "discount": total_discount,
-        "total": final_total,
-        "items": item_responses
-    }
-
-
-def search_products_for_order(db: Session, query_str: Optional[str] = None) -> List[dict]:
-    """Tìm kiếm hàng hoá và trả về các đơn vị tính hợp lệ khi nhập đơn (S3-09, SCRUM-230)."""
-    query = db.query(Product).filter(or_(Product.status.ilike("active"), Product.status.is_(None)))
-    if query_str and query_str.strip():
-        s = f"%{query_str.strip()}%"
-        query = query.filter((Product.sku.ilike(s)) | (Product.name.ilike(s)))
-    products = query.limit(30).all()
-
-    p_ids = [p.id for p in products]
-    stock_map = {}
-    if p_ids:
-        sps = db.query(ProductStockProfile).filter(ProductStockProfile.product_id.in_(p_ids)).all()
-        stock_map = {sp.product_id: sp.stock for sp in sps}
-
-    results = []
-    for p in products:
-        available_units = [p.unit or "cái"]
-        if p.packaging_spec:
-            spec_lower = p.packaging_spec.lower()
-            for u in ["hộp", "thùng", "lon", "gói", "chai", "bộ", "cặp", "kg", "cái"]:
-                if u in spec_lower and u not in available_units:
-                    available_units.append(u)
-        else:
-            for default_u in ["hộp", "thùng"]:
-                if default_u not in available_units:
-                    available_units.append(default_u)
-
-        price_val = float(getattr(p, "price", 0.0) or getattr(p, "sale_price", 0.0) or 0.0)
-        if price_val <= 0.0 and getattr(p, "cost_price", None):
-            price_val = round(float(p.cost_price) * 1.2, -4)
-
-        results.append({
-            "id": p.id,
-            "sku": p.sku,
-            "name": p.name,
-            "price": price_val,
-            "sale_price": price_val,
-            "stock": stock_map.get(p.id, 100),
-            "unit": p.unit or "cái",
-            "packaging_spec": p.packaging_spec,
-            "available_units": available_units,
-        })
-    return results
-
-
-def calculate_order_totals(
-    db: Session,
-    customer_id: str,
-    items: List[Any],
-    price_list_id: Optional[int] = None,
-    current_user: Optional[User] = None
-) -> dict:
-    """Tính toán tạm thời tổng tiền hàng, chiết khấu và tổng phải thu realtime (S3-09, SCRUM-230)."""
-    from app.services.volume_discount_service import calculate_volume_discount
-    from app.models.customer import Customer
-    from app.models.price_list import PriceListItem
-
-    customer = db.query(Customer).filter((Customer.id == customer_id) | (Customer.code == customer_id)).first()
-    if not customer:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Không tìm thấy đại lý '{customer_id}'.")
-
-    subtotal = 0.0
-    total_discount = 0.0
-    item_responses = []
-
-    for item in items:
-        pid = getattr(item, "product_id", None)
-        qty = int(getattr(item, "quantity", 1) or 1)
-        req_price = getattr(item, "price", None)
-        unit = getattr(item, "unit", "cái")
-
-        prod = None
-        str_pid = str(pid).strip()
-        if str_pid.isdigit():
-            prod = db.query(Product).filter(Product.id == int(str_pid)).first()
-        if not prod:
-            prod = db.query(Product).filter((Product.id == str_pid) | (Product.sku == str_pid) | (Product.name == str_pid)).first()
-
-        sku = prod.sku if prod else ""
-        name = prod.name if prod else f"Sản phẩm #{pid}"
-        prod_price = float(getattr(prod, "price", 0.0) or getattr(prod, "sale_price", 0.0) or 0.0)
-        if prod_price <= 0.0 and prod and getattr(prod, "cost_price", None):
-            prod_price = round(float(prod.cost_price) * 1.2, -4)
-        base_price = float(req_price if req_price is not None and req_price > 0 else prod_price)
-
-        if price_list_id:
-            pli = db.query(PriceListItem).filter(
-                PriceListItem.price_list_id == price_list_id,
-                (PriceListItem.product_id == prod.id if prod else False)
-            ).first()
-            if pli and pli.sale_price:
-                base_price = float(pli.sale_price)
-
-        line_subtotal = base_price * qty
 
         line_subtotal = pricing_res.applied_unit_price * qty
         line_discount = pricing_res.total_discount
@@ -470,9 +351,6 @@ def search_products_for_order(
                 if default_u not in available_units:
                     available_units.append(default_u)
 
-        price_val = float(getattr(p, "price", 0.0) or getattr(p, "sale_price", 0.0) or 0.0)
-        if price_val <= 0.0 and getattr(p, "cost_price", None):
-            price_val = round(float(p.cost_price) * 1.2, -4)
         avail_info = calculate_sku_availability(
             db=db,
             customer_id=customer_id,
@@ -485,9 +363,6 @@ def search_products_for_order(
             "id": p.id,
             "sku": p.sku,
             "name": p.name,
-            "price": price_val,
-            "sale_price": price_val,
-            "stock": stock_map.get(p.id, 100),
             "price": item_price,
             "sale_price": item_price,
             "stock": avail_info.available_stock,
@@ -564,28 +439,6 @@ def create_order(db: Session, order_in: OrderCreate, current_user: Optional[User
     requires_approval = False
     eval_res = None
     if not is_draft:
-        for item in order_in.items:
-            prod = None
-            str_pid = str(item.product_id).strip()
-            if str_pid.isdigit():
-                prod = db.query(Product).filter(Product.id == int(str_pid)).first()
-            if not prod:
-                prod = db.query(Product).filter((Product.id == str_pid) | (Product.sku == str_pid)).first()
-            if not prod and item.sku:
-                prod = db.query(Product).filter(Product.sku == item.sku).first()
-
-            if prod:
-                stock_profile = _get_or_create_stock_profile(db, prod, default_stock=100)
-                if stock_profile.stock < item.quantity:
-                    raise HTTPException(
-                        status_code=status.HTTP_400_BAD_REQUEST,
-                        detail=f"Sản phẩm '{prod.name}' không đủ tồn kho (Còn {stock_profile.stock}, yêu cầu {item.quantity})."
-                    )
-                stock_profile.stock = max(0, stock_profile.stock - item.quantity)
-                if stock_profile.stock == 0:
-                    prod.status = "out_of_stock"
-                elif stock_profile.stock <= stock_profile.min_stock:
-                    prod.status = "low_stock"
         from app.services.order_approval_service import evaluate_order_violations
         computed_total = order_in.total or sum((itm.price * itm.quantity) for itm in order_in.items)
         eval_res = evaluate_order_violations(
@@ -638,10 +491,6 @@ def create_order(db: Session, order_in: OrderCreate, current_user: Optional[User
         if credit_check.get("requires_approval"):
             order_data["status"] = "pending_approval"
             order_data["requires_approval"] = True
-            order_data["approval_reason"] = credit_check.get("approval_reason")
-        else:
-            order_data["requires_approval"] = False
-            order_data["approval_reason"] = None
             credit_approval_reason = credit_check.get("approval_reason")
             order_data["approval_reason"] = credit_approval_reason
 
@@ -958,7 +807,6 @@ def submit_draft_order(
         cus.total_spent += float(order.total or 0.0)
         cus.last_order_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
-    # 6. S4-02: Kiểm tra hạn mức công nợ & nợ quá hạn khi chốt đơn nháp (SCRUM-496, SCRUM-497, SCRUM-498)
     # 6. Kiểm tra bảng giá hiệu lực và giá sàn khi chốt đơn (SCRUM-490, SCRUM-492)
     from app.services.order_pricing_service import lookup_line_pricing
     cust_obj = db.query(Customer).filter(
@@ -997,10 +845,6 @@ def submit_draft_order(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=credit_check["error_message"]
         )
-    if credit_check.get("requires_approval"):
-        order.status = "pending_approval"
-        order.requires_approval = True
-        order.approval_reason = credit_check.get("approval_reason")
 
     all_approval_reasons = list(subfloor_reasons)
     if credit_check.get("requires_approval") and credit_check.get("approval_reason"):
@@ -1298,14 +1142,12 @@ def update_order_status(
     if current_user:
         u_role = (current_user.role or "").strip().lower()
 
-        # 1. Duyệt đơn hàng vượt hạn mức công nợ (pending_approval -> confirmed / approved) (S4-05)
         # 1. Duyệt đơn hàng vượt hạn mức công nợ hoặc dưới sàn (pending_approval -> confirmed / approved) (S4-05)
         if old_status == "pending_approval" and new_status in ["confirmed", "approved"]:
             allowed_approvers = ["admin", "sales manager", "director", "accountant", "manager"]
             if u_role not in allowed_approvers:
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Chỉ Quản lý kinh doanh (Sales Manager), Ban giám đốc hoặc Kế toán mới có quyền phê duyệt đơn hàng vượt hạn mức công nợ."
                     detail="Chỉ Quản lý kinh doanh (Sales Manager), Ban giám đốc hoặc Kế toán mới có quyền phê duyệt đơn hàng vượt hạn mức công nợ hoặc dưới giá sàn."
                 )
 
@@ -1354,8 +1196,6 @@ def update_order_status(
                         detail="Không thể hủy đơn hàng đang giao hoặc đã hoàn thành."
                     )
 
-    # S4-02: Khi duyệt đơn từ pending_approval sang confirmed / pending / shipping
-    if old_status == "pending_approval" and new_status in ["confirmed", "pending", "shipping", "completed"]:
     # S4-02: Khi duyệt đơn từ pending_approval sang confirmed / pending / shipping / completed / approved
     if old_status == "pending_approval" and new_status in ["confirmed", "pending", "shipping", "completed", "approved"]:
         order.requires_approval = False
@@ -1369,7 +1209,6 @@ def update_order_status(
         if unpaid > 0 and order.customer_id:
             from app.services.customer_credit_service import get_or_create_credit_profile, check_credit_for_dispatch
             # Khóa dòng bi quan (Pessimistic Lock) giữ khóa đến hết transaction để chống Race Condition khi xuất kho đồng thời
-            # Nếu đơn hàng đã được phê duyệt vượt hạn mức bởi Quản lý kinh doanh (S4-02, S4-05)
             is_approved = bool(order.approval_reason) or (old_status == "pending_approval" and new_status in ["confirmed", "shipping", "completed"])
             cred_prof = get_or_create_credit_profile(db=db, customer_id=order.customer_id, for_update=True)
             from app.models.order_approval import OrderApprovalRequest

@@ -1941,7 +1941,6 @@ export const CreateOrder: React.FC = () => {
               onClick={handleSubmitOrder}
               disabled={isSubmitting || isSavingDraft || items.length === 0 || Boolean(creditStatus?.isBlocked) || hasExceedingStock}
               className={`flex items-center gap-1.5 px-3.5 py-2.5 text-xs font-bold rounded-xl text-white shadow-md transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed ${
-                creditStatus?.isBlocked
                 items.length === 0
                   ? 'bg-slate-400 dark:bg-slate-700'
                   : hasExceedingStock
@@ -1953,7 +1952,6 @@ export const CreateOrder: React.FC = () => {
                   : 'bg-blue-600 hover:bg-blue-700 shadow-blue-500/20'
               }`}
               title={
-                creditStatus?.isBlocked
                 items.length === 0
                   ? 'Vui lòng thêm sản phẩm vào mục (2) Mặt Hàng để chốt đơn'
                   : hasExceedingStock
@@ -1965,7 +1963,6 @@ export const CreateOrder: React.FC = () => {
                   : 'Chốt đơn hàng'
               }
             >
-              {creditStatus?.isBlocked ? (
               {items.length === 0 ? (
                 <>
                   <Boxes className="w-3.5 h-3.5" />

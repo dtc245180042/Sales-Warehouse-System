@@ -563,8 +563,8 @@ def create_order(db: Session, order_in: OrderCreate, current_user: Optional[User
         if not is_draft and new_order.status in ["pending", "confirmed"]:
             new_order.status = "pending_approval"
 
-    # Kiểm tra tồn khả dụng & Giữ chỗ tồn kho an toàn nếu KHÔNG PHẢI đơn nháp (SCRUM-504, SCRUM-505, SCRUM-506)
-    if not is_draft:
+    # Kiểm tra tồn khả dụng & Giữ chỗ tồn kho an toàn nếu KHÔNG PHẢI đơn nháp và KHÔNG PHẢI đơn chờ duyệt ngoại lệ (SCRUM-504, SCRUM-237)
+    if not is_draft and not requires_approval and new_order.status != "pending_approval":
         from app.services.inventory_reservation_service import reserve_stock_for_order
         reserve_stock_for_order(db=db, order=new_order)
 

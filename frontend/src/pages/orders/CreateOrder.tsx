@@ -985,6 +985,52 @@ export const CreateOrder: React.FC = () => {
                   )}
                 </div>
               )}
+
+              {/* Gợi ý chọn nhanh đại lý để test SCRUM-501 */}
+              <div className="flex items-center gap-1.5 flex-wrap pt-2">
+                <span className="text-[11px] text-slate-400 font-medium">Test nhanh:</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const match = customers.find((c) => c.id === 'CUS-ROLL-2' || c.code === 'CUS-ROLL-2');
+                    if (match) setSelectedCustomer(match);
+                  }}
+                  className="px-2 py-1 text-xs font-semibold rounded-lg bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 hover:bg-rose-100 active:scale-95 transition-all"
+                  title="Test kịch bản nợ quá hạn -> Bị chặn tạo đơn"
+                >
+                  🚫 CUS-ROLL-2 (Bị chặn quá hạn)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const match = customers.find((c) => c.id === 'CUS-ROLL-1' || c.code === 'CUS-ROLL-1');
+                    if (match) setSelectedCustomer(match);
+                  }}
+                  className="px-2 py-1 text-xs font-semibold rounded-lg bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 hover:bg-amber-100 active:scale-95 transition-all"
+                  title="Test kịch bản vượt hạn mức công nợ -> Cần duyệt"
+                >
+                  ⚠️ CUS-ROLL-1 (Vượt hạn mức)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const match = customers.find((c) => c.id === 'CUS-003' || c.code === 'KH-1003');
+                    if (match) setSelectedCustomer(match);
+                  }}
+                  className="px-2 py-1 text-xs font-semibold rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 active:scale-95 transition-all"
+                  title="Test kịch bản công nợ an toàn trong hạn mức"
+                >
+                  ✓ CUS-003 (F-Soft • An toàn)
+                </button>
+              </div>
+
+              {/* Hướng dẫn khi chưa chọn đại lý */}
+              <div className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-dashed border-slate-200 dark:border-slate-700 text-[11px] text-slate-500">
+                <CreditCard className="w-4 h-4 text-blue-500 shrink-0" />
+                <span>
+                  Chọn đại lý ở trên để hệ thống tự động kiểm tra: <strong>Hạn mức công nợ</strong>, <strong>Cảnh báo quá hạn</strong> & <strong>Bảng giá áp dụng (SCRUM-501)</strong>.
+                </span>
+              </div>
             </div>
           ) : (
             <div className="p-3 bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200/70 dark:border-blue-800/60 rounded-xl space-y-2">

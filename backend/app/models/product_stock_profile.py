@@ -40,3 +40,19 @@ class ProductStockProfile(Base):
         onupdate=lambda: datetime.now(timezone.utc),
         nullable=False
     )
+
+
+# Đảm bảo các cột mới tự động tồn tại trong CSDL hiện hữu
+try:
+    from app.core.database import engine
+    from sqlalchemy import inspect, text
+    with engine.connect() as _conn:
+        _cols = [c["name"] for c in inspect(_conn).get_columns("product_stock_profiles")]
+        if _cols:
+            if "physical_stock" not in _cols:
+                _conn.execute(text("ALTER TABLE product_stock_profiles ADD COLUMN physical_stock INTEGER DEFAULT 0"))
+            if "reserved_stock" not in _cols:
+                _conn.execute(text("ALTER TABLE product_stock_profiles ADD COLUMN reserved_stock INTEGER DEFAULT 0"))
+            _conn.commit()
+except Exception:
+    pass

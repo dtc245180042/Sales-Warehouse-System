@@ -27,6 +27,10 @@ from app.schemas.portal import (
     PortalCartItemCalculated,
     PortalOrderCreateRequest,
     PortalOrderResponse,
+    PortalOrderItemResponse,
+    PortalOrderListItemResponse,
+    PortalOrderListPaginationResponse,
+    PortalOrderDetailResponse,
 )
 from app.services.volume_discount_service import calculate_volume_discount
 
@@ -558,3 +562,163 @@ def create_portal_order(
 
     db.commit()
     return res_dict
+
+
+# ==============================================================================
+# NGHIỆP VỤ THEO DÕI ĐƠN HÀNG DÀNH CHO ĐẠI LÝ (S5-01 / SC-243)
+# ==============================================================================
+
+def get_portal_orders(
+    db: Session,
+    customer: Customer,
+    status_filter: Optional[str] = None,
+    page: int = 1,
+    limit: int = 20,
+) -> PortalOrderListPaginationResponse:
+    """
+    Lấy danh sách đơn hàng chỉ thuộc về chính đại lý đăng nhập (S5-01 / SC-243).
+    - Ràng buộc cứng theo customer_id (chống IDOR).
+    - Trả về mã đơn, trạng thái, ngày giao dự kiến, tổng tiền, số lượng mặt hàng.
+    - Hỗ trợ lọc theo trạng thái và phân trang.
+    """
+    query = db.query(Order).filter(Order.customer_id == customer.id)
+    
+    if status_filter and status_filter.strip():
+        query = query.filter(Order.status == status_filter.strip())
+    
+    total = query.count()
+    orders = query.order_by(Order.created_at.desc()).offset((page - 1) * limit).limit(limit).all()
+
+    items: List[PortalOrderListItemResponse] = []
+    for o in orders:
+        # Lấy thông tin ngày giao dự kiến từ OrderDeliveryProfile
+        delivery_prof = db.query(OrderDeliveryProfile).filter(
+            OrderDeliveryProfile.order_id == o.id
+        ).first()
+        expected_delivery_date = delivery_prof.expected_delivery_date if delivery_prof else None
+
+        # Kiểm tra xem có dòng hàng nào bị giao thiếu không
+        has_short = False
+        for it in (o.items or []):
+            if it.delivered_quantity is not None and it.delivered_quantity < (it.quantity or 0):
+                has_short = True
+                break
+
+        created_at_val = o.created_at.isoformat() if hasattr(o.created_at, "isoformat") else str(o.created_at or "")
+        items.append(
+            PortalOrderListItemResponse(
+                id=o.id,
+                code=o.code or o.id,
+                customer_id=o.customer_id,
+                status=o.status or "pending",
+                total=float(o.total or 0.0),
+                subtotal=float(o.subtotal or 0.0),
+                discount=float(o.discount or 0.0),
+                payment_status=o.payment_status or "unpaid",
+                expected_delivery_date=expected_delivery_date,
+                created_at=created_at_val,
+                items_count=len(o.items) if o.items else 0,
+                has_short_delivery=has_short,
+            )
+        )
+
+    return PortalOrderListPaginationResponse(
+        items=items,
+        total=total,
+        page=page,
+        limit=limit,
+    )
+
+
+def get_portal_order_detail(
+    db: Session,
+    customer: Customer,
+    order_id: str,
+) -> PortalOrderDetailResponse:
+    """
+    Lấy chi tiết đơn hàng của đại lý kèm danh sách dòng hàng và số lượng thực giao (S5-01 / SC-243).
+    - Ràng buộc tầng API: Nếu đơn không thuộc đại lý -> trả về 403 hoặc 404 (Không tìm thấy hoặc không có quyền).
+    - Đối chiếu số lượng đặt vs số lượng thực giao để đại lý theo dõi trường hợp giao thiếu.
+    """
+    order = db.query(Order).filter(
+        (Order.id == order_id) | (Order.code == order_id)
+    ).first()
+
+    if not order:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Không tìm thấy đơn hàng yêu cầu."
+        )
+
+    # Kiểm soát bảo mật chống IDOR: Chỉ cho phép đại lý sở hữu đơn hàng xem (Subtask 5)
+    if order.customer_id != customer.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Bạn không có quyền truy cập thông tin đơn hàng của đại lý khác."
+        )
+
+    # Lấy thông tin giao hàng từ OrderDeliveryProfile
+    delivery_prof = db.query(OrderDeliveryProfile).filter(
+        OrderDeliveryProfile.order_id == order.id
+    ).first()
+
+    expected_delivery_date = delivery_prof.expected_delivery_date if delivery_prof else None
+    receiver_name = delivery_prof.delivery_receiver_name if delivery_prof else order.customer_name
+    receiver_phone = delivery_prof.delivery_phone if delivery_prof else order.customer_phone
+    receiver_address = delivery_prof.delivery_address if delivery_prof else order.customer_address
+    delivery_notes = delivery_prof.delivery_notes if delivery_prof else order.note
+
+    item_responses: List[PortalOrderItemResponse] = []
+    has_order_short_delivery = False
+
+    for it in (order.items or []):
+        qty = it.quantity or 0
+        deliv_qty = it.delivered_quantity
+        is_short = (deliv_qty is not None and deliv_qty < qty)
+        short_qty = max(0, qty - deliv_qty) if is_short else 0
+        if is_short:
+            has_order_short_delivery = True
+
+        item_responses.append(
+            PortalOrderItemResponse(
+                id=it.id,
+                product_id=str(it.product_id),
+                sku=it.sku,
+                name=it.name,
+                unit=it.unit or "cái",
+                price=float(it.price or 0.0),
+                quantity=qty,
+                delivered_quantity=deliv_qty,
+                is_short_delivered=is_short,
+                short_delivered_quantity=short_qty,
+                discount=float(it.discount or 0.0),
+                subtotal=float(it.subtotal or 0.0),
+            )
+        )
+
+    created_at_val = order.created_at.isoformat() if hasattr(order.created_at, "isoformat") else str(order.created_at or "")
+    updated_at_val = order.updated_at.isoformat() if hasattr(order.updated_at, "isoformat") else str(order.updated_at or "")
+
+    return PortalOrderDetailResponse(
+        id=order.id,
+        code=order.code or order.id,
+        customer_id=order.customer_id,
+        customer_name=order.customer_name,
+        status=order.status or "pending",
+        payment_method=order.payment_method or "transfer",
+        payment_status=order.payment_status or "unpaid",
+        subtotal=float(order.subtotal or 0.0),
+        discount=float(order.discount or 0.0),
+        tax=float(order.tax or 0.0),
+        total=float(order.total or 0.0),
+        paid_amount=float(order.paid_amount or 0.0),
+        delivery_receiver_name=receiver_name,
+        delivery_phone=receiver_phone,
+        delivery_address=receiver_address,
+        delivery_notes=delivery_notes,
+        expected_delivery_date=expected_delivery_date,
+        created_at=created_at_val,
+        updated_at=updated_at_val,
+        items=item_responses,
+        has_short_delivery=has_order_short_delivery,
+    )

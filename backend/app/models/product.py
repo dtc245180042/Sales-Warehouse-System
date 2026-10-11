@@ -55,3 +55,21 @@ class Product(Base):
 
     def __repr__(self):
         return f"<Product id={self.id} sku={self.sku} name={self.name} category_id={self.category_id} status={self.status}>"
+
+
+# Đảm bảo các cột mới tự động tồn tại trong CSDL hiện hữu
+try:
+    from app.core.database import engine
+    from sqlalchemy import inspect, text
+    with engine.connect() as _conn:
+        _cols = [c["name"] for c in inspect(_conn).get_columns("products")]
+        if _cols:
+            if "sale_price" not in _cols:
+                _conn.execute(text("ALTER TABLE products ADD COLUMN sale_price FLOAT DEFAULT 0.0"))
+            if "stock" not in _cols:
+                _conn.execute(text("ALTER TABLE products ADD COLUMN stock INTEGER DEFAULT 100"))
+            if "min_stock" not in _cols:
+                _conn.execute(text("ALTER TABLE products ADD COLUMN min_stock INTEGER DEFAULT 10"))
+            _conn.commit()
+except Exception:
+    pass

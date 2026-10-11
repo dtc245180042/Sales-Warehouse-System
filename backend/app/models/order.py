@@ -105,6 +105,9 @@ class OrderItem(Base):
     discount_rate = Column(Numeric(5, 2), nullable=True)      # % chiết khấu nếu áp dụng PERCENT
     discount_amount = Column(BigInteger, nullable=True)        # Tiền chiết khấu VND nếu áp dụng FIXED_AMOUNT
 
+    # Số lượng thực giao nếu giao thiếu hoặc giao chưa đủ (S5-01 / SC-243)
+    delivered_quantity = Column(Integer, nullable=True, default=None)
+
     order = relationship("Order", back_populates="items")
 
 
@@ -129,6 +132,8 @@ try:
                 _conn.execute(text("ALTER TABLE order_items ADD COLUMN floor_price FLOAT"))
             if "is_below_floor" not in _cols:
                 _conn.execute(text("ALTER TABLE order_items ADD COLUMN is_below_floor BOOLEAN DEFAULT 0"))
+            if "delivered_quantity" not in _cols:
+                _conn.execute(text("ALTER TABLE order_items ADD COLUMN delivered_quantity INTEGER"))
             _conn.commit()
 
         _order_cols = [c["name"] for c in inspect(_conn).get_columns("orders")]

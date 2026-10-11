@@ -14,6 +14,8 @@ from app.schemas.portal import (
     PortalCartCalculateResponse,
     PortalOrderCreateRequest,
     PortalOrderResponse,
+    PortalOrderListPaginationResponse,
+    PortalOrderDetailResponse,
 )
 from app.schemas.customer_delivery_address import DeliveryAddressResponse
 from app.services import portal_service
@@ -134,3 +136,49 @@ def create_portal_order(
     if result.pop("_is_replay", False):
         response.status_code = status.HTTP_200_OK
     return result
+
+
+@router.get(
+    "/orders",
+    response_model=PortalOrderListPaginationResponse,
+    summary="Danh sách đơn hàng của đại lý (S5-01 / SC-243)"
+)
+def get_portal_orders(
+    status: Optional[str] = Query(None, description="Lọc theo trạng thái đơn hàng (pending, confirmed, shipping, completed, cancelled)"),
+    page: int = Query(1, ge=1, description="Số trang hiển thị"),
+    limit: int = Query(20, ge=1, le=100, description="Số lượng mỗi trang"),
+    db: Session = Depends(lay_phien_db),
+    current_customer: Customer = Depends(lay_dai_ly_hien_tai),
+):
+    """
+    Theo dõi danh sách đơn hàng của đại lý kèm trạng thái, ngày giao dự kiến và tổng tiền.
+    Áp dụng kiểm soát dữ liệu: Chỉ thấy đơn hàng của chính đại lý đăng nhập.
+    """
+    return portal_service.get_portal_orders(
+        db=db,
+        customer=current_customer,
+        status_filter=status,
+        page=page,
+        limit=limit,
+    )
+
+
+@router.get(
+    "/orders/{order_id}",
+    response_model=PortalOrderDetailResponse,
+    summary="Chi tiết đơn hàng kèm số lượng thực giao (S5-01 / SC-243)"
+)
+def get_portal_order_detail(
+    order_id: str,
+    db: Session = Depends(lay_phien_db),
+    current_customer: Customer = Depends(lay_dai_ly_hien_tai),
+):
+    """
+    Xem chi tiết dòng hàng của đơn và số lượng thực giao trong trường hợp giao thiếu hoặc giao chưa đủ.
+    Áp dụng kiểm soát dữ liệu: Từ chối nếu truy cập đơn của đại lý khác (chống IDOR).
+    """
+    return portal_service.get_portal_order_detail(
+        db=db,
+        customer=current_customer,
+        order_id=order_id,
+    )

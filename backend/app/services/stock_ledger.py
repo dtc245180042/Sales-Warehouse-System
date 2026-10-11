@@ -11,10 +11,11 @@ from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import HTTPException, status
-from sqlalchemy import func, or_
+from sqlalchemy import func, or_, desc, and_, case
 from sqlalchemy.orm import Session
 
 from app.core.database import la_sqlite
+from app.models.auth import User
 from app.models.inventory import InventoryHistory
 from app.models.product import Product
 from app.models.product_stock_profile import ProductStockProfile
@@ -198,8 +199,11 @@ def _ensure_default_warehouse_backfilled(
         old_profile = db.query(ProductStockProfile).filter(
             ProductStockProfile.product_id == product_id
         ).first()
+        prod = db.query(Product).filter(Product.id == product_id).first()
+        prod_min = prod.min_stock if prod and prod.min_stock is not None else None
+        prof_min = old_profile.min_stock if old_profile and old_profile.min_stock is not None else None
+        init_min = int(prof_min if prof_min is not None else (prod_min if prod_min is not None else 10))
         if old_profile:
-            init_min = int(old_profile.min_stock if old_profile.min_stock is not None else 10)
             init_physical = int(
                 old_profile.physical_stock
                 if old_profile.physical_stock is not None
@@ -239,12 +243,14 @@ def _get_or_create_stock_row(
 
     stock_row = query.first()
     if not stock_row:
+        prod = db.query(Product).filter(Product.id == product_id).first()
+        init_min = int(prod.min_stock if prod and prod.min_stock is not None else 10)
         stock_row = WarehouseStock(
             product_id=product_id,
             sku=sku,
             warehouse_id=warehouse_id,
             physical_stock=0,
-            min_stock=10,
+            min_stock=init_min,
         )
         db.add(stock_row)
         db.flush()
@@ -496,7 +502,11 @@ def get_sku_ledger_summary(
         db, product_id, product.sku, wh_name
     )
     available = max(0, physical - reserved)
-    min_stk = int(stock_row.min_stock if stock_row.min_stock is not None else 10)
+
+    prod_min = int(product.min_stock) if product.min_stock is not None else 10
+    min_stk = int(stock_row.min_stock) if stock_row.min_stock is not None else prod_min
+    if stock_row.min_stock == 10 and prod_min != 10:
+        min_stk = prod_min
 
     # Dấu nhỏ hơn (<) theo đúng văn bản nghiệm thu S5-09 AC-2
     is_low_stock = bool(min_stk > 0 and available < min_stk)
@@ -530,11 +540,56 @@ def get_ledger_pagination(
     page: int = 1,
     limit: int = 50,
 ) -> Dict[str, Any]:
-    """Lấy danh sách sổ tồn kho 3 cột có phân trang và bộ lọc."""
+    """Lấy danh sách sổ tồn kho 3 cột có phân trang và bộ lọc tối ưu bằng SQL."""
     target_wh_id = warehouse_id if warehouse_id and warehouse_id > 0 else 1
     wh_code, wh_name = resolve_warehouse(db, target_wh_id)
 
-    query = db.query(Product).filter(Product.status == "ACTIVE")
+    # 1. Subquery tính tổng reserved_stock đang active theo warehouse
+    res_sub = (
+        db.query(
+            StockReservation.product_id.label("prod_id"),
+            func.coalesce(func.sum(StockReservation.reserved_quantity), 0).label("reserved_qty"),
+        )
+        .filter(
+            StockReservation.status == "active",
+            StockReservation.warehouse == wh_name,
+        )
+        .group_by(StockReservation.product_id)
+        .subquery()
+    )
+
+    # 2. Các biểu thức tính toán chuẩn mực
+    physical_expr = func.coalesce(WarehouseStock.physical_stock, 0)
+    reserved_expr = func.coalesce(res_sub.c.reserved_qty, 0)
+    avail_diff = physical_expr - reserved_expr
+    available_expr = case(
+        (avail_diff > 0, avail_diff),
+        else_=0
+    )
+    min_expr = func.coalesce(WarehouseStock.min_stock, Product.min_stock, 10)
+
+    # 3. Truy vấn kết hợp
+    query = (
+        db.query(
+            Product,
+            WarehouseStock,
+            reserved_expr.label("reserved_stock"),
+            available_expr.label("available_stock"),
+            min_expr.label("computed_min_stock"),
+        )
+        .outerjoin(
+            WarehouseStock,
+            and_(
+                WarehouseStock.product_id == Product.id,
+                WarehouseStock.warehouse_id == target_wh_id,
+            ),
+        )
+        .outerjoin(
+            res_sub,
+            res_sub.c.prod_id == Product.id,
+        )
+        .filter(Product.status == "ACTIVE")
+    )
 
     if category_id:
         query = query.filter(Product.category_id == category_id)
@@ -543,25 +598,41 @@ def get_ledger_pagination(
         kw = f"%{search.strip()}%"
         query = query.filter(or_(Product.sku.ilike(kw), Product.name.ilike(kw)))
 
-    total_products = query.count()
-    products = query.order_by(Product.name.asc()).offset((page - 1) * limit).limit(limit).all()
+    if stock_status == "out_of_stock":
+        query = query.filter(available_expr <= 0)
+    elif stock_status == "in_stock":
+        query = query.filter(available_expr > 0)
+    elif stock_status == "low_stock":
+        query = query.filter(and_(min_expr > 0, available_expr < min_expr))
+
+    total = query.count()
+    rows = query.order_by(Product.name.asc()).offset((page - 1) * limit).limit(limit).all()
 
     items = []
-    for prod in products:
-        summary = get_sku_ledger_summary(db, product_id=prod.id, warehouse_id=target_wh_id)
-
-        if stock_status == "out_of_stock" and summary["available_stock"] > 0:
-            continue
-        elif stock_status == "low_stock" and not summary["is_low_stock"]:
-            continue
-        elif stock_status == "in_stock" and summary["available_stock"] <= 0:
-            continue
-
-        items.append(summary)
+    for prod, ws, res_qty, avail_qty, min_val in rows:
+        phys_qty = int(ws.physical_stock if ws and ws.physical_stock is not None else 0)
+        res_int = int(res_qty or 0)
+        avail_int = int(avail_qty or 0)
+        min_int = int(min_val or 10)
+        is_low = bool(min_int > 0 and avail_int < min_int)
+        items.append({
+            "product_id": prod.id,
+            "sku": prod.sku,
+            "product_name": prod.name,
+            "unit": prod.unit or "cái",
+            "warehouse_id": target_wh_id,
+            "warehouse_code": wh_code,
+            "warehouse_name": wh_name,
+            "physical_stock": phys_qty,
+            "reserved_stock": res_int,
+            "available_stock": avail_int,
+            "min_stock": min_int,
+            "is_low_stock": is_low,
+        })
 
     return {
         "items": items,
-        "total": total_products,
+        "total": total,
         "page": page,
         "limit": limit,
         "warehouse_id": target_wh_id,
@@ -602,4 +673,153 @@ def check_ledger_drift(db: Session) -> List[Dict[str, Any]]:
             })
 
     return drift_items
+
+
+# ==============================================================================
+# HÀM 4 - TRUY VẤN LỊCH SỬ THẺ KHO CHI TIẾT (MOVEMENT ENTRIES)
+# ==============================================================================
+def get_ledger_entries_pagination(
+    db: Session,
+    *,
+    page: int = 1,
+    size: int = 20,
+    warehouse_id: Optional[int] = None,
+    product_id: Optional[str] = None,
+    movement_type: Optional[str] = None,
+    reference_code: Optional[str] = None,
+    search: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Lấy danh sách các bút toán biến động thẻ kho có phân trang và bộ lọc."""
+    query = db.query(StockLedgerEntry)
+
+    if warehouse_id is not None and warehouse_id > 0:
+        query = query.filter(StockLedgerEntry.warehouse_id == warehouse_id)
+
+    if product_id:
+        query = query.filter(StockLedgerEntry.product_id == product_id.strip())
+
+    if movement_type:
+        query = query.filter(StockLedgerEntry.movement_type == movement_type.strip().upper())
+
+    if reference_code:
+        query = query.filter(StockLedgerEntry.reference_code.ilike(f"%{reference_code.strip()}%"))
+
+    if search and search.strip():
+        kw = f"%{search.strip()}%"
+        query = query.filter(
+            or_(
+                StockLedgerEntry.reference_code.ilike(kw),
+                StockLedgerEntry.sku.ilike(kw),
+                StockLedgerEntry.product_id.ilike(kw),
+                StockLedgerEntry.note.ilike(kw),
+            )
+        )
+
+    total = query.count()
+    entries = query.order_by(desc(StockLedgerEntry.created_at)).offset((page - 1) * size).limit(size).all()
+
+    items = []
+    prod_cache: Dict[str, Optional[str]] = {}
+    user_cache: Dict[int, str] = {}
+    wh_cache: Dict[int, str] = {}
+
+    for e in entries:
+        if e.warehouse_id not in wh_cache:
+            _, wh_name = resolve_warehouse(db, e.warehouse_id)
+            wh_cache[e.warehouse_id] = wh_name
+        wh_name = wh_cache[e.warehouse_id]
+
+        if e.product_id not in prod_cache:
+            p = db.query(Product).filter(Product.id == e.product_id).first()
+            prod_cache[e.product_id] = p.name if p else None
+        p_name = prod_cache[e.product_id]
+
+        if e.performer_id not in user_cache:
+            u = db.query(User).filter(User.id == e.performer_id).first()
+            user_cache[e.performer_id] = (u.full_name or u.username) if u else f"User #{e.performer_id}"
+        u_name = user_cache[e.performer_id]
+
+        items.append({
+            "id": e.id,
+            "idempotency_key": e.idempotency_key,
+            "reference_code": e.reference_code,
+            "line_ref": e.line_ref,
+            "movement_type": e.movement_type,
+            "product_id": e.product_id,
+            "product_name": p_name,
+            "sku": e.sku,
+            "warehouse_id": e.warehouse_id,
+            "warehouse_name": wh_name,
+            "quantity_base": e.quantity_base,
+            "previous_physical": e.previous_physical,
+            "new_physical": e.new_physical,
+            "performer_id": e.performer_id,
+            "performer_name": u_name,
+            "note": e.note,
+            "created_at": e.created_at,
+        })
+
+    total_pages = max(1, (total + size - 1) // size)
+    return {
+        "items": items,
+        "total": total,
+        "page": page,
+        "size": size,
+        "total_pages": total_pages,
+    }
+
+
+def get_product_stock_card(
+    db: Session,
+    product_id: str,
+    *,
+    warehouse_id: Optional[int] = None,
+    page: int = 1,
+    size: int = 20,
+) -> Dict[str, Any]:
+    """Thẻ kho tổng hợp chi tiết cho 1 SKU cụ thể (gồm số dư 3 cột và lịch sử biến động)."""
+    product = db.query(Product).filter(Product.id == product_id).first()
+    if not product:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Không tìm thấy sản phẩm với mã '{product_id}'.",
+        )
+
+    # Lấy số dư các kho
+    target_whs = [warehouse_id] if warehouse_id and warehouse_id > 0 else list(FALLBACK_WAREHOUSE_MAP.keys())
+    balances = []
+    for wid in target_whs:
+        sum_data = get_sku_ledger_summary(db, product_id=product_id, warehouse_id=wid)
+        balances.append({
+            "product_id": product.id,
+            "sku": product.sku,
+            "product_name": product.name,
+            "category": product.category,
+            "unit": product.unit or "cái",
+            "warehouse_id": wid,
+            "warehouse_name": sum_data["warehouse_name"],
+            "physical_stock": sum_data["physical_stock"],
+            "reserved_stock": sum_data["reserved_stock"],
+            "available_stock": sum_data["available_stock"],
+            "min_stock": sum_data["min_stock"],
+            "is_low_stock": sum_data["is_low_stock"],
+        })
+
+    # Lấy danh sách lịch sử biến động
+    entries_res = get_ledger_entries_pagination(
+        db,
+        page=page,
+        size=size,
+        warehouse_id=warehouse_id,
+        product_id=product_id,
+    )
+
+    return {
+        "product_id": product.id,
+        "sku": product.sku,
+        "product_name": product.name,
+        "unit": product.unit or "cái",
+        "balances": balances,
+        "entries": entries_res,
+    }
 

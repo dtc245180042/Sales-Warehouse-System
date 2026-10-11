@@ -110,6 +110,9 @@ class StockMovementType(str, Enum):
     ADJUSTMENT_IN = "ADJUSTMENT_IN"                # (+)
     ADJUSTMENT_OUT = "ADJUSTMENT_OUT"              # (-)
 
+    # Xuất bán / Hoàn tất đơn hàng (Cầu nối S5 & Luồng đơn hàng)
+    OUT_SALE = "OUT_SALE"                          # (-) Xuất kho giao hàng
+
 
 _INCREASE = {
     StockMovementType.IN_PURCHASE,
@@ -122,6 +125,7 @@ _DECREASE = {
     StockMovementType.TRANSFER_OUT,
     StockMovementType.AUDIT_SHORTAGE,
     StockMovementType.ADJUSTMENT_OUT,
+    StockMovementType.OUT_SALE,
 }
 _NOTE_REQUIRED = {
     StockMovementType.IN_PURCHASE_REVERSAL,

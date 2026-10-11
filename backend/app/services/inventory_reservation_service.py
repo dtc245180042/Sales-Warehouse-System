@@ -446,11 +446,29 @@ def fulfill_stock_reservations_for_order(
             or_(Product.id == res.product_id, Product.sku == res.sku)
         ).first()
         if prod:
-            profile = get_or_create_product_stock_profile(db, prod, warehouse_name=res.warehouse, for_update=True)
-            # Trừ tồn vật lý
-            current_physical = int(profile.physical_stock if profile.physical_stock is not None else profile.stock)
-            profile.physical_stock = max(0, current_physical - res.reserved_quantity)
-            profile.reserved_stock = max(0, int(profile.reserved_stock or 0) - res.reserved_quantity)
-            profile.stock = max(0, profile.physical_stock - profile.reserved_stock)
+            try:
+                from app.services.stock_ledger import (
+                    record_stock_movement,
+                    StockMovementType,
+                    map_warehouse_name_to_id,
+                )
+                wh_id = map_warehouse_name_to_id(db, res.warehouse)
+                record_stock_movement(
+                    db,
+                    product_id=prod.id,
+                    warehouse_id=wh_id,
+                    quantity_base=res.reserved_quantity,
+                    movement_type=StockMovementType.OUT_SALE,
+                    reference_code=f"ORD-{order_id}",
+                    line_ref=f"RES-{res.id}",
+                    performer_id=1,
+                    auto_commit=False,
+                )
+            except Exception:
+                profile = get_or_create_product_stock_profile(db, prod, warehouse_name=res.warehouse, for_update=True)
+                current_physical = int(profile.physical_stock if profile.physical_stock is not None else profile.stock)
+                profile.physical_stock = max(0, current_physical - res.reserved_quantity)
+                profile.reserved_stock = max(0, int(profile.reserved_stock or 0) - res.reserved_quantity)
+                profile.stock = max(0, profile.physical_stock - profile.reserved_stock)
 
     db.flush()

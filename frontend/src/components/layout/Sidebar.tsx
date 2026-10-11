@@ -21,6 +21,11 @@ import {
   Receipt,
   PlusCircle,
   ShoppingCart,
+  Warehouse,
+  ClipboardCheck,
+  ArrowDownLeft,
+  ArrowUpRight,
+  History,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { UserRole } from '../../types/User';
@@ -220,6 +225,52 @@ export const Sidebar: React.FC<SidebarProps> = ({
           path: '/price-lists',
           icon: <Tag className="w-5 h-5" />,
           allowedRoles: ALL_ROLES,
+        },
+        {
+          title: 'Kho & Tồn kho',
+          icon: <Warehouse className="w-5 h-5" />,
+          allowedRoles: [
+            'Admin',
+            'WarehouseManager',
+            'WarehouseStaff',
+            'SalesManager',
+            'SalesStaff',
+            'Director',
+            'Manager',
+            'Staff',
+          ],
+          submenu: [
+            {
+              title: 'Tổng quan tồn kho',
+              path: '/inventory',
+              icon: <LayoutList className="w-3.5 h-3.5" />,
+              allowedRoles: ALL_ROLES,
+            },
+            {
+              title: 'Kiểm kê kho hàng',
+              path: '/inventory/stock-takes',
+              icon: <ClipboardCheck className="w-3.5 h-3.5" />,
+              allowedRoles: ALL_ROLES,
+            },
+            {
+              title: 'Nhập kho',
+              path: '/inventory/stock-in',
+              icon: <ArrowDownLeft className="w-3.5 h-3.5" />,
+              allowedRoles: ['Admin', 'WarehouseManager', 'WarehouseStaff', 'Director', 'Manager'],
+            },
+            {
+              title: 'Xuất kho',
+              path: '/inventory/stock-out',
+              icon: <ArrowUpRight className="w-3.5 h-3.5" />,
+              allowedRoles: ['Admin', 'WarehouseManager', 'WarehouseStaff', 'Director', 'Manager'],
+            },
+            {
+              title: 'Lịch sử thẻ kho',
+              path: '/inventory/history',
+              icon: <History className="w-3.5 h-3.5" />,
+              allowedRoles: ALL_ROLES,
+            },
+          ],
         },
       ],
     },

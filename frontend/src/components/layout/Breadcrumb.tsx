@@ -10,6 +10,7 @@ const routeNames: Record<string, string> = {
   inventory: 'Quản Lý Kho',
   'stock-in': 'Nhập Kho',
   'stock-out': 'Xuất Kho',
+  'stock-takes': 'Kiểm Kê Kho Hàng',
   history: 'Lịch Sử Giao Dịch',
   sales: 'Bán Hàng',
   pos: 'Điểm Bán Hàng (POS)',
@@ -25,6 +26,10 @@ const routeNames: Record<string, string> = {
   'activity-log': 'Nhật Ký Thao Tác',
   'price-lists': 'Bảng Giá Phân Phối',
   units: 'Đơn Vị Tính & Quy Đổi',
+  new: 'Thêm Mới',
+  import: 'Nhập Dữ Liệu',
+  portal: 'Cổng Đại Lý',
+  agents: 'Đại Lý',
 };
 
 export const Breadcrumb: React.FC = () => {
@@ -44,7 +49,16 @@ export const Breadcrumb: React.FC = () => {
       {pathnames.map((value, index) => {
         const to = `/${pathnames.slice(0, index + 1).join('/')}`;
         const isLast = index === pathnames.length - 1;
-        const name = routeNames[value] || value;
+        let name = routeNames[value] || value;
+        if (pathnames[index - 1] === 'stock-takes') {
+          if (value === 'create' || value === 'new') {
+            name = 'Tạo Phiếu Kiểm Kê';
+          } else {
+            name = 'Phiếu Kiểm Kê';
+          }
+        } else if (typeof name === 'string' && name.startsWith('STK-TAKE-')) {
+          name = name.replace('STK-TAKE-', 'PKK-2026-');
+        }
 
         return (
           <React.Fragment key={to}>

@@ -10,6 +10,8 @@ from app.models.order import Order
 from app.models.product_stock_profile import ProductStockProfile
 from app.models.stock_reservation import StockReservation
 from app.models.customer_warehouse_profile import CustomerWarehouseProfile
+from app.models.warehouse_stock import WarehouseStock
+from app.services.stock_ledger import map_warehouse_name_to_id
 from app.schemas.inventory_reservation import (
     SkuAvailabilityResponse,
     CheckOrderAvailabilityRequest,
@@ -164,7 +166,19 @@ def calculate_sku_availability(
         or_(StockReservation.product_id == str(prod.id), StockReservation.sku == prod.sku)
     ).scalar() or 0
 
-    physical = int(profile.physical_stock if profile.physical_stock is not None else profile.stock)
+    target_wh_id = map_warehouse_name_to_id(db, wh_name)
+    ws = None
+    if target_wh_id:
+        ws = db.query(WarehouseStock).filter(
+            WarehouseStock.product_id == str(prod.id),
+            WarehouseStock.warehouse_id == target_wh_id
+        ).first()
+
+    if ws is not None and ws.physical_stock is not None:
+        physical = int(ws.physical_stock)
+    else:
+        physical = int(profile.physical_stock if profile.physical_stock is not None else profile.stock)
+
     reserved = int(active_reserved_sum)
     available = max(0, physical - reserved)
 
@@ -325,13 +339,23 @@ def reserve_stock_for_order(
             or_(StockReservation.product_id == str(prod.id), StockReservation.sku == prod.sku)
         ).scalar() or 0
 
-        # Nếu physical_stock chưa đồng bộ khi stock bị sửa trực tiếp bởi module/test khác
-        current_reserved = int(active_reserved_sum)
-        current_stock = int(profile.stock or 0)
-        if profile.physical_stock is None or profile.physical_stock < (current_stock + current_reserved):
-            profile.physical_stock = current_stock + current_reserved
+        target_wh_id = map_warehouse_name_to_id(db, wh_name)
+        ws = None
+        if target_wh_id:
+            ws = db.query(WarehouseStock).filter(
+                WarehouseStock.product_id == str(prod.id),
+                WarehouseStock.warehouse_id == target_wh_id
+            ).first()
 
-        physical = int(profile.physical_stock)
+        current_reserved = int(active_reserved_sum)
+        if ws is not None and ws.physical_stock is not None:
+            physical = int(ws.physical_stock)
+        else:
+            current_stock = int(profile.stock or 0)
+            if profile.physical_stock is None or profile.physical_stock < (current_stock + current_reserved):
+                profile.physical_stock = current_stock + current_reserved
+            physical = int(profile.physical_stock)
+
         available = max(0, physical - current_reserved)
 
         # 3. SCRUM-506: Chặn chốt đơn nếu số lượng vượt tồn khả dụng
@@ -485,7 +509,6 @@ def fulfill_stock_reservations_for_order(
                 detail=f"Không xác định được kho hàng hợp lệ từ tên '{res.warehouse}' cho đơn hàng '{order_id}'.",
             )
 
-        # Ghi nhận biến động xuất bán OUT_SALE vào sổ kho
         record_stock_movement(
             db,
             product_id=prod.id,

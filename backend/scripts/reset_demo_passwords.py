@@ -33,8 +33,16 @@ def reset_passwords():
             user.locked_until = None
             user.is_active = True
             user.must_change_password = False
+
+        # Mở khóa toàn bộ thiết bị IP bị khóa tạm thời
+        try:
+            from app.models.device_lockout import DeviceLockout
+            db.query(DeviceLockout).delete()
+        except Exception:
+            pass
+
         db.commit()
-        print(f"Đã đặt lại mật khẩu thành công cho {len(users)} tài khoản trong CSDL chính!")
+        print(f"Đã đặt lại mật khẩu và gỡ khóa thiết bị thành công cho {len(users)} tài khoản!")
         print(f"Mật khẩu mới cho tất cả tài khoản: {NEW_PASSWORD}")
     except Exception as e:
         db.rollback()

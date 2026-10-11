@@ -57,9 +57,29 @@ function mapApiOrder(o: any): Order {
     deliveryNotes: o.deliveryNotes ?? o.delivery_notes ?? undefined,
     expectedDeliveryDate: o.expectedDeliveryDate || o.expected_delivery_date || undefined,
     copiedFromOrderId: o.copiedFromOrderId || o.copied_from_order_id || undefined,
-    createdAt: o.createdAt || (o.created_at ? o.created_at.replace('T', ' ').slice(0, 16) : new Date().toISOString().replace('T', ' ').slice(0, 16)),
-    updatedAt: o.updatedAt || (o.updated_at ? o.updated_at.replace('T', ' ').slice(0, 16) : new Date().toISOString().replace('T', ' ').slice(0, 16)),
+    createdAt: toLocalDateTimeString(o.createdAt || o.created_at),
+    updatedAt: toLocalDateTimeString(o.updatedAt || o.updated_at),
   };
+}
+
+function toLocalDateTimeString(val?: string): string {
+  if (!val) return '';
+  try {
+    let s = val.trim();
+    if (!s.endsWith('Z') && !/[+-]\d{2}(:\d{2})?$/.test(s)) {
+      s = s.replace(' ', 'T') + 'Z';
+    }
+    const d = new Date(s);
+    if (isNaN(d.getTime())) return val;
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    const hours = String(d.getHours()).padStart(2, '0');
+    const mins = String(d.getMinutes()).padStart(2, '0');
+    return `${year}-${month}-${day} ${hours}:${mins}`;
+  } catch {
+    return val;
+  }
 }
 
 export const orderService = {

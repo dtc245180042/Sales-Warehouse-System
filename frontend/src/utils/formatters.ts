@@ -13,7 +13,12 @@ export const formatNumber = (num: number): string => {
 export const formatDate = (dateString: string): string => {
   if (!dateString) return '-';
   try {
-    const d = new Date(dateString);
+    let s = dateString.trim();
+    if (!s.endsWith('Z') && !/[+-]\d{2}(:\d{2})?$/.test(s)) {
+      s = s.replace(' ', 'T') + 'Z';
+    }
+    const d = new Date(s);
+    if (isNaN(d.getTime())) return dateString;
     return new Intl.DateTimeFormat('vi-VN', {
       year: 'numeric',
       month: '2-digit',
@@ -29,7 +34,12 @@ export const formatDate = (dateString: string): string => {
 export const formatDateOnly = (dateString: string): string => {
   if (!dateString) return '-';
   try {
-    const d = new Date(dateString);
+    let s = dateString.trim();
+    if (!s.endsWith('Z') && !/[+-]\d{2}(:\d{2})?$/.test(s)) {
+      s = s.replace(' ', 'T') + 'Z';
+    }
+    const d = new Date(s);
+    if (isNaN(d.getTime())) return dateString;
     return new Intl.DateTimeFormat('vi-VN', {
       year: 'numeric',
       month: '2-digit',

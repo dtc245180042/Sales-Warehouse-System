@@ -61,6 +61,26 @@ const setStored = <T>(key: string, val: T): void => {
   }
 };
 
+function toLocalDateTimeString(val?: string): string {
+  if (!val) return '';
+  try {
+    let s = val.trim();
+    if (!s.endsWith('Z') && !/[+-]\d{2}(:\d{2})?$/.test(s)) {
+      s = s.replace(' ', 'T') + 'Z';
+    }
+    const d = new Date(s);
+    if (isNaN(d.getTime())) return val;
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    const hours = String(d.getHours()).padStart(2, '0');
+    const mins = String(d.getMinutes()).padStart(2, '0');
+    return `${year}-${month}-${day} ${hours}:${mins}`;
+  } catch {
+    return val;
+  }
+}
+
 // Simulating API network delay
 const delay = (ms = 350) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -261,8 +281,8 @@ export const api = {
             staffId: o.staffId || o.staff_id || 'USR-004',
             staffName: o.staffName || o.staff_name || '',
             note: o.note || '',
-            createdAt: o.createdAt || (o.created_at ? o.created_at.replace('T', ' ').slice(0, 16) : new Date().toISOString().replace('T', ' ').slice(0, 16)),
-            updatedAt: o.updatedAt || (o.updated_at ? o.updated_at.replace('T', ' ').slice(0, 16) : new Date().toISOString().replace('T', ' ').slice(0, 16)),
+            createdAt: toLocalDateTimeString(o.createdAt || o.created_at),
+            updatedAt: toLocalDateTimeString(o.updatedAt || o.updated_at),
           }));
           setStored(STORAGE_KEYS.ORDERS, list);
         }

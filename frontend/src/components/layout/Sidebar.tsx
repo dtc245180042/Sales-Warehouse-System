@@ -21,6 +21,11 @@ import {
   Receipt,
   PlusCircle,
   ShoppingCart,
+  Warehouse,
+  Layers,
+  ArrowDownLeft,
+  ArrowUpRight,
+  History,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { UserRole } from '../../types/User';
@@ -212,6 +217,44 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 'Director',
                 'Manager',
               ],
+            },
+          ],
+        },
+        {
+          title: 'Quản Lý Kho Hàng',
+          icon: <Warehouse className="w-5 h-5" />,
+          allowedRoles: [
+            'Admin',
+            'WarehouseManager',
+            'WarehouseStaff',
+            'SalesManager',
+            'Director',
+            'Manager',
+          ],
+          submenu: [
+            {
+              title: 'Sổ tồn kho 3 cột',
+              path: '/inventory',
+              icon: <Layers className="w-3.5 h-3.5" />,
+              allowedRoles: ALL_ROLES,
+            },
+            {
+              title: 'Nhập kho nhà cung cấp',
+              path: '/inventory/stock-in',
+              icon: <ArrowDownLeft className="w-3.5 h-3.5" />,
+              allowedRoles: ALL_ROLES,
+            },
+            {
+              title: 'Xuất kho hàng hóa',
+              path: '/inventory/stock-out',
+              icon: <ArrowUpRight className="w-3.5 h-3.5" />,
+              allowedRoles: ALL_ROLES,
+            },
+            {
+              title: 'Lịch sử thẻ kho',
+              path: '/inventory/history',
+              icon: <History className="w-3.5 h-3.5" />,
+              allowedRoles: ALL_ROLES,
             },
           ],
         },

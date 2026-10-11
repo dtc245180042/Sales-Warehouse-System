@@ -55,6 +55,11 @@ import { SalesReport } from '../pages/reports/SalesReport';
 import { RevenueReport } from '../pages/reports/RevenueReport';
 import { InventoryReport } from '../pages/reports/InventoryReport';
 
+// Sprint 5 Inventory & Stock Ledger Pages (S5-04, S5-05, S5-06)
+import { InventoryOverview } from '../pages/inventory/InventoryOverview';
+import { StockIn } from '../pages/inventory/StockIn';
+import { StockOut } from '../pages/inventory/StockOut';
+import { InventoryHistory } from '../pages/inventory/InventoryHistory';
 
 // Cổng Đại Lý B2B (S4-10, SCRUM-242)
 import { PortalOrderPage } from '../pages/portal/PortalOrderPage';
@@ -366,6 +371,50 @@ export const AppRoutes: React.FC = () => {
           element={
             <ProtectedRoute allowedRoles={['Admin', 'WarehouseManager', 'WarehouseStaff', 'Director', 'Manager']}>
               <InventoryReport />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* ============================================================ */}
+        {/* QUẢN LÝ KHO HÀNG & SỔ TỒN KHO 3 CỘT (S5-04, S5-05, S5-06)     */}
+        {/* ============================================================ */}
+        <Route
+          path="/inventory"
+          element={
+            <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
+              <InventoryOverview />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/inventory/overview"
+          element={
+            <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
+              <InventoryOverview />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/inventory/stock-in"
+          element={
+            <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
+              <StockIn />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/inventory/stock-out"
+          element={
+            <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
+              <StockOut />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/inventory/history"
+          element={
+            <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
+              <InventoryHistory />
             </ProtectedRoute>
           }
         />

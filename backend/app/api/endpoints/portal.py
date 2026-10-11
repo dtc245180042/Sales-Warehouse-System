@@ -18,7 +18,7 @@ from app.schemas.portal import (
 from app.schemas.customer_delivery_address import DeliveryAddressResponse
 from app.services import portal_service
 
-router = APIRouter(prefix="/portal", tags=["Cổng Đại Lý Đặt Hàng (SCRUM-242 / S4-10)"])
+router = APIRouter(prefix="/portal", tags=["Cổng Đại Lý Đặt Hàng (SCRUM-242)"])
 
 
 @router.get("/me", summary="Lấy thông tin hồ sơ đại lý đang đăng nhập")

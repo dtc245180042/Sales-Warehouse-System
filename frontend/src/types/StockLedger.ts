@@ -10,7 +10,7 @@ export interface StockBalanceItem {
   reserved_stock: number;  // Cột 2: Tồn đang giữ chỗ
   available_stock: number; // Cột 3: Tồn khả dụng (Physical - Reserved)
   min_stock: number;
-  is_low_stock: boolean;   // Cảnh báo tồn dưới mức tối thiểu (S5-09)
+  is_low_stock: boolean;   // Cảnh báo tồn dưới mức tối thiểu
 }
 
 export interface StockBalanceListResponse {

@@ -268,7 +268,7 @@ export const InventoryOverview: React.FC = () => {
   return (
     <PageContainer
       title="Sổ Tồn Kho & Thẻ Kho Tập Trung"
-      subtitle="Báo cáo 3 cột: Tồn thực tế - Đang giữ chỗ - Tồn khả dụng theo từng kho (Sprint 5: S5-05, S5-06)"
+      subtitle="Báo cáo 3 cột: Tồn thực tế - Đang giữ chỗ - Tồn khả dụng theo từng kho"
       actions={
         <div className="flex items-center gap-2">
           <Button
@@ -398,7 +398,7 @@ export const InventoryOverview: React.FC = () => {
                 >
                   <option value="all">Tất cả trạng thái</option>
                   <option value="in_stock">Còn hàng</option>
-                  <option value="low_stock">Tồn thấp (S5-09)</option>
+                  <option value="low_stock">Tồn dưới định mức</option>
                   <option value="out_of_stock">Hết hàng</option>
                 </select>
               </div>

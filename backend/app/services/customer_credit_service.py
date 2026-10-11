@@ -270,7 +270,7 @@ def check_customer_overdue_debt(
     order_id: Optional[str] = None
 ) -> Dict[str, Any]:
     """
-    Kiểm tra xem khách hàng / đại lý có khoản nợ nào quá hạn thanh toán hay không (S4-02, SCRUM-497).
+    Kiểm tra xem khách hàng / đại lý có khoản nợ nào quá hạn thanh toán hay không (SCRUM-497).
     - Điều kiện: đơn hàng đã xuất kho (shipping, completed) và còn nợ (total - paid_amount > 0).
     - Số ngày quá hạn = (hôm nay - ngày xuất kho) - max_debt_days.
     - Nếu có khoản nợ quá hạn: Bị chặn tạo đơn hoàn toàn theo quy định.
@@ -337,9 +337,9 @@ def check_credit_for_order_placement(
     order_id: Optional[str] = None
 ) -> Dict[str, Any]:
     """
-    Kiểm tra hạn mức công nợ và số ngày quá hạn khi tạo hoặc chốt đơn hàng (S4-02, SCRUM-496, SCRUM-497, SCRUM-498).
+    Kiểm tra hạn mức công nợ và số ngày quá hạn khi tạo hoặc chốt đơn hàng (SCRUM-496, SCRUM-497, SCRUM-498).
     
-    Quy tắc nghiệp vụ S4-02:
+    Quy tắc nghiệp vụ:
     1. Kiểm tra nợ quá hạn:
        - Nếu đại lý có khoản nợ quá số ngày cho phép: Chặn tạo/chốt đơn hoàn toàn!
     2. Đơn thanh toán đủ 100% (unpaid_amount <= 0):

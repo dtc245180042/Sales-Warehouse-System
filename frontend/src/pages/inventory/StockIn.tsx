@@ -180,7 +180,7 @@ export const StockIn: React.FC = () => {
       const supplier = initialSuppliers.find((s) => s.id === supplierId);
       const whName = getWarehouseName(warehouseId);
 
-      // 1. Gọi backend S5-04 API: /api/v1/stock-receipts
+      // 1. Gọi backend API: /api/v1/stock-receipts
       const apiPayload = {
         supplier_id: parseInt(supplierId.replace(/\D/g, '') || '1', 10),
         warehouse_id: warehouseId,
@@ -251,7 +251,7 @@ export const StockIn: React.FC = () => {
   return (
     <PageContainer
       title="Tạo Phiếu Nhập Kho Nhà Cung Cấp"
-      subtitle="Quy đổi ĐVT về đơn vị cơ sở, quản lý số lô & hạn sử dụng (Sprint 5: S5-04)"
+      subtitle="Quy đổi ĐVT về đơn vị cơ sở, quản lý số lô & hạn sử dụng"
     >
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left: Items list (2 cols) */}
@@ -351,7 +351,7 @@ export const StockIn: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* S5-04 AC-3: Lô và Hạn sử dụng */}
+                  {/* Quản lý Số Lô và Hạn sử dụng */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-200/60 dark:border-slate-700/60">
                     <div>
                       <label className="block text-[11px] font-semibold text-slate-500 dark:text-slate-400 mb-1 flex items-center gap-1">

@@ -55,13 +55,13 @@ import { SalesReport } from '../pages/reports/SalesReport';
 import { RevenueReport } from '../pages/reports/RevenueReport';
 import { InventoryReport } from '../pages/reports/InventoryReport';
 
-// Sprint 5 Inventory & Stock Ledger Pages (S5-04, S5-05, S5-06)
+// Inventory & Stock Ledger Pages
 import { InventoryOverview } from '../pages/inventory/InventoryOverview';
 import { StockIn } from '../pages/inventory/StockIn';
 import { StockOut } from '../pages/inventory/StockOut';
 import { InventoryHistory } from '../pages/inventory/InventoryHistory';
 
-// Cổng Đại Lý B2B (S4-10, SCRUM-242)
+// Cổng Đại Lý B2B (SCRUM-242)
 import { PortalOrderPage } from '../pages/portal/PortalOrderPage';
 
 // All 7 business roles allowed in Sprint 1 & 2 backoffice
@@ -376,7 +376,7 @@ export const AppRoutes: React.FC = () => {
         />
 
         {/* ============================================================ */}
-        {/* QUẢN LÝ KHO HÀNG & SỔ TỒN KHO 3 CỘT (S5-04, S5-05, S5-06)     */}
+        {/* QUẢN LÝ KHO HÀNG & SỔ TỒN KHO 3 CỘT                         */}
         {/* ============================================================ */}
         <Route
           path="/inventory"
@@ -500,7 +500,7 @@ export const AppRoutes: React.FC = () => {
         />
       </Route>
 
-      {/* Cổng Đại lý tự đặt hàng B2B 24/7 Mobile & Desktop (S4-10, SCRUM-242) */}
+      {/* Cổng Đại lý tự đặt hàng B2B 24/7 Mobile & Desktop (SCRUM-242) */}
       <Route
         path="/portal/order"
         element={

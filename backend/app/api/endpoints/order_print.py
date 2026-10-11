@@ -16,7 +16,7 @@ from app.services.order_print_service import (
     generate_order_print_html,
 )
 
-router = APIRouter(prefix="/orders", tags=["Order Print & PDF (SCRUM-240 / S4-08)"])
+router = APIRouter(prefix="/orders", tags=["Order Print & PDF (SCRUM-240)"])
 
 
 @router.get(

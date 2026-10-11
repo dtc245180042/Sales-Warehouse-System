@@ -13,7 +13,7 @@ from app.schemas.stock_ledger import (
 )
 from app.services import stock_ledger
 
-router = APIRouter(prefix="/stock-ledger", tags=["Sổ Tồn Kho & Thẻ Kho Tập Trung (S5-05, S5-06)"])
+router = APIRouter(prefix="/stock-ledger", tags=["Sổ Tồn Kho & Thẻ Kho Tập Trung"])
 
 
 @router.get(
@@ -32,11 +32,11 @@ def get_stock_balances(
     current_user: User = Depends(lay_nguoi_dung_hien_tai),
 ):
     """
-    Sổ tồn kho 3 cột chuẩn Sprint 5 (S5-05, S5-06):
+    Sổ tồn kho 3 cột chuẩn:
     - Cột 1: physical_stock (Tồn thực tế trong kho)
     - Cột 2: reserved_stock (Tồn đang giữ chỗ active cho đơn hàng)
     - Cột 3: available_stock (Tồn khả dụng = Physical - Reserved)
-    Hỗ trợ cảnh báo low-stock khi available_stock < min_stock (S5-09).
+    Hỗ trợ cảnh báo low-stock khi available_stock < min_stock.
     """
     data = stock_ledger.get_ledger_pagination(
         db,
@@ -74,7 +74,7 @@ def get_ledger_entries(
     current_user: User = Depends(lay_nguoi_dung_hien_tai),
 ):
     """
-    Tra cứu sổ cái biến động kho lưu trữ bất biến (S5-05):
+    Tra cứu sổ cái biến động kho lưu trữ bất biến:
     - Mỗi dòng thể hiện số lượng biến động (+/-), tồn trước, tồn sau, người thực hiện, lý do.
     """
     return stock_ledger.get_ledger_entries_pagination(
@@ -103,7 +103,7 @@ def get_product_stock_card(
     current_user: User = Depends(lay_nguoi_dung_hien_tai),
 ):
     """
-    Thẻ kho chi tiết từng SKU (S5-05):
+    Thẻ kho chi tiết từng SKU:
     - Hiển thị số dư 3 cột theo từng kho hàng.
     - Lịch sử biến động nhập / xuất / chuyển kho / kiểm kê theo thứ tự thời gian.
     """

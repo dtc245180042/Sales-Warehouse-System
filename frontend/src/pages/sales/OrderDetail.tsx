@@ -47,7 +47,7 @@ export const OrderDetail: React.FC = () => {
   const [isCopyModalOpen, setIsCopyModalOpen] = useState(false);
   const [isCopying, setIsCopying] = useState(false);
 
-  // Phân quyền theo vai trò (RBAC S4-05, SCRUM-203, SCRUM-498):
+  // Phân quyền theo vai trò (RBAC):
   const isManagerOrAdmin = ['Admin', 'Director', 'SalesManager', 'Manager', 'Accountant'].includes(role);
   const isWarehouseRole = ['Admin', 'Director', 'WarehouseManager', 'WarehouseStaff'].includes(role);
   const isSalesStaff = role === 'SalesStaff' || role === 'Staff';
@@ -206,7 +206,7 @@ export const OrderDetail: React.FC = () => {
         </div>
       }
     >
-      {/* Banner Cảnh báo đơn chờ duyệt do vượt hạn mức công nợ (S4-02 / SCRUM-498 / SCRUM-501) */}
+      {/* Banner Cảnh báo đơn chờ duyệt do vượt hạn mức công nợ */}
       {(order.status === 'pending_approval' || order.requiresApproval) && (
         <div
           id="order-credit-approval-alert"
@@ -250,7 +250,7 @@ export const OrderDetail: React.FC = () => {
         </div>
       )}
 
-      {/* SCRUM-238 (S4-06): Tiến trình vòng đời đơn hàng trực quan và phân nhánh */}
+      {/* Tiến trình vòng đời đơn hàng trực quan và phân nhánh */}
       <div className="mb-6">
         <OrderLifecycleTimeline
           order={order}

@@ -19,7 +19,7 @@ export const InventoryHistory: React.FC = () => {
   const fetchHistory = async () => {
     setLoading(true);
     try {
-      // 1. Ưu tiên lấy từ sổ cái bất biến S5-05 (/stock-ledger/entries)
+      // 1. Ưu tiên lấy từ sổ cái bất biến (/stock-ledger/entries)
       const ledgerParams: any = { page: 1, size: 100 };
       if (typeof warehouseFilter === 'number') {
         ledgerParams.warehouse_id = warehouseFilter;
@@ -175,7 +175,7 @@ export const InventoryHistory: React.FC = () => {
   return (
     <PageContainer
       title="Lịch Sử Giao Dịch & Sổ Cái Biến Động Kho"
-      subtitle="Theo dõi vết bất biến các giao dịch nhập hàng NCC, xuất bán, hoàn trả và điều chỉnh tồn kho (S5-05)"
+      subtitle="Theo dõi vết bất biến các giao dịch nhập hàng NCC, xuất bán, hoàn trả và điều chỉnh tồn kho"
       actions={
         <div className="flex items-center gap-2">
           {isLiveLedger && (

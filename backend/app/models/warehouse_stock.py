@@ -5,7 +5,7 @@ from app.core.database import Base
 
 class WarehouseStock(Base):
     """
-    Bảng quản lý tồn kho vật lý đa kho theo từng sản phẩm và kho hàng (Sprint 5 - S5-03, S5-05).
+    Bảng quản lý tồn kho vật lý đa kho theo từng sản phẩm và kho hàng.
     Khóa duy nhất: (product_id, warehouse_id).
     Lưu ý: Không lưu reserved_stock ở đây; reserved_stock được tính động từ bảng stock_reservations.
     """
@@ -17,7 +17,7 @@ class WarehouseStock(Base):
     warehouse_id = Column(Integer, nullable=False, index=True)
 
     physical_stock = Column(Integer, default=0, nullable=False)   # Cột 1: Tồn thực tế trong kho
-    min_stock = Column(Integer, default=10, nullable=False)        # Hạn mức tối thiểu (S5-09)
+    min_stock = Column(Integer, default=10, nullable=False)        # Hạn mức tối thiểu
 
     created_at = Column(
         DateTime(timezone=True),

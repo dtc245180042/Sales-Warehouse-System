@@ -369,7 +369,7 @@ export const AgentOrderCreate: React.FC = () => {
       showToast('Giỏ hàng đang trống, hãy thêm ít nhất một sản phẩm', 'warning');
       return;
     }
-    // S4-02: Chặn tạo đơn khi đại lý có nợ quá hạn
+    // Chặn tạo đơn khi đại lý có nợ quá hạn
     if (!draft && creditStatus?.isBlocked) {
       showToast(creditStatus.blockReason || 'Đại lý có nợ quá hạn. Hệ thống chặn tạo đơn hoàn toàn theo quy định!', 'error');
       return;
@@ -601,7 +601,7 @@ export const AgentOrderCreate: React.FC = () => {
                 </div>
               </div>
 
-              {/* S4-02: Khối Hiển thị Công nợ hiện tại, Hạn mức & Cảnh báo vượt hạn mức / Chặn quá hạn */}
+              {/* Khối Hiển thị Công nợ hiện tại, Hạn mức & Cảnh báo vượt hạn mức / Chặn quá hạn */}
               <CustomerCreditBanner
                 customerId={selectedAgent.id}
                 customerName={selectedAgent.name}

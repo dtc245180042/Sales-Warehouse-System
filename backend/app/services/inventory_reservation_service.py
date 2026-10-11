@@ -402,7 +402,7 @@ def release_stock_reservations_for_order(
     order_id: str
 ):
     """
-    Hủy giữ chỗ khi đơn hàng bị hủy (SCRUM-504, S4-06).
+    Hủy giữ chỗ khi đơn hàng bị hủy (SCRUM-504).
     Chuyển trạng thái reservation từ 'active' -> 'released' và nhả lại tồn khả dụng.
     """
     active_res = db.query(StockReservation).filter(
@@ -457,7 +457,7 @@ def fulfill_stock_reservations_for_order(
     """
     Hoàn tất giữ chỗ khi đơn hàng xuất kho giao hàng (status -> shipping / completed).
     Chuyển trạng thái reservation từ 'active' -> 'fulfilled', đồng thời trừ tồn vật lý (physical_stock)
-    và ghi nhận bút toán OUT_SALE vào sổ cái thẻ kho tập trung (S5-05, S5-06).
+    và ghi nhận bút toán OUT_SALE vào sổ cái thẻ kho tập trung.
     Tuyệt đối không nuốt lỗi: Nếu xuất kho thất bại (thiếu tồn, sai kho), ném lỗi để rollback toàn bộ dispatch.
     """
     active_res = db.query(StockReservation).filter(

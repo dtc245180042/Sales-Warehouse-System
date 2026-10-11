@@ -1,7 +1,6 @@
 """
-services/stock_ledger.py (HỢP ĐỒNG v3 - SPRINT 5)
-Sổ tồn kho & thẻ kho tập trung - Sprint 5 (S5-05, S5-06).
-Chủ sở hữu duy nhất: NT1. VT, NT2, BT chỉ GỌI hàm, không sửa file này.
+services/stock_ledger.py
+Sổ tồn kho & thẻ kho tập trung.
 """
 
 import uuid
@@ -22,7 +21,7 @@ from app.models.product_stock_profile import ProductStockProfile
 from app.models.stock_reservation import StockReservation
 from app.models.warehouse_stock import StockLedgerEntry, WarehouseStock
 
-# Lazy import model Warehouse do VT phụ trách tạo (S5-03)
+# Lazy import model Warehouse
 try:
     from app.models.warehouse import Warehouse
 except ImportError:
@@ -99,15 +98,12 @@ map_warehouse_name_to_id = resolve_warehouse_id_by_name
 class StockMovementType(str, Enum):
     """Mỗi loại quyết định chiều +/- cố định. quantity_base luôn dương."""
 
-    # VT (S5-04)
     IN_PURCHASE = "IN_PURCHASE"                    # (+) Nhập mua từ NCC
     IN_PURCHASE_REVERSAL = "IN_PURCHASE_REVERSAL"  # (-) Chỉ từ phiếu điều chỉnh nhập
 
-    # NT2 (S5-07)
     TRANSFER_OUT = "TRANSFER_OUT"                  # (-) Kho đi, theo SỐ GỬI (Hàng chuyển sang in_transit)
     TRANSFER_IN = "TRANSFER_IN"                    # (+) Kho đến, theo SỐ NHẬN THỰC TẾ
 
-    # NT2 (S5-08)
     AUDIT_SURPLUS = "AUDIT_SURPLUS"                # (+) Thực đếm > sổ sách
     AUDIT_SHORTAGE = "AUDIT_SHORTAGE"              # (-) Thực đếm < sổ sách
 
@@ -483,7 +479,7 @@ def get_sku_ledger_summary(
     """
     Trả về dữ liệu 3 cột chuẩn mực:
     physical_stock (Cột 1), reserved_stock (Cột 2), available_stock (Cột 3).
-    is_low_stock = min_stock > 0 and available_stock < min_stock (S5-09 AC-2).
+    is_low_stock = min_stock > 0 and available_stock < min_stock.
     """
     product = db.query(Product).filter(Product.id == product_id).first()
     if not product:
@@ -508,7 +504,7 @@ def get_sku_ledger_summary(
     if stock_row.min_stock == 10 and prod_min != 10:
         min_stk = prod_min
 
-    # Dấu nhỏ hơn (<) theo đúng văn bản nghiệm thu S5-09 AC-2
+    # Dấu nhỏ hơn (<) cảnh báo tồn dưới mức tối thiểu
     is_low_stock = bool(min_stk > 0 and available < min_stk)
 
     return {
@@ -528,7 +524,7 @@ def get_sku_ledger_summary(
 
 
 # ==============================================================================
-# HÀM 3 - DANH SÁCH SỔ TỒN PHÂN TRANG (NT1 dùng cho màn S5-05)
+# HÀM 3 - DANH SÁCH SỔ TỒN PHÂN TRANG
 # ==============================================================================
 def get_ledger_pagination(
     db: Session,

@@ -14,7 +14,7 @@ from app.schemas.stock_receipt import (
 )
 from app.services import stock_receipt_service
 
-router = APIRouter(prefix="/stock-receipts", tags=["Phiếu Nhập Kho Nhà Cung Cấp (S5-04)"])
+router = APIRouter(prefix="/stock-receipts", tags=["Phiếu Nhập Kho Nhà Cung Cấp"])
 
 
 @router.post(

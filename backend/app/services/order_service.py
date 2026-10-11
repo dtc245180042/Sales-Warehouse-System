@@ -251,7 +251,7 @@ def calculate_order_totals(
     current_user: Optional[User] = None
 ) -> dict:
     """
-    Tính toán tạm thời tổng tiền hàng, chiết khấu và tổng phải thu realtime (S3-09, S4-01).
+    Tính toán tạm thời tổng tiền hàng, chiết khấu và tổng phải thu realtime.
     Tự động áp giá theo nhóm khách hàng, kiểm tra giá sàn và tính lại chiết khấu sản lượng.
     """
     from app.models.customer import Customer
@@ -328,7 +328,7 @@ def search_products_for_order(
     query_str: Optional[str] = None,
     customer_id: Optional[str] = None
 ) -> List[dict]:
-    """Tìm kiếm hàng hoá và trả về các đơn vị tính hợp lệ kèm tồn khả dụng (S3-09, S4-03)."""
+    """Tìm kiếm hàng hoá và trả về các đơn vị tính hợp lệ kèm tồn khả dụng."""
     query = db.query(Product).filter(or_(Product.status.ilike("active"), Product.status.is_(None)))
     if query_str and query_str.strip():
         s = f"%{query_str.strip()}%"
@@ -435,7 +435,7 @@ def create_order(db: Session, order_in: OrderCreate, current_user: Optional[User
         count += 1
         order_code = f"DH-2026-{str(count).zfill(3)}"
 
-    # 1. Kiểm tra vi phạm hạn mức công nợ và giá sàn (SCRUM-237 / S4-05)
+    # 1. Kiểm tra vi phạm hạn mức công nợ và giá sàn (SCRUM-237)
     requires_approval = False
     eval_res = None
     if not is_draft:
@@ -469,7 +469,7 @@ def create_order(db: Session, order_in: OrderCreate, current_user: Optional[User
         order_data["total"] = computed_total
         order_data["subtotal"] = computed_total
 
-    # S4-02: Kiểm tra hạn mức công nợ & nợ quá hạn khi tạo đơn chính thức (SCRUM-496, SCRUM-497, SCRUM-498)
+    # Kiểm tra hạn mức công nợ & nợ quá hạn khi tạo đơn chính thức (SCRUM-496, SCRUM-497, SCRUM-498)
     credit_approval_reason = None
     if not is_draft and order_in.customer_id:
         computed_order_total = float(order_data.get("total", 0.0) or 0.0)
@@ -765,7 +765,7 @@ def submit_draft_order(
         from app.services.customer_delivery_address_service import validate_delivery_address_for_customer
         validate_delivery_address_for_customer(db, order.customer_id, order.delivery_address_id)
 
-    # 2.5. Kiểm tra vi phạm ngoại lệ cần phê duyệt (SCRUM-237 / S4-05)
+    # 2.5. Kiểm tra vi phạm ngoại lệ cần phê duyệt (SCRUM-237)
     from app.services.order_approval_service import evaluate_order_violations, record_or_update_approval_request
     eval_res = evaluate_order_violations(
         db=db,
@@ -831,7 +831,7 @@ def submit_draft_order(
         if pricing_res.is_below_floor and pricing_res.approval_reason:
             subfloor_reasons.append(pricing_res.approval_reason)
 
-    # S4-02: Kiểm tra hạn mức công nợ & nợ quá hạn khi chốt đơn nháp (SCRUM-496, SCRUM-497, SCRUM-498)
+    # Kiểm tra hạn mức công nợ & nợ quá hạn khi chốt đơn nháp (SCRUM-496, SCRUM-497, SCRUM-498)
     unpaid = max(0.0, float(order.total or 0.0) - float(order.paid_amount or 0.0))
     from app.services.customer_credit_service import check_credit_for_order_placement
     credit_check = check_credit_for_order_placement(
@@ -890,7 +890,7 @@ def copy_order_to_draft(
     order_id: str,
     current_user: Optional[User] = None
 ) -> dict:
-    """Sao chép đơn hàng cũ thành đơn nháp mới, tự động tính lại giá & chiết khấu theo bảng giá hiện hành (S4-09, SCRUM-241)."""
+    """Sao chép đơn hàng cũ thành đơn nháp mới, tự động tính lại giá & chiết khấu theo bảng giá hiện hành (SCRUM-241)."""
     ensure_seed_orders(db)
 
     # 1. Kiểm tra quyền hạn theo vai trò (RBAC)
@@ -1138,11 +1138,11 @@ def update_order_status(
     order = get_order_by_id(db, order_id)
     old_status = order.status
 
-    # RBAC Guard: Kiểm tra phân quyền vai trò đối với các hành động chuyển trạng thái đơn hàng (S4-05, SCRUM-203, SCRUM-498)
+    # RBAC Guard: Kiểm tra phân quyền vai trò đối với các hành động chuyển trạng thái đơn hàng (SCRUM-203, SCRUM-498)
     if current_user:
         u_role = (current_user.role or "").strip().lower()
 
-        # 1. Duyệt đơn hàng vượt hạn mức công nợ hoặc dưới sàn (pending_approval -> confirmed / approved) (S4-05)
+        # 1. Duyệt đơn hàng vượt hạn mức công nợ hoặc dưới sàn (pending_approval -> confirmed / approved)
         if old_status == "pending_approval" and new_status in ["confirmed", "approved"]:
             allowed_approvers = ["admin", "sales manager", "director", "accountant", "manager"]
             if u_role not in allowed_approvers:
@@ -1196,7 +1196,7 @@ def update_order_status(
                         detail="Không thể hủy đơn hàng đang giao hoặc đã hoàn thành."
                     )
 
-    # S4-02: Khi duyệt đơn từ pending_approval sang confirmed / pending / shipping / completed / approved
+    # Khi duyệt đơn từ pending_approval sang confirmed / pending / shipping / completed / approved
     if old_status == "pending_approval" and new_status in ["confirmed", "pending", "shipping", "completed", "approved"]:
         order.requires_approval = False
 
@@ -1243,7 +1243,7 @@ def update_order_status(
         from app.services.inventory_reservation_service import fulfill_stock_reservations_for_order
         fulfill_stock_reservations_for_order(db, order.id)
 
-    # Khi đơn hàng được duyệt từ pending_approval sang confirmed / approved -> chuyển sang giữ chỗ tồn kho (S4-05, S4-03)
+    # Khi đơn hàng được duyệt từ pending_approval sang confirmed / approved -> chuyển sang giữ chỗ tồn kho
     if old_status == "pending_approval" and new_status in ["confirmed", "approved"]:
         from app.services.inventory_reservation_service import reserve_stock_for_order
         try:
@@ -1251,7 +1251,7 @@ def update_order_status(
         except Exception:
             pass
 
-    # Nếu chuyển sang hủy từ trạng thái chưa hủy, giải phóng tồn giữ chỗ (SCRUM-504, S4-06)
+    # Nếu chuyển sang hủy từ trạng thái chưa hủy, giải phóng tồn giữ chỗ (SCRUM-504)
     if new_status == "cancelled" and old_status != "cancelled":
         from app.services.inventory_reservation_service import release_stock_reservations_for_order
         release_stock_reservations_for_order(db, order.id)
@@ -1283,7 +1283,7 @@ def cancel_order(
 
 
 # ============================================================================
-# SCRUM-236 (S4-04): Lịch sử mua hàng 3 tháng gần nhất & Gợi ý mặt hàng
+# SCRUM-236: Lịch sử mua hàng 3 tháng gần nhất & Gợi ý mặt hàng
 # ============================================================================
 
 def get_purchase_history_suggestions(

@@ -14,19 +14,19 @@ from app.core.database import Base
 
 class SupplierStockReceipt(Base):
     """
-    Bảng quản lý phiếu nhập kho từ nhà cung cấp (Sprint 5 - S5-04).
+    Bảng quản lý phiếu nhập kho từ nhà cung cấp.
     Trạng thái:
-      - DRAFT: Phiếu nháp, chưa cộng tồn kho thực tế (AC-4).
-      - CONFIRMED: Đã nhập kho thành công, đã ghi sổ tồn kho và cộng physical_stock (AC-4, AC-5).
+      - DRAFT: Phiếu nháp, chưa cộng tồn kho thực tế.
+      - CONFIRMED: Đã nhập kho thành công, đã ghi sổ tồn kho và cộng physical_stock.
       - CANCELLED: Đã hủy khi còn là DRAFT.
-    Quyết định 5: Bỏ hoàn toàn cost_price và total_cost_amount khỏi phiếu nhập kho.
+    Quyết định: Bỏ hoàn toàn cost_price và total_cost_amount khỏi phiếu nhập kho.
     """
     __tablename__ = "supplier_stock_receipts"
 
     id = Column(Integer, primary_key=True, autoincrement=True, index=True)
     receipt_code = Column(String(50), unique=True, nullable=False, index=True)  # PNK-YYYYMMDD-XXXX
     supplier_id = Column(String(50), ForeignKey("suppliers.id", ondelete="SET NULL"), nullable=True, index=True)
-    warehouse_id = Column(Integer, nullable=False, index=True)  # Scalar warehouse ID (liên kết lỏng S5-03, không lưu tên)
+    warehouse_id = Column(Integer, nullable=False, index=True)  # Scalar warehouse ID
 
     status = Column(String(20), default="DRAFT", nullable=False, index=True)
     note = Column(Text, nullable=True)

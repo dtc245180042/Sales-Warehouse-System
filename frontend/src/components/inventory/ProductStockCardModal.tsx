@@ -67,7 +67,7 @@ export const ProductStockCardModal: React.FC<ProductStockCardModalProps> = ({
       isOpen={isOpen}
       onClose={onClose}
       title={data ? `Thẻ Kho: ${data.sku} - ${data.product_name}` : 'Thẻ Kho Sản Phẩm'}
-      subtitle="Báo cáo số dư 3 cột và lịch sử biến động thẻ kho tập trung (S5-05)"
+      subtitle="Báo cáo số dư 3 cột và lịch sử biến động thẻ kho tập trung"
       maxWidth="4xl"
       footer={
         <Button variant="secondary" size="sm" onClick={onClose}>

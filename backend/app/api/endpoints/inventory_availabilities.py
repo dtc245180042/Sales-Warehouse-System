@@ -15,7 +15,7 @@ from app.schemas.inventory_reservation import (
 )
 from app.services import inventory_reservation_service
 
-router = APIRouter(prefix="/inventory-availabilities", tags=["Quản Lý Tồn Khả Dụng & Giữ Chỗ (S4-03)"])
+router = APIRouter(prefix="/inventory-availabilities", tags=["Quản Lý Tồn Khả Dụng & Giữ Chỗ"])
 
 
 @router.get("", response_model=SkuAvailabilityResponse)

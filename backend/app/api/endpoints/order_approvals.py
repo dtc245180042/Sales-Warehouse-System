@@ -39,7 +39,7 @@ def list_pending_order_approvals(
     current_user: Optional[User] = Depends(lay_nguoi_dung_tuy_chon),
 ):
     """
-    Lấy danh sách các đơn hàng chờ duyệt ngoại lệ (S4-05, SCRUM-237).
+    Lấy danh sách các đơn hàng chờ duyệt ngoại lệ (SCRUM-237).
     Hiển thị rõ lý do cần duyệt (vượt hạn mức nợ / bán dưới giá sàn) và mức độ vi phạm.
     """
     return order_approval_service.list_order_approvals(

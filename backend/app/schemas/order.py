@@ -282,7 +282,7 @@ class OrderResponse(BaseModel):
 
 
 # ============================================================================
-# SCRUM-236 (S4-04): Gợi ý mặt hàng từ lịch sử mua hàng 3 tháng gần nhất
+# SCRUM-236: Gợi ý mặt hàng từ lịch sử mua hàng 3 tháng gần nhất
 # ============================================================================
 
 class PurchaseHistoryItemSuggestion(BaseModel):

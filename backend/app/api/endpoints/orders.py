@@ -51,10 +51,10 @@ def get_draft_orders(
 @router.get("/products/search", response_model=List[ProductSearchForOrderResponse])
 def search_products_for_order(
     q: Optional[str] = Query(None, description="Từ khóa SKU hoặc tên sản phẩm"),
-    customer_id: Optional[str] = Query(None, description="Mã khách hàng để tính tồn khả dụng theo kho phục vụ (S4-03)"),
+    customer_id: Optional[str] = Query(None, description="Mã khách hàng để tính tồn khả dụng theo kho phục vụ"),
     db: Session = Depends(lay_phien_db),
 ):
-    """Tìm kiếm sản phẩm hỗ trợ tạo đơn hàng kèm quy cách/đơn vị tính và tồn khả dụng (S3-09, S4-03)."""
+    """Tìm kiếm sản phẩm hỗ trợ tạo đơn hàng kèm quy cách/đơn vị tính và tồn khả dụng."""
     return order_service.search_products_for_order(db=db, query_str=q, customer_id=customer_id)
 
 
@@ -66,7 +66,7 @@ def get_customer_purchase_suggestions(
     current_user: Optional[User] = Depends(lay_nguoi_dung_tuy_chon),
 ):
     """
-    Lấy gợi ý mặt hàng từ lịch sử mua hàng 3 tháng gần nhất của đại lý kèm số lượng bình quân (S4-04, SCRUM-236).
+    Lấy gợi ý mặt hàng từ lịch sử mua hàng 3 tháng gần nhất của đại lý kèm số lượng bình quân (SCRUM-236).
     Chặn 403 nếu Sales Rep không được phân công quản lý đại lý.
     """
     return order_service.get_purchase_history_suggestions(
@@ -82,7 +82,7 @@ def merge_suggestion_items(
     req: MergeItemsRequest,
 ):
     """
-    Hợp nhất sản phẩm/nhóm hàng từ gợi ý vào danh sách đơn hiện tại, áp dụng quy tắc chống trùng dòng (S4-04, SCRUM-236).
+    Hợp nhất sản phẩm/nhóm hàng từ gợi ý vào danh sách đơn hiện tại, áp dụng quy tắc chống trùng dòng (SCRUM-236).
     """
     merged_items = order_service.merge_items_anti_duplicate(
         current_items=req.current_items,
@@ -205,7 +205,7 @@ def copy_order_to_draft(
     db: Session = Depends(lay_phien_db),
     current_user: Optional[User] = Depends(lay_nguoi_dung_tuy_chon),
 ):
-    """Sao chép đơn hàng cũ thành đơn nháp mới, tự động tính lại giá & chiết khấu theo bảng giá hiện hành (S4-09, SCRUM-241)."""
+    """Sao chép đơn hàng cũ thành đơn nháp mới, tự động tính lại giá & chiết khấu theo bảng giá hiện hành (SCRUM-241)."""
     return order_service.copy_order_to_draft(
         db=db,
         order_id=order_id,

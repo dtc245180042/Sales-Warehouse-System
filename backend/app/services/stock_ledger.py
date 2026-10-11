@@ -173,6 +173,41 @@ def _get_active_reserved_for_sku_warehouse(
     return int(total_res)
 
 
+def _ensure_default_warehouse_backfilled(
+    db: Session,
+    product_id: str,
+    sku: Optional[str] = None,
+) -> None:
+    """
+    Đảm bảo kho mặc định (1) được backfill từ ProductStockProfile cũ
+    trước khi thực hiện bất kỳ phép tính hoặc đồng bộ nào trên sản phẩm.
+    """
+    ws_wh1 = db.query(WarehouseStock).filter(
+        WarehouseStock.product_id == product_id,
+        WarehouseStock.warehouse_id == 1,
+    ).first()
+    if not ws_wh1:
+        old_profile = db.query(ProductStockProfile).filter(
+            ProductStockProfile.product_id == product_id
+        ).first()
+        if old_profile:
+            init_min = int(old_profile.min_stock if old_profile.min_stock is not None else 10)
+            init_physical = int(
+                old_profile.physical_stock
+                if old_profile.physical_stock is not None
+                else (old_profile.stock or 0)
+            )
+            ws_wh1 = WarehouseStock(
+                product_id=product_id,
+                sku=sku or old_profile.sku,
+                warehouse_id=1,
+                physical_stock=init_physical,
+                min_stock=init_min,
+            )
+            db.add(ws_wh1)
+            db.flush()
+
+
 def _get_or_create_stock_row(
     db: Session,
     product_id: str,
@@ -184,6 +219,9 @@ def _get_or_create_stock_row(
     Lấy hoặc khởi tạo dòng WarehouseStock có khóa bi quan (SELECT FOR UPDATE)
     và cơ chế Backfill tự động từ ProductStockProfile (kho mặc định = 1).
     """
+    # Đảm bảo kho 1 luôn được backfill nếu chưa có
+    _ensure_default_warehouse_backfilled(db, product_id, sku)
+
     query = db.query(WarehouseStock).filter(
         WarehouseStock.product_id == product_id,
         WarehouseStock.warehouse_id == warehouse_id,
@@ -193,28 +231,12 @@ def _get_or_create_stock_row(
 
     stock_row = query.first()
     if not stock_row:
-        # Cơ chế Backfill: Nếu là kho mặc định (1), sao chép tồn ban đầu từ ProductStockProfile
-        init_physical = 0
-        init_min = 10
-
-        old_profile = db.query(ProductStockProfile).filter(
-            ProductStockProfile.product_id == product_id
-        ).first()
-        if old_profile:
-            init_min = int(old_profile.min_stock if old_profile.min_stock is not None else 10)
-            if warehouse_id == 1:
-                # Ưu tiên lấy physical_stock, nếu chưa có thì lấy stock cũ
-                if old_profile.physical_stock is not None:
-                    init_physical = int(old_profile.physical_stock)
-                elif old_profile.stock is not None:
-                    init_physical = int(old_profile.stock)
-
         stock_row = WarehouseStock(
             product_id=product_id,
             sku=sku,
             warehouse_id=warehouse_id,
-            physical_stock=init_physical,
-            min_stock=init_min,
+            physical_stock=0,
+            min_stock=10,
         )
         db.add(stock_row)
         db.flush()
@@ -233,6 +255,9 @@ def _sync_legacy_stock(
     stock (khả dụng) = physical_stock - reserved_stock
     Trả về: (total_physical, total_reserved, total_available)
     """
+    # Đảm bảo kho 1 đã được backfill trước khi sum
+    _ensure_default_warehouse_backfilled(db, product_id)
+
     total_physical = int(
         db.query(func.coalesce(func.sum(WarehouseStock.physical_stock), 0))
         .filter(WarehouseStock.product_id == product_id)
@@ -522,3 +547,38 @@ def get_ledger_pagination(
         "warehouse_code": wh_code,
         "warehouse_name": wh_name,
     }
+
+
+# ==============================================================================
+# HÀM KIỂM SOÁT LỆCH TỒN (LEDGER DRIFT DETECTION - CHỈ ĐỌC)
+# ==============================================================================
+def check_ledger_drift(db: Session) -> List[Dict[str, Any]]:
+    """
+    Hàm chỉ đọc đối soát kiểm tra xem có sản phẩm nào bị lệch bất biến:
+    tổng warehouse_stocks.physical_stock != ProductStockProfile.physical_stock hay không.
+    Trả về danh sách các sản phẩm bị lệch (drift != 0).
+    """
+    profiles = db.query(ProductStockProfile).all()
+    drift_items: List[Dict[str, Any]] = []
+
+    for prof in profiles:
+        total_ws_physical = int(
+            db.query(func.coalesce(func.sum(WarehouseStock.physical_stock), 0))
+            .filter(WarehouseStock.product_id == prof.product_id)
+            .scalar()
+            or 0
+        )
+        legacy_physical = int(prof.physical_stock if prof.physical_stock is not None else (prof.stock or 0))
+        drift = total_ws_physical - legacy_physical
+
+        if drift != 0:
+            drift_items.append({
+                "product_id": prof.product_id,
+                "sku": prof.sku,
+                "warehouse_stocks_total": total_ws_physical,
+                "profile_physical_stock": legacy_physical,
+                "drift": drift,
+            })
+
+    return drift_items
+

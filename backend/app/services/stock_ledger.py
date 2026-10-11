@@ -69,12 +69,12 @@ def resolve_warehouse(db: Session, warehouse_id: int) -> Tuple[str, str]:
     )
 
 
-def resolve_warehouse_id_by_name(db: Session, warehouse_name: str) -> int:
-    """Ánh xạ ngược từ tên kho dạng chuỗi sang warehouse_id (dùng khi tính reserved)."""
-    if not warehouse_name:
-        return 1
+def resolve_warehouse_id_by_name(db: Session, warehouse_name: str) -> Optional[int]:
+    """Ánh xạ ngược từ tên kho dạng chuỗi sang warehouse_id (dùng khi tính reserved và dispatch)."""
+    if not warehouse_name or not str(warehouse_name).strip():
+        return None
 
-    clean_name = warehouse_name.strip().lower()
+    clean_name = str(warehouse_name).strip().lower()
 
     if Warehouse is not None:
         wh = db.query(Warehouse).filter(Warehouse.name.ilike(f"%{clean_name}%")).first()
@@ -82,10 +82,14 @@ def resolve_warehouse_id_by_name(db: Session, warehouse_name: str) -> int:
             return wh.id
 
     for wid, data in FALLBACK_WAREHOUSE_MAP.items():
-        if clean_name in data["name"].lower() or data["code"].lower() in clean_name:
+        if clean_name in data["name"].lower() or data["code"].lower() in clean_name or any(a.lower() in clean_name for a in data.get("aliases", [])):
             return wid
 
-    return 1  # Mặc định kho 1 (Kho Tổng Hà Nội)
+    return None
+
+
+# Alias hàm ánh xạ duy nhất
+map_warehouse_name_to_id = resolve_warehouse_id_by_name
 
 
 # ==============================================================================
@@ -288,6 +292,19 @@ def _sync_legacy_stock(
         profile.physical_stock = total_physical
         profile.reserved_stock = total_reserved
         profile.stock = total_available
+    else:
+        prod = db.query(Product).filter(Product.id == product_id).first()
+        if prod:
+            profile = ProductStockProfile(
+                product_id=product_id,
+                sku=prod.sku,
+                physical_stock=total_physical,
+                reserved_stock=total_reserved,
+                stock=total_available,
+                min_stock=int(prod.min_stock if prod.min_stock is not None else 10),
+                warehouse="Kho Tổng Hà Nội",
+            )
+            db.add(profile)
 
     prod = db.query(Product).filter(Product.id == product_id).first()
     if prod:

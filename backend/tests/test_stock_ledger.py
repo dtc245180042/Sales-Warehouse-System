@@ -19,6 +19,12 @@ from app.services.stock_ledger import (
 def setup_db():
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
+    test_pids = ["PRD-TEST-LEDGER", "PRD-TEST-BACKFILL", "PRD-TEST-LOWSTOCK"]
+    db.query(StockLedgerEntry).filter(StockLedgerEntry.product_id.in_(test_pids)).delete(synchronize_session=False)
+    db.query(WarehouseStock).filter(WarehouseStock.product_id.in_(test_pids)).delete(synchronize_session=False)
+    db.query(StockReservation).filter(StockReservation.product_id.in_(test_pids)).delete(synchronize_session=False)
+    db.commit()
+
     # 1. Tạo sản phẩm test chính
     prod = db.query(Product).filter(Product.id == "PRD-TEST-LEDGER").first()
     if not prod:

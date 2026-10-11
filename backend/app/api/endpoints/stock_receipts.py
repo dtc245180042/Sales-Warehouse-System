@@ -10,6 +10,7 @@ from app.schemas.stock_receipt import (
     StockReceiptUpdate,
     StockReceiptResponse,
     StockReceiptListResponse,
+    StockReceiptAdjustmentRequest,
 )
 from app.services import stock_receipt_service
 
@@ -141,3 +142,24 @@ def cancel_receipt(
     Phiếu đã CONFIRMED bắt buộc lập phiếu điều chỉnh, không được hủy trực tiếp.
     """
     return stock_receipt_service.cancel_stock_receipt(db, id, current_user, reason)
+
+
+@router.post(
+    "/{id}/adjustment",
+    response_model=StockReceiptResponse,
+    summary="Điều chỉnh / đảo ngược phiếu nhập kho đã xác nhận (AC-5)",
+)
+def adjust_receipt(
+    id: int,
+    data: StockReceiptAdjustmentRequest,
+    db: Session = Depends(lay_phien_db),
+    current_user: User = Depends(lay_nguoi_dung_hien_tai),
+):
+    """
+    AC-5: Điều chỉnh phiếu nhập kho đã CONFIRMED:
+    - Gọi IN_PURCHASE_REVERSAL giảm tồn kho vật lý.
+    - Bắt buộc phải có lý do (reason).
+    - Không đảo vượt số lượng đã nhập ban đầu.
+    - Không làm âm tồn kho thực tế hiện tại.
+    """
+    return stock_receipt_service.adjust_stock_receipt(db, id, data, current_user)

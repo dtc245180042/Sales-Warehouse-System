@@ -5,10 +5,11 @@ from pydantic import BaseModel, Field, ConfigDict
 
 class StockReceiptItemCreate(BaseModel):
     product_id: str = Field(..., description="Mã sản phẩm (PRD-xxx)")
-    quantity: int = Field(..., gt=0, description="Số lượng nhập (nguyên dương, đơn vị cơ sở)")
-    cost_price: float = Field(0.0, ge=0.0, description="Đơn giá nhập")
-    lot_number: Optional[str] = Field(None, description="Số lô hàng (AC-3)")
-    expiry_date: Optional[datetime] = Field(None, description="Hạn sử dụng (AC-3)")
+    input_quantity: int = Field(..., gt=0, description="Số lượng nhập theo đơn vị khai báo (vd: 10 thùng)")
+    input_unit: Optional[str] = Field(None, description="Tên đơn vị nhập (vd: thùng, kiện)")
+    conversion_rate: int = Field(1, ge=1, description="Hệ số quy đổi sang đơn vị cơ sở (vd: 24 lon/thùng)")
+    lot_number: Optional[str] = Field(None, description="Số lô sản xuất (AC-3: bắt buộc với hàng date)")
+    expiry_date: Optional[datetime] = Field(None, description="Hạn sử dụng (AC-3: bắt buộc với hàng date)")
 
 
 class StockReceiptItemResponse(BaseModel):
@@ -18,8 +19,11 @@ class StockReceiptItemResponse(BaseModel):
     product_id: str
     product_name: Optional[str] = None
     sku: Optional[str] = None
-    quantity: int
-    cost_price: Optional[float] = None  # Che giấu đối với vai trò Thủ kho
+    input_quantity: int
+    input_unit: Optional[str] = None
+    conversion_rate: int
+    quantity_base: int
+    adjusted_quantity: int = 0
     lot_number: Optional[str] = None
     expiry_date: Optional[datetime] = None
 
@@ -51,8 +55,7 @@ class StockReceiptResponse(BaseModel):
     status: str
     note: Optional[str] = None
     total_items: int
-    total_quantity: int
-    total_cost_amount: Optional[float] = None  # Che giấu đối với vai trò Thủ kho
+    total_quantity: int  # Tổng số lượng cơ sở (quantity_base)
     created_by_id: int
     confirmed_by_id: Optional[int] = None
     confirmed_at: Optional[datetime] = None
@@ -67,3 +70,13 @@ class StockReceiptListResponse(BaseModel):
     page: int
     size: int
     total_pages: int
+
+
+class StockReceiptAdjustmentItem(BaseModel):
+    product_id: str = Field(..., description="Mã sản phẩm cần đảo ngược")
+    quantity: int = Field(..., gt=0, description="Số lượng cơ sở cần đảo ngược (không vượt số đã nhập)")
+
+
+class StockReceiptAdjustmentRequest(BaseModel):
+    reason: str = Field(..., min_length=3, description="Lý do điều chỉnh / đảo ngược phiếu nhập (bắt buộc)")
+    items: List[StockReceiptAdjustmentItem] = Field(..., min_length=1, description="Danh sách mặt hàng cần đảo ngược")

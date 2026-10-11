@@ -68,6 +68,67 @@ export interface CartCalculationResult {
   total_amount: number;
 }
 
+export interface PortalOrderItem {
+  id: number;
+  product_id: string;
+  sku?: string;
+  name: string;
+  unit?: string;
+  price: number;
+  quantity: number;
+  delivered_quantity?: number | null;
+  is_short_delivered: boolean;
+  short_delivered_quantity: number;
+  discount: number;
+  subtotal: number;
+}
+
+export interface PortalOrderListItem {
+  id: string;
+  code: string;
+  customer_id: string;
+  status: string;
+  total: number;
+  subtotal: number;
+  discount: number;
+  payment_status: string;
+  expected_delivery_date?: string | null;
+  created_at: string;
+  items_count: number;
+  has_short_delivery: boolean;
+}
+
+export interface PortalOrderListResponse {
+  items: PortalOrderListItem[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+export interface PortalOrderDetail {
+  id: string;
+  code: string;
+  customer_id: string;
+  customer_name: string;
+  status: string;
+  payment_method: string;
+  payment_status: string;
+  subtotal: number;
+  discount: number;
+  tax: number;
+  total: number;
+  paid_amount: number;
+  delivery_receiver_name?: string | null;
+  delivery_phone?: string | null;
+  delivery_address?: string | null;
+  delivery_notes?: string | null;
+  expected_delivery_date?: string | null;
+  created_at: string;
+  updated_at?: string | null;
+  items: PortalOrderItem[];
+  has_short_delivery: boolean;
+}
+
 export const portalService = {
   getProfile: async (): Promise<PortalProfile> => {
     const res = await apiClient.get<PortalProfile>('/portal/me');
@@ -107,4 +168,15 @@ export const portalService = {
     });
     return res.data;
   },
+
+  getOrders: async (params?: { status?: string; page?: number; limit?: number }): Promise<PortalOrderListResponse> => {
+    const res = await apiClient.get<PortalOrderListResponse>('/portal/orders', { params });
+    return res.data;
+  },
+
+  getOrderDetail: async (orderId: string): Promise<PortalOrderDetail> => {
+    const res = await apiClient.get<PortalOrderDetail>(`/portal/orders/${orderId}`);
+    return res.data;
+  },
 };
+

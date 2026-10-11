@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   ShoppingBag,
+  Package,
   Search,
   CreditCard,
   Building2,
@@ -38,6 +40,7 @@ interface CartItem {
 
 export const PortalOrderPage: React.FC = () => {
   const { logout } = useAuth();
+  const navigate = useNavigate();
 
   // State
   const [profile, setProfile] = useState<PortalProfile | null>(null);
@@ -236,6 +239,23 @@ export const PortalOrderPage: React.FC = () => {
               <LogOut className="w-5 h-5" />
             </button>
           </div>
+        </div>
+
+        {/* Navigation Tabs */}
+        <div className="max-w-4xl mx-auto px-4 flex border-t border-slate-100 dark:border-slate-700/60">
+          <button
+            className="flex items-center gap-2 py-3 px-4 text-xs font-semibold border-b-2 border-indigo-600 text-indigo-600 dark:text-indigo-400 transition"
+          >
+            <ShoppingBag className="w-4 h-4" />
+            <span>Đặt Hàng Trực Tuyến</span>
+          </button>
+          <button
+            onClick={() => navigate('/portal/orders')}
+            className="flex items-center gap-2 py-3 px-4 text-xs font-semibold border-b-2 border-transparent text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition"
+          >
+            <Package className="w-4 h-4" />
+            <span>Theo Dõi Đơn Hàng Của Tôi</span>
+          </button>
         </div>
       </header>
 
@@ -639,12 +659,23 @@ export const PortalOrderPage: React.FC = () => {
               </div>
             </div>
 
-            <button
-              onClick={() => setSuccessOrder(null)}
-              className="w-full bg-indigo-600 text-white font-bold py-2.5 rounded-xl text-xs shadow-md"
-            >
-              Hoàn tất & Tiếp tục đặt hàng
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  setSuccessOrder(null);
+                  navigate('/portal/orders');
+                }}
+                className="flex-1 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold py-2.5 rounded-xl text-xs transition"
+              >
+                Xem đơn hàng
+              </button>
+              <button
+                onClick={() => setSuccessOrder(null)}
+                className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 rounded-xl text-xs shadow-md transition"
+              >
+                Tiếp tục đặt
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -59,26 +59,6 @@ export const Orders: React.FC = () => {
   const { user, role } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  // SCRUM-613: Nhân viên kinh doanh (SalesStaff) chỉ xem đơn của các đại lý được phân công hoặc do mình tạo
-  const isSalesStaff = role === 'SalesStaff';
-  const assignedAgentIds = useMemo(() => {
-    if (!isSalesStaff || !user) return null;
-    const set = new Set<string>();
-    agents.forEach((a) => {
-      if (
-        a.assignedStaffId === user.id ||
-        a.assignedStaffName === user.name ||
-        (user.assignedDealers && user.assignedDealers.includes(a.id)) ||
-        (user.assignedDealers && user.assignedDealers.includes(a.code))
-      ) {
-        set.add(a.id);
-        set.add(a.code);
-        set.add(a.name);
-      }
-    });
-    return set;
-  }, [isSalesStaff, user, agents]);
-
   // Read URL params
   const urlSearch = searchParams.get('q') || '';
   const urlStatus = searchParams.get('status') || 'all';
@@ -100,6 +80,26 @@ export const Orders: React.FC = () => {
   const [endDate, setEndDate] = useState<string>(urlEndDate);
   const [cancelOrderId, setCancelOrderId] = useState<string | null>(null);
   const [printOrder, setPrintOrder] = useState<Order | null>(null);
+
+  // SCRUM-613: Nhân viên kinh doanh (SalesStaff) chỉ xem đơn của các đại lý được phân công hoặc do mình tạo
+  const isSalesStaff = role === 'SalesStaff';
+  const assignedAgentIds = useMemo(() => {
+    if (!isSalesStaff || !user) return null;
+    const set = new Set<string>();
+    agents.forEach((a) => {
+      if (
+        a.assignedStaffId === user.id ||
+        a.assignedStaffName === user.name ||
+        (user.assignedDealers && user.assignedDealers.includes(a.id)) ||
+        (user.assignedDealers && user.assignedDealers.includes(a.code))
+      ) {
+        set.add(a.id);
+        set.add(a.code);
+        set.add(a.name);
+      }
+    });
+    return set;
+  }, [isSalesStaff, user, agents]);
 
   // SCRUM-239 / SCRUM-612: Đồng bộ trạng thái bộ lọc với sessionStorage & URL
   // Khi mở màn hình lần đầu: nếu URL không có query params, khôi phục từ sessionStorage nếu có

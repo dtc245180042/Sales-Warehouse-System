@@ -254,5 +254,51 @@ export const customerService = {
     const filtered = customers.filter((c) => c.id !== id);
     setStorageItem(STORAGE_KEY, filtered);
     return true;
-  }
+  },
+
+  getSalesReps: async (): Promise<SalesRep[]> => {
+    try {
+      const res = await apiClient.get('/sales-reps');
+      if (Array.isArray(res.data)) {
+        return res.data.map((r: any) => ({
+          id: String(r.id),
+          username: r.username,
+          fullName: r.fullName || r.full_name || r.name,
+          email: r.email,
+          phoneNumber: r.phoneNumber || r.phone_number,
+          isActive: r.isActive ?? r.is_active ?? true,
+          assignedCustomerCount: r.assignedCustomerCount ?? r.assigned_customer_count ?? 0,
+        }));
+      }
+    } catch (err) {
+      console.warn('[customerService] Failed to load sales reps:', err);
+    }
+    return [];
+  },
+
+  assignCustomer: async (customerId: string, staffId: string, reason: string): Promise<any> => {
+    const res = await apiClient.post(`/customers/${encodeURIComponent(customerId)}/assign`, {
+      assigned_staff_id: staffId,
+      reason,
+    });
+    return res.data;
+  },
+
+  unassignCustomer: async (customerId: string, reason: string): Promise<any> => {
+    const res = await apiClient.post(`/customers/${encodeURIComponent(customerId)}/unassign`, {
+      reason,
+    });
+    return res.data;
+  },
+
+  bulkTransfer: async (payload: {
+    from_staff_id: string;
+    to_staff_id: string;
+    transfer_all: boolean;
+    customer_ids: string[];
+    reason: string;
+  }): Promise<any> => {
+    const res = await apiClient.post('/customers/assignments/bulk-transfer', payload);
+    return res.data;
+  },
 };

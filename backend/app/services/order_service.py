@@ -421,11 +421,13 @@ def create_order(db: Session, order_in: OrderCreate, current_user: Optional[User
             validate_delivery_address_for_customer(db, order_in.customer_id, order_in.delivery_address_id)
 
     from app.models.stock_reservation import StockReservation
+    from app.models.order_delivery_profile import OrderDeliveryProfile
     count = db.query(Order).count() + 1
     order_id = f"ORD-{str(count).zfill(3)}"
     while (
         db.query(Order).filter(Order.id == order_id).first() or
-        db.query(StockReservation).filter(StockReservation.order_id == order_id).first()
+        db.query(StockReservation).filter(StockReservation.order_id == order_id).first() or
+        db.query(OrderDeliveryProfile).filter(OrderDeliveryProfile.order_id == order_id).first()
     ):
         count += 1
         order_id = f"ORD-{str(count).zfill(3)}"

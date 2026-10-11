@@ -68,7 +68,10 @@ export const productService = {
       console.warn('[productService] Backend API offline hoặc lỗi, sử dụng bộ nhớ cục bộ:', err);
     }
     const stored = getStorageItem<Product[]>(STORAGE_KEY, initialProducts);
-    return stored.map((p) => ({
+    const cleaned = stored.filter(
+      (p) => !p.id.startsWith('PROD-TRF-') && !p.sku.startsWith('SKU-TRF-') && !p.sku.startsWith('PROD-TRF-')
+    );
+    return cleaned.map((p) => ({
       ...p,
       image: (p.image && !p.image.includes('/images/products/') && !p.image.includes('placeholder')) ? p.image : '',
     }));

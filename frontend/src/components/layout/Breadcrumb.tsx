@@ -25,6 +25,10 @@ const routeNames: Record<string, string> = {
   'activity-log': 'Nhật Ký Thao Tác',
   'price-lists': 'Bảng Giá Phân Phối',
   units: 'Đơn Vị Tính & Quy Đổi',
+  transfers: 'Chuyển Kho Nội Bộ',
+  overview: 'Tổng Quan Tồn Kho',
+  portal: 'Cổng Đại Lý B2B',
+  import: 'Nhập Excel',
 };
 
 export const Breadcrumb: React.FC = () => {
@@ -44,7 +48,13 @@ export const Breadcrumb: React.FC = () => {
       {pathnames.map((value, index) => {
         const to = `/${pathnames.slice(0, index + 1).join('/')}`;
         const isLast = index === pathnames.length - 1;
-        const name = routeNames[value] || value;
+        let name = routeNames[value] || value;
+
+        if (value.startsWith('PCK-')) {
+          name = `Phiếu ${value}`;
+        } else if (value.startsWith('TRF-')) {
+          name = `Phiếu ${value.replace('TRF-', 'PCK-')}`;
+        }
 
         return (
           <React.Fragment key={to}>

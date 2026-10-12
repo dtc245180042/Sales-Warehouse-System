@@ -62,3 +62,10 @@ export const validateVNPhoneNumber = (
 
   return { valid: true, normalized: cleaned };
 };
+
+/**
+ * Lọc ký tự nhập vào ô số điện thoại, chỉ giữ lại chữ số
+ */
+export const filterPhoneInput = (input: string): string => {
+  return input.replace(/[^\d+]/g, '');
+};

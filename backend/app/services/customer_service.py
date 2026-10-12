@@ -231,6 +231,15 @@ def _enrich_customer_response(db: Session, customer: Customer) -> CustomerRespon
         max_debt_days = credit_profile.max_debt_days
         current_debt = credit_profile.current_debt
 
+    valid_groups = {"TIER_1", "TIER_2", "WHOLESALE", "VIP", "RETAIL"}
+    raw_grp = (customer.customer_group or "RETAIL").upper().strip()
+    if raw_grp.startswith("WHOLESALE"):
+        safe_grp = "WHOLESALE"
+    elif raw_grp in valid_groups:
+        safe_grp = raw_grp
+    else:
+        safe_grp = "RETAIL"
+
     return CustomerResponse(
         id=customer.id,
         code=customer.code,
@@ -238,7 +247,7 @@ def _enrich_customer_response(db: Session, customer: Customer) -> CustomerRespon
         phone=customer.phone,
         email=customer.email,
         address=customer.address,
-        customer_group=customer.customer_group,
+        customer_group=safe_grp,
         tax_code=customer.tax_code,
         region=customer.region,
         assigned_sales_rep=customer.assigned_sales_rep or assigned_staff_name,
@@ -270,6 +279,18 @@ def check_sales_rep_scope(db: Session, customer_id: str, current_user: Optional[
             CustomerAssignment.assigned_staff_id == current_user.id
         ).first()
         if not assignment:
+            # Kiểm tra thêm nếu tên người phụ trách trên bảng customer trùng khớp
+            cus = db.query(Customer).filter(or_(Customer.id == customer_id, Customer.code == customer_id)).first()
+            if cus and (cus.assigned_sales_rep == current_user.full_name or cus.assigned_sales_rep == current_user.username):
+                # Đồng bộ tự động CustomerAssignment
+                existing_assign = db.query(CustomerAssignment).filter(CustomerAssignment.customer_id == cus.id).first()
+                if existing_assign:
+                    existing_assign.assigned_staff_id = current_user.id
+                else:
+                    db.add(CustomerAssignment(customer_id=cus.id, assigned_staff_id=current_user.id, assigned_by="Hệ thống"))
+                db.commit()
+                return
+
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Không tìm thấy thông tin đại lý '{customer_id}' trong phạm vi phụ trách của bạn."
@@ -336,12 +357,16 @@ def get_all_customers(
     query = db.query(Customer)
 
     # Phạm vi phân quyền (Scope Guard):
-    # Sales Rep: Chỉ được xem đại lý mình phụ trách (assigned_staff_id == user.id)
+    # Sales Rep: Chỉ được xem đại lý mình phụ trách (assigned_staff_id == user.id hoặc assigned_sales_rep khớp tên)
     if current_user and current_user.role == UserRole.SALES_REP.value:
-        query = query.join(
+        query = query.outerjoin(
             CustomerAssignment, Customer.id == CustomerAssignment.customer_id
         ).filter(
-            CustomerAssignment.assigned_staff_id == current_user.id
+            or_(
+                CustomerAssignment.assigned_staff_id == current_user.id,
+                Customer.assigned_sales_rep == current_user.full_name,
+                Customer.assigned_sales_rep == current_user.username
+            )
         )
     else:
         # Manager / Admin: Xem được 100% và hỗ trợ lọc theo nhân viên
@@ -537,12 +562,23 @@ def create_customer(
         )
         db.add(history)
     else:
+        target_staff_id = None
+        if customer.assigned_sales_rep:
+            staff_user = db.query(User).filter(
+                or_(
+                    User.full_name == customer.assigned_sales_rep,
+                    User.username == customer.assigned_sales_rep
+                )
+            ).first()
+            if staff_user:
+                target_staff_id = staff_user.id
+
         assignment = CustomerAssignment(
             customer_id=customer.id,
-            assigned_staff_id=None,
+            assigned_staff_id=target_staff_id,
             assigned_by=current_user.username if current_user else "Hệ thống",
             assigned_at=datetime.now(timezone.utc),
-            notes="Đại lý mới chưa phân công"
+            notes="Phân công theo người phụ trách khi tạo đại lý" if target_staff_id else "Đại lý mới chưa phân công"
         )
         db.add(assignment)
 
@@ -647,6 +683,20 @@ def update_customer(
             reason="Cập nhật thông tin đại lý"
         )
         db.add(audit)
+
+    # Đồng bộ CustomerAssignment nếu có thay đổi người phụ trách
+    if "assigned_sales_rep" in update_data:
+        rep_val = update_data["assigned_sales_rep"]
+        new_staff_id = None
+        if rep_val:
+            s_user = db.query(User).filter(or_(User.full_name == rep_val, User.username == rep_val)).first()
+            if s_user:
+                new_staff_id = s_user.id
+        assign_rec = db.query(CustomerAssignment).filter(CustomerAssignment.customer_id == customer.id).first()
+        if assign_rec:
+            assign_rec.assigned_staff_id = new_staff_id
+        else:
+            db.add(CustomerAssignment(customer_id=customer.id, assigned_staff_id=new_staff_id))
 
     try:
         db.commit()

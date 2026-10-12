@@ -600,7 +600,7 @@ export const ProductForm: React.FC<ProductFormProps> = ({
                   Cây Phân Cấp Ngành Hàng / Nhóm Hàng *
                 </label>
                 <span className="text-[11px] text-indigo-600 dark:text-indigo-400 font-medium">
-                  3 Cấp ERP (SCRUM-214)
+                  3 Cấp ERP
                 </span>
               </div>
               <select

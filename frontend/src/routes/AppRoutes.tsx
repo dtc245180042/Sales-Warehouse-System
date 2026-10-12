@@ -49,6 +49,7 @@ import { ProductCreate } from '../pages/products/ProductCreate';
 import { ProductEdit } from '../pages/products/ProductEdit';
 import { ProductUnitPage } from '../pages/products/ProductUnitPage';
 import { ProductImportPage } from '../pages/products/ProductImportPage';
+import { PriceHistoryPage } from '../pages/products/PriceHistoryPage';
 
 // Report Pages (Báo cáo bán hàng theo ngành hàng & Doanh thu)
 import { SalesReport } from '../pages/reports/SalesReport';
@@ -315,6 +316,14 @@ export const AppRoutes: React.FC = () => {
           element={
             <ProtectedRoute allowedRoles={['Admin', 'SalesManager', 'WarehouseManager', 'Director', 'Manager']}>
               <ProductUnitPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/products/price-history"
+          element={
+            <ProtectedRoute allowedRoles={['Admin', 'SalesManager', 'SalesStaff', 'Accountant', 'Director', 'Manager']}>
+              <PriceHistoryPage />
             </ProtectedRoute>
           }
         />

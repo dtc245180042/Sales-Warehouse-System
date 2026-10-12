@@ -22,6 +22,16 @@ interface DataTableProps<T> {
   emptyTitle?: string;
   emptyDescription?: string;
   defaultPageSize?: number;
+  loading?: boolean;
+  emptyMessage?: string;
+
+  // Hỗ trợ phân trang Server-side & Controlled
+  serverSidePagination?: boolean;
+  totalRecords?: number;
+  currentPage?: number;
+  pageSize?: number;
+  onPageChange?: (page: number) => void;
+  onPageSizeChange?: (pageSize: number) => void;
 }
 
 export function DataTable<T extends Record<string, any>>({
@@ -36,15 +46,27 @@ export function DataTable<T extends Record<string, any>>({
   emptyTitle = 'Không tìm thấy dữ liệu',
   emptyDescription = 'Thử thay đổi bộ lọc hoặc thêm bản ghi mới',
   defaultPageSize = 10,
+  loading = false,
+  emptyMessage,
+  serverSidePagination = false,
+  totalRecords,
+  currentPage: controlledPage,
+  pageSize: controlledPageSize,
+  onPageChange,
+  onPageSizeChange,
 }: DataTableProps<T>) {
-  const [currentPage, setCurrentPage] = useState<number>(1);
-  const [pageSize, setPageSize] = useState<number>(defaultPageSize);
+  const [internalPage, setInternalPage] = useState<number>(1);
+  const [internalPageSize, setInternalPageSize] = useState<number>(defaultPageSize);
   const [sortKey, setSortKey] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
+  const isServerSide = serverSidePagination || totalRecords !== undefined;
+  const activePage = isServerSide ? (controlledPage ?? 1) : internalPage;
+  const activePageSize = isServerSide ? (controlledPageSize ?? defaultPageSize) : internalPageSize;
+
   // Sorting
   const sortedData = React.useMemo(() => {
-    if (!sortKey) return data;
+    if (!sortKey || isServerSide) return data;
     return [...data].sort((a, b) => {
       const valA = a[sortKey];
       const valB = b[sortKey];
@@ -58,12 +80,34 @@ export function DataTable<T extends Record<string, any>>({
         ? String(valA).localeCompare(String(valB))
         : String(valB).localeCompare(String(valA));
     });
-  }, [data, sortKey, sortDirection]);
+  }, [data, sortKey, sortDirection, isServerSide]);
 
   // Pagination
-  const totalPages = Math.ceil(sortedData.length / pageSize) || 1;
-  const validPage = Math.min(currentPage, totalPages);
-  const paginatedData = sortedData.slice((validPage - 1) * pageSize, validPage * pageSize);
+  const totalCount = isServerSide ? (totalRecords ?? data.length) : sortedData.length;
+  const totalPages = Math.max(1, Math.ceil(totalCount / activePageSize));
+  const validPage = Math.min(Math.max(1, activePage), totalPages);
+  const paginatedData = isServerSide
+    ? data
+    : sortedData.slice((validPage - 1) * activePageSize, validPage * activePageSize);
+
+  const handlePageChange = (newPage: number) => {
+    const page = Math.min(Math.max(1, newPage), totalPages);
+    if (isServerSide) {
+      onPageChange?.(page);
+    } else {
+      setInternalPage(page);
+    }
+  };
+
+  const handlePageSizeChange = (newSize: number) => {
+    if (isServerSide) {
+      onPageSizeChange?.(newSize);
+      onPageChange?.(1);
+    } else {
+      setInternalPageSize(newSize);
+      setInternalPage(1);
+    }
+  };
 
   const handleSort = (key: string) => {
     if (sortKey === key) {
@@ -164,7 +208,16 @@ export function DataTable<T extends Record<string, any>>({
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-sm">
-            {paginatedData.length > 0 ? (
+            {loading ? (
+              <tr>
+                <td colSpan={columns.length + (selectable ? 1 : 0)} className="py-14 text-center text-slate-400">
+                  <div className="flex items-center justify-center gap-2.5">
+                    <div className="w-5 h-5 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+                    <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Đang nạp dữ liệu...</span>
+                  </div>
+                </td>
+              </tr>
+            ) : paginatedData.length > 0 ? (
               paginatedData.map((row) => {
                 const id = keyExtractor(row);
                 const isSelected = selectedIds.includes(id);
@@ -196,7 +249,7 @@ export function DataTable<T extends Record<string, any>>({
             ) : (
               <tr>
                 <td colSpan={columns.length + (selectable ? 1 : 0)} className="p-8">
-                  <EmptyState title={emptyTitle} description={emptyDescription} />
+                  <EmptyState title={emptyMessage || emptyTitle} description={emptyDescription} />
                 </td>
               </tr>
             )}
@@ -205,41 +258,97 @@ export function DataTable<T extends Record<string, any>>({
       </div>
 
       {/* Pagination Footer */}
-      {sortedData.length > 0 && (
+      {totalCount > 0 && (
         <div className="px-4 py-3.5 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs sm:text-sm text-slate-500 dark:text-slate-400">
           <div className="flex items-center gap-2">
             <span>Hiển thị</span>
             <select
-              value={pageSize}
-              onChange={(e) => {
-                setPageSize(Number(e.target.value));
-                setCurrentPage(1);
-              }}
-              className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-xs"
+              value={activePageSize}
+              onChange={(e) => handlePageSizeChange(Number(e.target.value))}
+              className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-xs font-medium cursor-pointer"
             >
               <option value={5}>5</option>
               <option value={10}>10</option>
               <option value={20}>20</option>
               <option value={50}>50</option>
             </select>
-            <span>trong tổng số {sortedData.length} bản ghi</span>
+            <span>trong tổng số {totalCount.toLocaleString('vi-VN')} bản ghi</span>
           </div>
 
           <div className="flex items-center gap-1.5">
             <button
-              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              onClick={() => handlePageChange(validPage - 1)}
               disabled={validPage <= 1}
               className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              title="Trang trước"
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
-            <span className="px-2 font-medium">
-              Trang {validPage} / {totalPages}
-            </span>
+
+            {/* Các nút bấm trực tiếp số trang */}
+            <div className="flex items-center gap-1">
+              {totalPages <= 7 ? (
+                Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+                  <button
+                    key={p}
+                    onClick={() => handlePageChange(p)}
+                    className={`w-7 h-7 rounded-lg text-xs font-semibold transition-colors ${
+                      p === validPage
+                        ? 'bg-indigo-600 text-white shadow-sm'
+                        : 'border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                    }`}
+                  >
+                    {p}
+                  </button>
+                ))
+              ) : (
+                <>
+                  <button
+                    onClick={() => handlePageChange(1)}
+                    className={`w-7 h-7 rounded-lg text-xs font-semibold transition-colors ${
+                      1 === validPage
+                        ? 'bg-indigo-600 text-white shadow-sm'
+                        : 'border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                    }`}
+                  >
+                    1
+                  </button>
+                  {validPage > 3 && <span className="text-slate-400 px-0.5">...</span>}
+                  {Array.from({ length: totalPages }, (_, i) => i + 1)
+                    .filter((p) => p !== 1 && p !== totalPages && Math.abs(p - validPage) <= 1)
+                    .map((p) => (
+                      <button
+                        key={p}
+                        onClick={() => handlePageChange(p)}
+                        className={`w-7 h-7 rounded-lg text-xs font-semibold transition-colors ${
+                          p === validPage
+                            ? 'bg-indigo-600 text-white shadow-sm'
+                            : 'border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                        }`}
+                      >
+                        {p}
+                      </button>
+                    ))}
+                  {validPage < totalPages - 2 && <span className="text-slate-400 px-0.5">...</span>}
+                  <button
+                    onClick={() => handlePageChange(totalPages)}
+                    className={`w-7 h-7 rounded-lg text-xs font-semibold transition-colors ${
+                      totalPages === validPage
+                        ? 'bg-indigo-600 text-white shadow-sm'
+                        : 'border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                    }`}
+                  >
+                    {totalPages}
+                  </button>
+                </>
+              )}
+            </div>
+
             <button
-              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              onClick={() => handlePageChange(validPage + 1)}
               disabled={validPage >= totalPages}
               className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              title="Trang sau"
             >
               <ChevronRight className="w-4 h-4" />
             </button>

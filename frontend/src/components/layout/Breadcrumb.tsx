@@ -25,6 +25,7 @@ const routeNames: Record<string, string> = {
   'activity-log': 'Nhật Ký Thao Tác',
   'price-lists': 'Bảng Giá Phân Phối',
   units: 'Đơn Vị Tính & Quy Đổi',
+  'price-history': 'Lịch Sử Thay Đổi Giá',
 };
 
 export const Breadcrumb: React.FC = () => {

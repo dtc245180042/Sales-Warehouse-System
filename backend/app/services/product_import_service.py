@@ -55,14 +55,14 @@ class ProductImportService:
             col_letter = get_column_letter(col_idx)
             ws1.column_dimensions[col_letter].width = width
 
-        # Dữ liệu mẫu minh họa theo Cách 1: Mã thông minh phân cấp [NHÓM]-[HÃNG]-[MODEL]-[THUỘC TÍNH]
+        # Dữ liệu mẫu minh họa theo chuẩn ngành hàng Điện Tử - Công Nghệ
         sample_rows = [
-            ["NGK-COCA-330-LON", "Nước ngọt Coca Cola lon 330ml", "Nước giải khát", "Lon", "24 lon/thùng", 7500, 10000, "Nước ngọt có gas hương cola", "ACTIVE"],
-            ["NGK-PEPSI-330-LON", "Nước ngọt Pepsi lon 330ml", "Nước giải khát", "Lon", "24 lon/thùng", 7200, 9500, "Nước giải khát có gas vị chanh", "ACTIVE"],
-            ["BR-BIHN-330-LON", "Bia Hà Nội lon 330ml", "Bia & Rượu", "Lon", "24 lon/thùng", 9500, 13000, "Bia lon vàng truyền thống", "ACTIVE"],
-            ["DT-APL-IP15-128", "Điện thoại Apple iPhone 15 128GB", "Điện thoại & Tablet", "Chiếc", "1 chiếc/hộp", 18500000, 21990000, "Hàng chính hãng VN/A", "ACTIVE"],
-            ["GD-SUN-SHD-CHAO", "Chảo chống dính Sunhouse 26cm", "Đồ gia dụng", "Chiếc", "10 chiếc/thùng", 120000, 185000, "Chảo nhôm đúc phủ chống dính", "ACTIVE"],
-            ["NK-AQUA-500-CHAI", "Nước khoáng Aquafina 500ml", "Nước khoáng", "Chai", "24 chai/thùng", 4000, 6000, "Nước khoáng tinh khiết đóng chai", "ACTIVE"]
+            ["DT-APL-IP15-128", "Điện thoại Apple iPhone 15 128GB", "Điện thoại & Máy tính bảng", "Chiếc", "1 chiếc/hộp", 18500000, 21990000, "Hàng chính hãng VN/A", "ACTIVE"],
+            ["LT-APL-MBA-M2", "Laptop Apple MacBook Air M2 8GB 256GB", "Máy tính & Thiết bị IT", "Chiếc", "1 chiếc/hộp", 22000000, 24990000, "Màu Space Gray chính hãng", "ACTIVE"],
+            ["TN-APL-APP2", "Tai nghe Apple AirPods Pro 2 USB-C", "Âm thanh & Phụ kiện công nghệ", "Chiếc", "1 chiếc/hộp", 4500000, 5690000, "Chống ồn chủ động ANC", "ACTIVE"],
+            ["TB-APL-IPAD9", "Máy tính bảng Apple iPad Gen 9 64GB WiFi", "Điện thoại & Máy tính bảng", "Chiếc", "1 chiếc/hộp", 6500000, 7490000, "Màn hình Retina 10.2 inch", "ACTIVE"],
+            ["PK-ANK-CHRG-65W", "Củ sạc nhanh Anker 735 GaNPrime 65W", "Âm thanh & Phụ kiện công nghệ", "Chiếc", "1 chiếc/hộp", 800000, 1150000, "3 cổng sạc nhanh đa năng", "ACTIVE"],
+            ["TB-ASU-RT-AX30", "Router WiFi 6 ASUS RT-AX3000P Dual Band", "Thiết bị mạng & Nhà thông minh", "Chiếc", "1 chiếc/hộp", 1500000, 2090000, "Phủ sóng rộng chuẩn AX3000", "ACTIVE"]
         ]
 
         data_font = Font(name="Calibri", size=10)

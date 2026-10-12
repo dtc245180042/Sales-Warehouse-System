@@ -34,6 +34,7 @@ import { Customer } from '../../types/Customer';
 import { Order } from '../../types/Order';
 import { useToast } from '../../contexts/ToastContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { DeliveryAddressManager } from '../../components/customers/DeliveryAddressManager';
 
 export const CustomerDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -62,12 +63,13 @@ export const CustomerDetail: React.FC = () => {
   const [unlockReason, setUnlockReason] = useState('');
   const [submittingLock, setSubmittingLock] = useState(false);
 
-  // Quyền: Kế toán công nợ và Admin
+  // Quyền: Kế toán công nợ, Quản lý kinh doanh, Giám đốc và Admin
+  const roleLower = String(user?.role || '').toLowerCase();
   const canManageLock =
-    user?.role === 'Accountant' ||
-    user?.role === 'Admin' ||
-    user?.role?.includes('Accountant') ||
-    user?.role?.includes('Admin');
+    roleLower.includes('accountant') ||
+    roleLower.includes('admin') ||
+    roleLower.includes('manager') ||
+    roleLower.includes('director');
 
   const fetchLockData = async (customerId: string) => {
     try {
@@ -384,10 +386,11 @@ export const CustomerDetail: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setIsCreditModalOpen(true)}
-                  className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1"
+                  className="px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-xs font-bold text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 border border-indigo-200 dark:border-indigo-800 flex items-center gap-1.5 transition-colors shadow-sm"
+                  title="Thiết lập hạn mức tín dụng và thời hạn nợ cho đại lý"
                 >
-                  <Edit3 className="w-3.5 h-3.5" />
-                  <span>Thiết lập</span>
+                  <CreditCard className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                  <span>Thiết lập hạn mức tín dụng</span>
                 </button>
               )}
             </div>
@@ -501,6 +504,9 @@ export const CustomerDetail: React.FC = () => {
 
         {/* Right Column: Order History of this customer (2 cols) */}
         <div className="lg:col-span-2 space-y-6">
+          {/* SCRUM-225 (S3-04): Quản lý nhiều điểm giao hàng cho một đại lý */}
+          <DeliveryAddressManager customerId={customer.id} customerName={customer.name} />
+
           <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-card">
             <div className="flex items-center justify-between mb-4">
               <div>

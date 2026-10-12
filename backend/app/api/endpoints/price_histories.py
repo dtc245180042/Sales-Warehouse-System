@@ -13,6 +13,40 @@ router = APIRouter(tags=["Lịch sử thay đổi giá sản phẩm"])
 
 
 @router.get(
+    "/price-histories",
+    response_model=ProductPriceHistoryListResponse,
+    summary="Tra cứu toàn bộ lịch sử thay đổi giá sản phẩm (S3-02 / SCRUM-223)"
+)
+def get_all_price_histories(
+    product_id: Optional[str] = Query(None, description="Mã sản phẩm hoặc SKU"),
+    search: Optional[str] = Query(None, description="Tìm theo tên sản phẩm, SKU hoặc lý do"),
+    customer_group: Optional[str] = Query(None, description="Lọc theo nhóm khách hàng: TIER_1, TIER_2, RETAIL, VIP..."),
+    price_type: Optional[str] = Query(None, description="Lọc theo loại giá: LISTED_PRICE, FLOOR_PRICE, SALE_PRICE"),
+    from_date: Optional[datetime] = Query(None, description="Từ thời điểm áp dụng"),
+    to_date: Optional[datetime] = Query(None, description="Đến thời điểm áp dụng"),
+    page: int = Query(1, ge=1, description="Số trang (bắt đầu từ 1)"),
+    limit: int = Query(20, ge=1, le=100, description="Số bản ghi trên mỗi trang"),
+    current_user: User = Depends(lay_nguoi_dung_hien_tai),
+    db: Session = Depends(lay_phien_db),
+):
+    """
+    Tra cứu toàn bộ lịch sử thay đổi giá sản phẩm với bộ lọc đa tiêu chí (S3-02 / SCRUM-223).
+    """
+    return price_history_service.list_all_price_histories(
+        db=db,
+        product_id=product_id,
+        search=search,
+        customer_group=customer_group,
+        price_type=price_type,
+        from_date=from_date,
+        to_date=to_date,
+        page=page,
+        limit=limit,
+        current_user=current_user
+    )
+
+
+@router.get(
     "/products/{product_id}/price-history",
     response_model=ProductPriceHistoryListResponse,
     summary="Tra cứu lịch sử thay đổi giá của một sản phẩm (S3-02 / SCRUM-424)"

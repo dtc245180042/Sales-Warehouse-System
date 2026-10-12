@@ -36,6 +36,7 @@ import { ConfirmDialog } from '../../components/common/ConfirmDialog';
 import { EmptyState } from '../../components/common/EmptyState';
 import { formatCurrency } from '../../utils/formatters';
 import { customerService } from '../../services/customerService';
+import { creditService } from '../../services/creditService';
 import { Customer, CustomerFilterOptions, SalesRep } from '../../types/Customer';
 import { useToast } from '../../contexts/ToastContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -48,6 +49,11 @@ export const CustomerList: React.FC = () => {
   // Đánh giá quyền hạn người dùng
   const roleStr = String(user?.role || '').toLowerCase();
   const isManagerOrAdmin = roleStr.includes('admin') || roleStr.includes('manager') || roleStr.includes('director');
+  const canManageCredit =
+    isManagerOrAdmin ||
+    roleStr.includes('accountant') ||
+    roleStr.includes('kế toán') ||
+    roleStr.includes('salesmanager');
 
   // 1. Đọc trạng thái từ URL Query Parameters
   const urlSearch = searchParams.get('q') || '';
@@ -56,6 +62,7 @@ export const CustomerList: React.FC = () => {
   const urlRep = searchParams.get('rep') || 'all';
   const urlStatus = searchParams.get('status') || 'all';
   const urlPage = parseInt(searchParams.get('page') || '1', 10);
+  const urlPageSize = parseInt(searchParams.get('pageSize') || '10', 10);
   const urlView = (searchParams.get('view') as 'table' | 'cards') || 'table';
 
   // 2. Local States
@@ -112,6 +119,14 @@ export const CustomerList: React.FC = () => {
     status: 'active' as 'active' | 'inactive' | 'locked',
   });
 
+  // Modal Thiết Lập Hạn Mức Tín Dụng & Công Nợ
+  const [creditCustomer, setCreditCustomer] = useState<Customer | null>(null);
+  const [isCreditModalOpen, setIsCreditModalOpen] = useState(false);
+  const [creditLimitInput, setCreditLimitInput] = useState<number>(50000000);
+  const [maxDebtDaysInput, setMaxDebtDaysInput] = useState<number>(30);
+  const [creditReasonInput, setCreditReasonInput] = useState<string>('');
+  const [submittingCredit, setSubmittingCredit] = useState(false);
+
   // 3. Nạp danh mục tùy chọn lọc từ backend
   useEffect(() => {
     customerService.getFilterOptions().then(setFilterOptions);
@@ -129,7 +144,7 @@ export const CustomerList: React.FC = () => {
   const updateParams = useCallback((updates: Record<string, string | null>) => {
     const params = new URLSearchParams(searchParams);
     Object.entries(updates).forEach(([key, val]) => {
-      if (!val || val === 'all' || (key === 'page' && val === '1')) {
+      if (!val || val === 'all' || (key === 'page' && val === '1') || (key === 'pageSize' && val === '10')) {
         params.delete(key);
       } else {
         params.set(key, val);
@@ -159,7 +174,7 @@ export const CustomerList: React.FC = () => {
         assigned_sales_rep: urlRep !== 'all' ? urlRep : undefined,
         status: urlStatus !== 'all' ? urlStatus : undefined,
         page: urlPage,
-        page_size: 10,
+        page_size: urlPageSize,
       });
       setCustomers(res.items);
       setTotalCount(res.total);
@@ -169,7 +184,7 @@ export const CustomerList: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [urlSearch, urlRegion, urlGroup, urlRep, urlStatus, urlPage, showToast]);
+  }, [urlSearch, urlRegion, urlGroup, urlRep, urlStatus, urlPage, urlPageSize, showToast]);
 
   useEffect(() => {
     loadCustomers();
@@ -386,6 +401,34 @@ export const CustomerList: React.FC = () => {
     }
   };
 
+  const handleOpenCreditModal = (customer: Customer) => {
+    setCreditCustomer(customer);
+    setCreditLimitInput(customer.creditLimit ?? customer.credit_limit ?? 50000000);
+    setMaxDebtDaysInput(customer.maxDebtDays ?? customer.max_debt_days ?? 30);
+    setCreditReasonInput('');
+    setIsCreditModalOpen(true);
+  };
+
+  const handleCreditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!creditCustomer) return;
+    try {
+      setSubmittingCredit(true);
+      await creditService.updateProfile(creditCustomer.id, {
+        credit_limit: creditLimitInput,
+        max_debt_days: maxDebtDaysInput,
+        reason: creditReasonInput || 'Điều chỉnh từ danh sách đại lý',
+      });
+      showToast(`Đã thiết lập hạn mức tín dụng cho đại lý '${creditCustomer.name}' thành công!`, 'success');
+      setIsCreditModalOpen(false);
+      loadCustomers();
+    } catch (err: any) {
+      showToast(err.message || 'Lỗi khi cập nhật hạn mức tín dụng', 'error');
+    } finally {
+      setSubmittingCredit(false);
+    }
+  };
+
   // Helper Badge phân loại
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -546,9 +589,14 @@ export const CustomerList: React.FC = () => {
         const limit = c.creditLimit ?? c.credit_limit ?? 50000000;
         const maxDays = c.maxDebtDays ?? c.max_debt_days ?? 30;
         return (
-          <div className="text-right">
-            <span className="font-bold text-xs text-purple-600 dark:text-purple-400 block">
+          <div
+            className={`text-right ${canManageCredit ? 'cursor-pointer group' : ''}`}
+            onClick={canManageCredit ? () => handleOpenCreditModal(c) : undefined}
+            title={canManageCredit ? "Click để thiết lập hạn mức tín dụng" : undefined}
+          >
+            <span className="font-bold text-xs text-purple-600 dark:text-purple-400 group-hover:underline flex items-center justify-end gap-1">
               {formatCurrency(limit)}
+              {canManageCredit && <CreditCard className="w-3 h-3 text-purple-400 opacity-60 group-hover:opacity-100" />}
             </span>
             <span className="text-[11px] text-slate-400">
               Tối đa {maxDays} ngày
@@ -608,6 +656,15 @@ export const CustomerList: React.FC = () => {
           >
             <Eye className="w-4 h-4" />
           </Link>
+          {canManageCredit && (
+            <button
+              onClick={() => handleOpenCreditModal(c)}
+              className="p-1.5 rounded-lg text-slate-400 hover:text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-950/40"
+              title="Thiết lập hạn mức tín dụng"
+            >
+              <CreditCard className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+            </button>
+          )}
           {isManagerOrAdmin && (
             <button
               onClick={() => handleOpenAssign(c)}
@@ -650,7 +707,7 @@ export const CustomerList: React.FC = () => {
   return (
     <PageContainer
       title="Đại Lý & Hạn Mức Công Nợ"
-      subtitle={`Hệ thống quản lý ${totalCount} đại lý và khách hàng trong tuyến phân phối (EP-03)`}
+      subtitle={`Hệ thống quản lý ${totalCount.toLocaleString('vi-VN')} đại lý và khách hàng trong tuyến phân phối`}
       actions={
         <div className="flex items-center gap-2">
           {/* Nút chuyển đổi View Mode: Bảng vs Thẻ Ngoài Hiện Trường */}
@@ -919,7 +976,14 @@ export const CustomerList: React.FC = () => {
           data={customers}
           loading={isLoading}
           keyExtractor={(c) => c.id}
-          emptyMessage="Không tìm thấy đại lý nào phù hợp với điều kiện tìm kiếm hoặc bộ lọc."
+          serverSidePagination={true}
+          totalRecords={totalCount}
+          currentPage={urlPage}
+          pageSize={urlPageSize}
+          onPageChange={(p) => updateParams({ page: String(p) })}
+          onPageSizeChange={(ps) => updateParams({ pageSize: String(ps), page: '1' })}
+          emptyTitle="Không tìm thấy đại lý nào phù hợp"
+          emptyDescription="Thử nới lỏng từ khóa hoặc bộ lọc để hiển thị kết quả."
         />
       ) : (
         /* GIAO DIỆN THẺ NGOÀI ĐƯỜNG CHO SALES REP */
@@ -1018,6 +1082,15 @@ export const CustomerList: React.FC = () => {
                       <ShoppingCart className="w-3.5 h-3.5" />
                       <span>Tạo đơn</span>
                     </Link>
+                    {canManageCredit && (
+                      <button
+                        onClick={() => handleOpenCreditModal(c)}
+                        className="p-1.5 rounded-xl border border-purple-200 dark:border-purple-800 hover:bg-purple-50 dark:hover:bg-purple-950/40 text-purple-600 dark:text-purple-400"
+                        title="Thiết lập hạn mức tín dụng"
+                      >
+                        <CreditCard className="w-4 h-4" />
+                      </button>
+                    )}
                     <Link
                       to={`/customers/${c.id}`}
                       className="p-1.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300"
@@ -1035,6 +1108,45 @@ export const CustomerList: React.FC = () => {
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+
+          {/* Phân trang khi xem dạng thẻ ngoài hiện trường */}
+          {totalCount > 0 && (
+            <div className="mt-4 p-3.5 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs sm:text-sm text-slate-500 dark:text-slate-400">
+              <div className="flex items-center gap-2">
+                <span>Hiển thị</span>
+                <select
+                  value={urlPageSize}
+                  onChange={(e) => updateParams({ pageSize: e.target.value, page: '1' })}
+                  className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-xs font-medium cursor-pointer"
+                >
+                  <option value={5}>5</option>
+                  <option value={10}>10</option>
+                  <option value={20}>20</option>
+                  <option value={50}>50</option>
+                </select>
+                <span>trong tổng số {totalCount.toLocaleString('vi-VN')} bản ghi</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => updateParams({ page: String(Math.max(1, urlPage - 1)) })}
+                  disabled={urlPage <= 1}
+                  className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  title="Trang trước"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <span className="px-2 font-medium">Trang {urlPage} / {totalPages}</span>
+                <button
+                  onClick={() => updateParams({ page: String(Math.min(totalPages, urlPage + 1)) })}
+                  disabled={urlPage >= totalPages}
+                  className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  title="Trang sau"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
             </div>
           )}
         </div>
@@ -1353,6 +1465,103 @@ export const CustomerList: React.FC = () => {
             </Button>
           </div>
         </form>
+      </Modal>
+
+      {/* Modal Thiết Lập Hạn Mức Tín Dụng & Công Nợ */}
+      <Modal
+        isOpen={isCreditModalOpen}
+        onClose={() => setIsCreditModalOpen(false)}
+        title="Thiết Lập Hạn Mức Tín Dụng & Công Nợ"
+        maxWidth="md"
+      >
+        {creditCustomer && (
+          <form onSubmit={handleCreditSubmit} className="space-y-4">
+            <div className="p-3.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 text-xs text-indigo-900 dark:text-indigo-200 flex items-start gap-2.5">
+              <CreditCard className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-bold">Đại lý: {creditCustomer.name} ({creditCustomer.code})</p>
+                <p className="mt-0.5 text-slate-600 dark:text-slate-300">
+                  Thiết lập hạn mức công nợ và số ngày nợ tối đa cho phép. Thay đổi sẽ được ghi vào lịch sử kiểm toán của hệ thống.
+                </p>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                Hạn mức công nợ tối đa (VNĐ) *
+              </label>
+              <input
+                type="number"
+                min="0"
+                step="1000000"
+                value={creditLimitInput}
+                onChange={(e) => setCreditLimitInput(Number(e.target.value) || 0)}
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs sm:text-sm font-bold text-indigo-600 dark:text-indigo-400 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                placeholder="Ví dụ: 50000000"
+                required
+              />
+              <p className="mt-1 text-[11px] text-slate-400">
+                Giá trị: {formatCurrency(creditLimitInput)}
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                Số ngày nợ tối đa (ngày) *
+              </label>
+              <div className="grid grid-cols-4 gap-2 mb-2">
+                {[0, 15, 30, 45].map((d) => (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick={() => setMaxDebtDaysInput(d)}
+                    className={`py-1.5 px-2 rounded-lg text-xs font-bold border transition-all ${
+                      maxDebtDaysInput === d
+                        ? 'border-indigo-600 bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300'
+                        : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'
+                    }`}
+                  >
+                    {d === 0 ? '0 ngày' : `${d} ngày`}
+                  </button>
+                ))}
+              </div>
+              <input
+                type="number"
+                min="0"
+                max="365"
+                value={maxDebtDaysInput}
+                onChange={(e) => setMaxDebtDaysInput(Number(e.target.value) || 0)}
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs sm:text-sm font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                required
+              />
+              <p className="mt-1 text-[11px] text-slate-400">
+                {maxDebtDaysInput === 0 ? '0 = Bắt buộc thanh toán ngay, không cho nợ ngày' : `Đại lý được nợ tối đa ${maxDebtDaysInput} ngày kể từ khi xuất kho.`}
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                Lý do điều chỉnh hạn mức
+              </label>
+              <textarea
+                value={creditReasonInput}
+                onChange={(e) => setCreditReasonInput(e.target.value)}
+                placeholder="Nhập ghi chú hoặc lý do phê duyệt hạn mức mới..."
+                rows={2}
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs sm:text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+              <Button type="button" variant="secondary" size="sm" onClick={() => setIsCreditModalOpen(false)}>
+                Hủy
+              </Button>
+              <Button type="submit" variant="primary" size="sm" isLoading={submittingCredit}>
+                Xác nhận lưu hạn mức
+              </Button>
+            </div>
+          </form>
+        )}
       </Modal>
 
       {/* Dialog xác nhận xóa */}

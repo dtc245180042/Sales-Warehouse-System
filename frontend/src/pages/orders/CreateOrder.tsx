@@ -1224,22 +1224,94 @@ export const CreateOrder: React.FC = () => {
                   <ChevronDown className="w-4 h-4 absolute right-2.5 top-3 text-slate-400 pointer-events-none" />
                 </div>
               ) : (
-                <p className="text-[11px] text-amber-600 dark:text-amber-400">
-                  Đại lý này chưa cấu hình điểm giao hàng phụ. Đơn hàng sẽ giao theo địa chỉ đăng ký.
-                </p>
+                <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
+                  <span>Đại lý chưa có điểm giao hàng phụ đã lưu.</span>
+                  <span className="font-semibold text-blue-600 dark:text-blue-400">Nhập địa chỉ giao hàng bên dưới:</span>
+                </div>
               )}
 
-              {/* Delivery Details Card */}
-              <div className="p-2.5 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200/80 dark:border-slate-700/60 text-xs space-y-1.5">
-                <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
-                  <MapPin className="w-3.5 h-3.5 text-red-500 shrink-0" />
-                  <span className="font-medium truncate">{customAddress || 'Chưa có địa chỉ'}</span>
+              {/* Delivery Details Card hoặc Form nhập địa chỉ khác */}
+              {selectedAddressId === undefined ? (
+                <div className="p-3 bg-blue-50/70 dark:bg-blue-950/30 rounded-xl border border-blue-200 dark:border-blue-800/60 text-xs space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5 text-blue-700 dark:text-blue-300 font-bold text-xs">
+                      <MapPin className="w-4 h-4 text-blue-600 shrink-0" />
+                      <span>Thông tin giao tại địa chỉ khác</span>
+                    </div>
+                    {deliveryAddresses.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const def = deliveryAddresses.find((a) => a.isDefault) || deliveryAddresses[0];
+                          if (def) handleAddressChange(String(def.id));
+                        }}
+                        className="text-[11px] font-semibold text-blue-600 dark:text-blue-400 hover:underline"
+                      >
+                        Chọn từ danh sách đã lưu
+                      </button>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      Địa chỉ nhận hàng cụ thể <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={customAddress}
+                      onChange={(e) => setCustomAddress(e.target.value)}
+                      placeholder="Số nhà, tên đường, phường/xã, quận/huyện, tỉnh/thành..."
+                      className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-medium text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      required
+                    />
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                        Người nhận hàng
+                      </label>
+                      <input
+                        type="text"
+                        value={receiverName}
+                        onChange={(e) => setReceiverName(e.target.value)}
+                        placeholder="Họ tên người nhận..."
+                        className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-medium text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                        Số điện thoại người nhận
+                      </label>
+                      <input
+                        type="tel"
+                        value={receiverPhone}
+                        onChange={(e) => setReceiverPhone(e.target.value)}
+                        placeholder="Số điện thoại liên hệ..."
+                        className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-medium text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                  </div>
                 </div>
-                <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 text-[11px]">
-                  <span>Người nhận: <strong className="text-slate-700 dark:text-slate-200 font-semibold">{receiverName || 'Chưa rõ'}</strong></span>
-                  <span>SĐT: <strong className="text-slate-700 dark:text-slate-200 font-semibold">{receiverPhone || 'Chưa rõ'}</strong></span>
+              ) : (
+                <div className="p-2.5 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200/80 dark:border-slate-700/60 text-xs space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300 min-w-0">
+                      <MapPin className="w-3.5 h-3.5 text-red-500 shrink-0" />
+                      <span className="font-medium truncate">{customAddress || 'Chưa có địa chỉ'}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleAddressChange('custom')}
+                      className="text-[11px] font-semibold text-blue-600 dark:text-blue-400 hover:underline shrink-0 ml-2"
+                    >
+                      Đổi địa chỉ khác
+                    </button>
+                  </div>
+                  <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 text-[11px]">
+                    <span>Người nhận: <strong className="text-slate-700 dark:text-slate-200 font-semibold">{receiverName || 'Chưa rõ'}</strong></span>
+                    <span>SĐT: <strong className="text-slate-700 dark:text-slate-200 font-semibold">{receiverPhone || 'Chưa rõ'}</strong></span>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           )}
 

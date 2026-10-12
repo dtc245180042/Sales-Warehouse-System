@@ -273,3 +273,88 @@ def get_product_price_history(
         limit=limit,
         total_pages=total_pages
     )
+
+
+def list_all_price_histories(
+    db: Session,
+    product_id: Optional[str] = None,
+    search: Optional[str] = None,
+    customer_group: Optional[str] = None,
+    price_type: Optional[str] = None,
+    from_date: Optional[datetime] = None,
+    to_date: Optional[datetime] = None,
+    page: int = 1,
+    limit: int = 20,
+    current_user: Optional[User] = None
+) -> ProductPriceHistoryListResponse:
+    """
+    Tra cứu toàn bộ lịch sử thay đổi giá sản phẩm (S3-02 / SCRUM-223) có hỗ trợ tìm kiếm và lọc đa tiêu chí.
+    """
+    allowed_roles = (
+        UserRole.ADMIN.value,
+        UserRole.SALES_MANAGER.value,
+        UserRole.SALES_REP.value,
+        UserRole.ACCOUNTANT.value,
+        "Admin",
+        "Sales Manager",
+        "Sales Rep",
+        "Accountant"
+    )
+    if current_user and current_user.role not in allowed_roles:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Bạn không có quyền xem lịch sử thay đổi giá sản phẩm."
+        )
+
+    ensure_price_history_baseline(db)
+
+    query = db.query(ProductPriceHistory)
+
+    if product_id and str(product_id).strip():
+        pid = str(product_id).strip()
+        query = query.filter(
+            or_(
+                ProductPriceHistory.product_id == pid,
+                ProductPriceHistory.product_sku == pid
+            )
+        )
+
+    if search and str(search).strip():
+        s = f"%{str(search).strip()}%"
+        query = query.filter(
+            or_(
+                ProductPriceHistory.product_name.ilike(s),
+                ProductPriceHistory.product_sku.ilike(s),
+                ProductPriceHistory.reason.ilike(s)
+            )
+        )
+
+    if customer_group and customer_group.upper() != "ALL":
+        query = query.filter(
+            or_(
+                ProductPriceHistory.customer_group == customer_group.upper(),
+                ProductPriceHistory.customer_group == None
+            )
+        )
+
+    if price_type and price_type.upper() != "ALL":
+        query = query.filter(ProductPriceHistory.price_type == price_type.upper())
+
+    if from_date:
+        query = query.filter(ProductPriceHistory.effective_from >= from_date)
+    if to_date:
+        query = query.filter(ProductPriceHistory.effective_from <= to_date)
+
+    total = query.count()
+    offset = (page - 1) * limit
+    items = query.order_by(ProductPriceHistory.created_at.desc(), ProductPriceHistory.id.desc()).offset(offset).limit(limit).all()
+
+    total_pages = (total + limit - 1) // limit if limit > 0 else 1
+
+    return ProductPriceHistoryListResponse(
+        items=[ProductPriceHistoryResponse.model_validate(it) for it in items],
+        total=total,
+        page=page,
+        limit=limit,
+        total_pages=total_pages
+    )

@@ -60,7 +60,6 @@ export const formatDate = (dateString: string | Date | undefined | null): string
     return String(dateString);
   }
 };
-};
 
 export const formatDateOnly = (dateString: string | Date | undefined | null): string => {
   if (!dateString) return '-';

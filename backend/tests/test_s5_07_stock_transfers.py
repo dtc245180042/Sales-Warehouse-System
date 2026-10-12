@@ -85,6 +85,7 @@ def transfer_fixture():
     try:
         cleanup_db.execute(text(f"DELETE FROM stock_transfer_items WHERE product_id = '{pid}'"))
         cleanup_db.execute(text("DELETE FROM stock_transfers WHERE id NOT IN (SELECT DISTINCT transfer_id FROM stock_transfer_items)"))
+        cleanup_db.execute(text(f"DELETE FROM inventory_history WHERE product_id = '{pid}'"))
         cleanup_db.execute(text(f"DELETE FROM warehouse_stocks WHERE product_id = '{pid}'"))
         cleanup_db.execute(text(f"DELETE FROM products WHERE id = '{pid}'"))
         cleanup_db.commit()
@@ -231,7 +232,8 @@ def test_scrum570_ship_stock_transfer_flow(transfer_fixture):
     # Kiểm tra thẻ kho (InventoryHistory) xuất kho
     hist = db.query(InventoryHistory).filter(
         InventoryHistory.code == shipped_data["code"],
-        InventoryHistory.warehouse == "Kho Tổng Hà Nội"
+        InventoryHistory.warehouse == "Kho Tổng Hà Nội",
+        InventoryHistory.product_id == transfer_fixture["product_id"]
     ).first()
     assert hist is not None
     assert hist.quantity == -20

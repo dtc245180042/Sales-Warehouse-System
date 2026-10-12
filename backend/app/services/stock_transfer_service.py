@@ -70,8 +70,18 @@ def get_or_create_warehouse_stock(
     else:
         init_stock = int(prod.stock if prod and prod.stock is not None else 30)
 
+    wh_map = {"hà nội": 1, "đà nẵng": 2, "hồ chí minh": 3, "cần thơ": 4}
+    mapped_id = None
+    for k, v in wh_map.items():
+        if k in warehouse.lower():
+            mapped_id = v
+            break
+    if not mapped_id:
+        mapped_id = abs(hash(warehouse)) % 10000 + 10
+
     wh_stock = WarehouseStock(
         warehouse=warehouse,
+        warehouse_id=mapped_id,
         product_id=str(product_id),
         sku=resolved_sku,
         stock=init_stock,

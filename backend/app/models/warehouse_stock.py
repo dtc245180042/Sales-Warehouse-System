@@ -14,9 +14,12 @@ class WarehouseStock(Base):
     id = Column(Integer, primary_key=True, autoincrement=True, index=True)
     product_id = Column(String(50), nullable=False, index=True)
     sku = Column(String(100), nullable=True, index=True)
-    warehouse_id = Column(Integer, nullable=False, index=True)
+    warehouse_id = Column(Integer, nullable=True, default=1, index=True)
+    warehouse = Column(String(255), nullable=True, index=True)
 
+    stock = Column(Integer, default=0, nullable=False)            # Tồn khả dụng tại kho (S5-07)
     physical_stock = Column(Integer, default=0, nullable=False)   # Cột 1: Tồn thực tế trong kho
+    in_transit_stock = Column(Integer, default=0, nullable=False) # Hàng đang trên đường tới kho này (S5-07)
     min_stock = Column(Integer, default=10, nullable=False)        # Hạn mức tối thiểu
 
     created_at = Column(

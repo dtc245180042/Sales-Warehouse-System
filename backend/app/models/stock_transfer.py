@@ -116,31 +116,4 @@ class StockTransferItem(Base):
     transfer = relationship("StockTransfer", back_populates="items")
 
 
-class WarehouseStock(Base):
-    """
-    Bảng quản lý tồn kho chi tiết theo từng kho hàng và hàng đang trên đường (SCRUM-575).
-    Cho phép kiểm soát tồn kho phân tán giữa các chi nhánh / kho hàng.
-    """
-    __tablename__ = "warehouse_stocks"
-
-    id = Column(Integer, primary_key=True, autoincrement=True, index=True)
-    warehouse = Column(String(255), nullable=False, index=True)
-    product_id = Column(String(50), nullable=False, index=True)
-    sku = Column(String(100), nullable=True, index=True)
-    
-    # Số lượng
-    stock = Column(Integer, default=0, nullable=False)            # Tồn khả dụng tại kho
-    physical_stock = Column(Integer, default=0, nullable=False)   # Tồn vật lý tại kho
-    in_transit_stock = Column(Integer, default=0, nullable=False) # Hàng đang trên đường tới kho này
-    
-    created_at = Column(
-        DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
-        nullable=False
-    )
-    updated_at = Column(
-        DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
-        nullable=False
-    )
+from app.models.warehouse_stock import WarehouseStock

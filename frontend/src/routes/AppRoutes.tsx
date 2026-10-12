@@ -57,11 +57,14 @@ import { SalesReport } from '../pages/reports/SalesReport';
 import { RevenueReport } from '../pages/reports/RevenueReport';
 import { InventoryReport } from '../pages/reports/InventoryReport';
 
-// Inventory & Stock Ledger Pages
+// Inventory & Stock Ledger & Stock Take Pages
 import { InventoryOverview } from '../pages/inventory/InventoryOverview';
 import { StockIn } from '../pages/inventory/StockIn';
 import { StockOut } from '../pages/inventory/StockOut';
 import { InventoryHistory } from '../pages/inventory/InventoryHistory';
+import { StockTakeList } from '../pages/inventory/StockTakeList';
+import { StockTakeCreate } from '../pages/inventory/StockTakeCreate';
+import { StockTakeDetail } from '../pages/inventory/StockTakeDetail';
 
 // Cổng Đại Lý B2B (S4-10, SCRUM-242 & S5-01, SCRUM-243)
 import { PortalOrderPage } from '../pages/portal/PortalOrderPage';
@@ -474,7 +477,7 @@ export const AppRoutes: React.FC = () => {
         />
 
         {/* ============================================================ */}
-        {/* QUẢN LÝ KHO HÀNG & SỔ TỒN KHO 3 CỘT                         */}
+        {/* QUẢN LÝ KHO HÀNG, SỔ TỒN KHO 3 CỘT & KIỂM KÊ (S5-08)         */}
         {/* ============================================================ */}
         <Route
           path="/inventory"
@@ -513,6 +516,38 @@ export const AppRoutes: React.FC = () => {
           element={
             <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
               <InventoryHistory />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/inventory/stock-takes"
+          element={
+            <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
+              <StockTakeList />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/inventory/stock-takes/create"
+          element={
+            <ProtectedRoute allowedRoles={['Admin', 'WarehouseManager', 'WarehouseStaff', 'Director', 'Manager']}>
+              <StockTakeCreate />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/inventory/stock-takes/new"
+          element={
+            <ProtectedRoute allowedRoles={['Admin', 'WarehouseManager', 'WarehouseStaff', 'Director', 'Manager']}>
+              <StockTakeCreate />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/inventory/stock-takes/:id"
+          element={
+            <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
+              <StockTakeDetail />
             </ProtectedRoute>
           }
         />

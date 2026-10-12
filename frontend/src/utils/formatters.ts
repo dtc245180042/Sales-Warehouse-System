@@ -18,11 +18,9 @@ export const parseSafeDate = (val: string | Date | undefined | null): Date | nul
   if (!val) return null;
   if (val instanceof Date) return isNaN(val.getTime()) ? null : val;
   let str = String(val).trim();
-  // Nếu chuỗi chứa khoảng trắng giữa ngày và giờ (định dạng SQLite 'YYYY-MM-DD HH:mm:ss')
   if (/^\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}/.test(str)) {
     str = str.replace(' ', 'T');
   }
-  // Nếu là chuỗi ISO nhưng thiếu múi giờ (ví dụ "2026-10-11T02:15:00"), thêm 'Z' để hiểu đúng là UTC
   if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(str) && !str.endsWith('Z') && !/[+-]\d{2}:?\d{2}$/.test(str)) {
     str += 'Z';
   }
@@ -30,15 +28,27 @@ export const parseSafeDate = (val: string | Date | undefined | null): Date | nul
   return isNaN(d.getTime()) ? null : d;
 };
 
+export const parseIsoDate = (dateString?: string | null): Date | null => {
+  return parseSafeDate(dateString);
+};
+
+export const formatDateTime = (dateString?: string | Date | null): string => {
+  const d = parseSafeDate(dateString);
+  if (!d) return '-';
+  return d.toLocaleString('vi-VN', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+};
+
 export const formatDate = (dateString: string | Date | undefined | null): string => {
   if (!dateString) return '-';
   try {
-    let s = typeof dateString === 'string' ? dateString.trim() : new Date(dateString).toISOString();
-    if (!s.endsWith('Z') && !/[+-]\d{2}(:\d{2})?$/.test(s)) {
-      s = s.replace(' ', 'T') + 'Z';
-    }
-    const d = new Date(s);
-    if (isNaN(d.getTime())) return String(dateString);
+    const d = parseSafeDate(dateString);
+    if (!d) return String(dateString);
     return new Intl.DateTimeFormat('vi-VN', {
       year: 'numeric',
       month: '2-digit',
@@ -49,6 +59,7 @@ export const formatDate = (dateString: string | Date | undefined | null): string
   } catch {
     return String(dateString);
   }
+};
 };
 
 export const formatDateOnly = (dateString: string | Date | undefined | null): string => {

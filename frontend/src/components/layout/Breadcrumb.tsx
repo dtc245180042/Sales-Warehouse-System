@@ -10,6 +10,7 @@ const routeNames: Record<string, string> = {
   inventory: 'Quản Lý Kho',
   'stock-in': 'Nhập Kho',
   'stock-out': 'Xuất Kho',
+  'stock-takes': 'Kiểm Kê Kho Hàng',
   history: 'Lịch Sử Giao Dịch',
   sales: 'Bán Hàng',
   pos: 'Điểm Bán Hàng (POS)',
@@ -27,9 +28,12 @@ const routeNames: Record<string, string> = {
   units: 'Đơn Vị Tính & Quy Đổi',
   'price-history': 'Lịch Sử Thay Đổi Giá',
   transfers: 'Chuyển Kho Nội Bộ',
+  'stock-takes': 'Kiểm Kê Kho Hàng',
   overview: 'Tổng Quan Tồn Kho',
   portal: 'Cổng Đại Lý B2B',
   import: 'Nhập Excel',
+  new: 'Thêm Mới',
+  agents: 'Đại Lý',
 };
 
 export const Breadcrumb: React.FC = () => {
@@ -55,6 +59,14 @@ export const Breadcrumb: React.FC = () => {
           name = `Phiếu ${value}`;
         } else if (value.startsWith('TRF-')) {
           name = `Phiếu ${value.replace('TRF-', 'PCK-')}`;
+        } else if (pathnames[index - 1] === 'stock-takes') {
+          if (value === 'create' || value === 'new') {
+            name = 'Tạo Phiếu Kiểm Kê';
+          } else {
+            name = 'Phiếu Kiểm Kê';
+          }
+        } else if (typeof name === 'string' && name.startsWith('STK-TAKE-')) {
+          name = name.replace('STK-TAKE-', 'PKK-2026-');
         }
 
         return (

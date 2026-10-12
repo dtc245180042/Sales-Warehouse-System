@@ -12,6 +12,7 @@ import {
   Eye,
   RefreshCw,
   CheckCircle2,
+  ClipboardCheck,
 } from 'lucide-react';
 import { PageContainer } from '../../components/layout/PageContainer';
 import { DataTable, Column } from '../../components/common/DataTable';
@@ -290,6 +291,11 @@ export const InventoryOverview: React.FC = () => {
           <Link to="/inventory/history">
             <Button variant="secondary" size="sm" leftIcon={<History className="w-4 h-4" />}>
               Lịch sử kho
+            </Button>
+          </Link>
+          <Link to="/inventory/stock-takes">
+            <Button variant="outline" size="sm" leftIcon={<ClipboardCheck className="w-4 h-4" />}>
+              Kiểm kê kho
             </Button>
           </Link>
           <Link to="/inventory/stock-out">

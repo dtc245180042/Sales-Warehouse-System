@@ -24,6 +24,7 @@ import {
   Warehouse,
   Layers,
   ArrowLeftRight,
+  ClipboardCheck,
   ArrowDownLeft,
   ArrowUpRight,
   History,
@@ -269,6 +270,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
               title: 'Xuất kho hàng hóa',
               path: '/inventory/stock-out',
               icon: <ArrowUpRight className="w-3.5 h-3.5" />,
+              allowedRoles: ALL_ROLES,
+            },
+            {
+              title: 'Kiểm kê kho hàng',
+              path: '/inventory/stock-takes',
+              icon: <ClipboardCheck className="w-3.5 h-3.5" />,
               allowedRoles: ALL_ROLES,
             },
             {

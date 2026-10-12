@@ -12,7 +12,7 @@ from app.core.database import Base
 class StockReservation(Base):
     """
     Bảng quản lý giữ chỗ tồn kho (Stock Reservation) cho đơn hàng.
-    Tuân thủ quy tắc Additive-Only của AGENTS.md (S4-03, SCRUM-504, SCRUM-505).
+    Tuân thủ quy tắc Additive-Only của AGENTS.md (SCRUM-504, SCRUM-505).
     """
     __tablename__ = "stock_reservations"
 

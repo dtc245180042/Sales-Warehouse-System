@@ -46,7 +46,7 @@ export const CustomerDetail: React.FC = () => {
   const [customerOrders, setCustomerOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // SC-226 & S4-02: Hồ sơ hạn mức công nợ
+  // Hồ sơ hạn mức công nợ
   const [creditProfile, setCreditProfile] = useState<CustomerCreditProfile | null>(null);
   const [isCreditModalOpen, setIsCreditModalOpen] = useState(false);
   const [creditLimitInput, setCreditLimitInput] = useState<number>(0);
@@ -373,7 +373,7 @@ export const CustomerDetail: React.FC = () => {
             </div>
           </div>
 
-          {/* Hồ Sơ Hạn Mức Tín Dụng & Công Nợ Đại Lý (SC-226 & S4-02) */}
+          {/* Hồ Sơ Hạn Mức Tín Dụng & Công Nợ Đại Lý */}
           <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-card">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
@@ -699,7 +699,7 @@ export const CustomerDetail: React.FC = () => {
         </form>
       </Modal>
 
-      {/* Modal Thiết Lập Hạn Mức Công Nợ & Số Ngày Nợ (SC-226 / S4-02) */}
+      {/* Modal Thiết Lập Hạn Mức Công Nợ & Số Ngày Nợ */}
       <Modal
         isOpen={isCreditModalOpen}
         onClose={() => setIsCreditModalOpen(false)}

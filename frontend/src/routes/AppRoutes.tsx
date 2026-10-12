@@ -57,6 +57,11 @@ import { SalesReport } from '../pages/reports/SalesReport';
 import { RevenueReport } from '../pages/reports/RevenueReport';
 import { InventoryReport } from '../pages/reports/InventoryReport';
 
+// Inventory & Stock Ledger Pages
+import { InventoryOverview } from '../pages/inventory/InventoryOverview';
+import { StockIn } from '../pages/inventory/StockIn';
+import { StockOut } from '../pages/inventory/StockOut';
+import { InventoryHistory } from '../pages/inventory/InventoryHistory';
 
 // Cổng Đại Lý B2B (S4-10, SCRUM-242 & S5-01, SCRUM-243)
 import { PortalOrderPage } from '../pages/portal/PortalOrderPage';
@@ -392,6 +397,50 @@ export const AppRoutes: React.FC = () => {
         />
 
         {/* ============================================================ */}
+        {/* QUẢN LÝ KHO HÀNG & SỔ TỒN KHO 3 CỘT                         */}
+        {/* ============================================================ */}
+        <Route
+          path="/inventory"
+          element={
+            <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
+              <InventoryOverview />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/inventory/overview"
+          element={
+            <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
+              <InventoryOverview />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/inventory/stock-in"
+          element={
+            <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
+              <StockIn />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/inventory/stock-out"
+          element={
+            <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
+              <StockOut />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/inventory/history"
+          element={
+            <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
+              <InventoryHistory />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* ============================================================ */}
         {/* HỢP NHẤT ĐẠI LÝ & KHÁCH HÀNG (EP-03) - REDIRECT TƯƠNG THÍCH   */}
         {/* ============================================================ */}
         <Route
@@ -472,7 +521,7 @@ export const AppRoutes: React.FC = () => {
         />
       </Route>
 
-      {/* Cổng Đại lý tự đặt hàng B2B 24/7 Mobile & Desktop (S4-10, SCRUM-242) */}
+      {/* Cổng Đại lý tự đặt hàng B2B 24/7 Mobile & Desktop (SCRUM-242) */}
       <Route
         path="/portal/order"
         element={

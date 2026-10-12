@@ -91,7 +91,7 @@ export const CreateOrder: React.FC = () => {
   const [effectivePriceList, setEffectivePriceList] = useState<EffectivePriceListResponse | null>(null);
   const [isLoadingPriceList, setIsLoadingPriceList] = useState(false);
 
-  // S4-03: Kho phục vụ đại lý & Tồn khả dụng (SCRUM-503, SCRUM-505)
+  // Kho phục vụ đại lý & Tồn khả dụng (SCRUM-503, SCRUM-505)
   const [servicingWarehouse, setServicingWarehouse] = useState<{
     warehouse_name: string;
     warehouse_code: string;
@@ -262,7 +262,7 @@ export const CreateOrder: React.FC = () => {
     }
   }, [selectedCustomer]);
 
-  // S4-01: Tải Bảng giá hiệu lực của khách hàng
+  // Tải Bảng giá hiệu lực của khách hàng
   useEffect(() => {
     if (selectedCustomer) {
       setIsLoadingPriceList(true);
@@ -279,7 +279,7 @@ export const CreateOrder: React.FC = () => {
           setIsLoadingPriceList(false);
         });
 
-      // S4-03: Lấy kho phục vụ đại lý (SCRUM-505)
+      // Lấy kho phục vụ đại lý (SCRUM-505)
       orderService
         .getCustomerServicingWarehouse(selectedCustomer.id)
         .then((wh) => {
@@ -312,7 +312,7 @@ export const CreateOrder: React.FC = () => {
 
   const hasExceedingStock = exceedingStockItems.length > 0;
 
-  // S4-03: Kiểm tra tồn khả dụng theo thời gian thực (SCRUM-503, SCRUM-507, SCRUM-508)
+  // Kiểm tra tồn khả dụng theo thời gian thực (SCRUM-503, SCRUM-507, SCRUM-508)
   const checkItemsAvailability = async (currentItems: FormItem[], customerId: string) => {
     if (currentItems.length === 0 || !customerId) return;
     try {
@@ -365,7 +365,7 @@ export const CreateOrder: React.FC = () => {
     }
   };
 
-  // Product Search Debounce (S4-03: kèm customer_id để lấy tồn kho phục vụ)
+  // Product Search Debounce (kèm customer_id để lấy tồn kho phục vụ)
   useEffect(() => {
     if (!productQuery.trim()) {
       setProductResults([]);
@@ -519,7 +519,7 @@ export const CreateOrder: React.FC = () => {
         const currentQty = items[existingIndex].quantity + 1;
         await handleUpdateQty(String(prod.id), currentQty);
       } else {
-        // Thêm dòng mới với giá tự động, giá sàn và tồn khả dụng theo kho (S4-03)
+        // Thêm dòng mới với giá tự động, giá sàn và tồn khả dụng theo kho
         const defaultUnit = prod.unit || (prod.available_units?.[0] ?? 'cái');
         const avail = prod.available_stock ?? prod.stock;
         const newItem: FormItem = {
@@ -614,7 +614,7 @@ export const CreateOrder: React.FC = () => {
     );
   };
 
-  // S4-01: Update item price manually & kiểm tra giá sàn (SCRUM-490 & SCRUM-495)
+  // Update item price manually & kiểm tra giá sàn (SCRUM-490 & SCRUM-495)
   const handleUpdatePrice = (productId: string, newPrice: number) => {
     setItems((prev) =>
       prev.map((i) => {
@@ -782,7 +782,7 @@ export const CreateOrder: React.FC = () => {
         return;
       }
 
-      // S4-02: Kiểm tra nợ quá hạn - Chặn tạo/chốt đơn hoàn toàn
+      // Kiểm tra nợ quá hạn - Chặn tạo/chốt đơn hoàn toàn
       if (creditStatus?.isBlocked) {
         showToast(
           creditStatus.blockReason || 'Đại lý đang có khoản nợ quá hạn. Hệ thống chặn tạo đơn hoàn toàn theo quy định!',
@@ -1157,7 +1157,7 @@ export const CreateOrder: React.FC = () => {
                 </div>
               </div>
 
-              {/* S4-01: Hiển thị thông tin Bảng giá hiệu lực */}
+              {/* Hiển thị thông tin Bảng giá hiệu lực */}
               {isLoadingPriceList ? (
                 <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
                   <RefreshCw className="w-3 h-3 animate-spin" />
@@ -1179,7 +1179,7 @@ export const CreateOrder: React.FC = () => {
                 </div>
               ) : null}
 
-              {/* S4-03: Hiển thị kho phục vụ đại lý (SCRUM-505) */}
+              {/* Hiển thị kho phục vụ đại lý (SCRUM-505) */}
               <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-blue-100/70 dark:bg-blue-900/40 border border-blue-200 dark:border-blue-800 text-[11px] text-blue-900 dark:text-blue-200 font-medium">
                 <Boxes className="w-3.5 h-3.5 text-blue-600 shrink-0" />
                 <span>
@@ -1189,7 +1189,7 @@ export const CreateOrder: React.FC = () => {
             </div>
           )}
 
-          {/* S4-02: Khối Hiển thị Công nợ hiện tại, Hạn mức & Cảnh báo vượt hạn mức / Chặn quá hạn */}
+          {/* Khối Hiển thị Công nợ hiện tại, Hạn mức & Cảnh báo vượt hạn mức / Chặn quá hạn */}
           {selectedCustomer && (
             <CustomerCreditBanner
               customerId={selectedCustomer.id}
@@ -1562,7 +1562,7 @@ export const CreateOrder: React.FC = () => {
                         ) : null}
                       </div>
 
-                      {/* S4-03: Hiển thị Tồn khả dụng theo từng dòng hàng (SCRUM-503) */}
+                      {/* Hiển thị Tồn khả dụng theo từng dòng hàng (SCRUM-503) */}
                       <div className="flex flex-wrap items-center gap-2 mt-1">
                         <div className="flex items-center gap-1.5 text-[11px]">
                           <Boxes className="w-3.5 h-3.5 text-blue-500 shrink-0" />

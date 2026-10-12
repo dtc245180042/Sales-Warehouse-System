@@ -28,7 +28,7 @@ def get_customer_credit_profile(
     db: Session = Depends(lay_phien_db),
     current_user: Optional[User] = Depends(lay_nguoi_dung_tuy_chon),
 ):
-    """Xem hạn mức công nợ tối đa, số ngày nợ tối đa và dư nợ hiện tại của đại lý (S4-02, SCRUM-499)."""
+    """Xem hạn mức công nợ tối đa, số ngày nợ tối đa và dư nợ hiện tại của đại lý (SCRUM-499)."""
     check_sales_rep_customer_scope(db=db, customer_id=customer_id, current_user=current_user)
     profile = customer_credit_service.get_or_create_credit_profile(db=db, customer_id=customer_id)
     # Tự động đồng bộ dư nợ thực tế
@@ -38,7 +38,7 @@ def get_customer_credit_profile(
         db.commit()
         db.refresh(profile)
 
-    # Đính kèm thông tin nợ quá hạn và trạng thái chặn nợ (S4-02)
+    # Đính kèm thông tin nợ quá hạn và trạng thái chặn nợ
     overdue_info = customer_credit_service.check_customer_overdue_debt(db=db, customer_id=customer_id)
     profile.has_overdue = overdue_info["has_overdue"]
     profile.overdue_days = overdue_info["overdue_days"]

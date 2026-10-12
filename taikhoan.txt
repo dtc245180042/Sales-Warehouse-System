@@ -1,0 +1,36 @@
+DANH SÁCH TÀI KHOẢN DEMO (MẬT KHẨU CHUNG DỄ NHỚ: 123456):
+
+1. Quản trị hệ thống (System Admin):
+- Tên đăng nhập: admin (hoặc admin_pro)
+- Email: admin@warehouse.local (hoặc admin@khovanpro.vn)
+- Mật khẩu: 123456
+
+2. Quản lý kinh doanh (Sales Manager):
+- Tên đăng nhập: sales_mgr (hoặc sales_mgr_pro)
+- Email: sales_mgr@warehouse.local (hoặc salesmanager@khovanpro.vn)
+- Mật khẩu: 123456
+
+3. Nhân viên kinh doanh (Sales Staff / Rep):
+- Tên đăng nhập: sales_rep (hoặc sales_rep_pro)
+- Email: sales_rep@warehouse.local (hoặc salesstaff@khovanpro.vn)
+- Mật khẩu: 123456
+
+4. Quản lý kho (Warehouse Manager):
+- Tên đăng nhập: wh_mgr (hoặc wh_mgr_pro)
+- Email: wh_mgr@warehouse.local (hoặc whmanager@khovanpro.vn)
+- Mật khẩu: 123456
+
+5. Thủ kho (Warehouse Staff):
+- Tên đăng nhập: warehouse (hoặc wh_staff_pro)
+- Email: warehouse@warehouse.local (hoặc whstaff@khovanpro.vn)
+- Mật khẩu: 123456
+
+6. Kế toán (Accountant):
+- Tên đăng nhập: accountant (hoặc accountant_pro)
+- Email: accountant@warehouse.local (hoặc accountant@khovanpro.vn)
+- Mật khẩu: 123456
+
+7. Khách hàng / Đại lý (Customer):
+- Tên đăng nhập: customer
+- Email: customer@warehouse.local
+- Mật khẩu: 123456

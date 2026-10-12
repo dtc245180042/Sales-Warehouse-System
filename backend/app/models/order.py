@@ -44,7 +44,7 @@ class Order(Base):
     payment_status = Column(String(50), default="paid", nullable=False)  # paid, unpaid, partial
     status = Column(String(50), default="pending", nullable=False, index=True)  # pending, pending_approval, confirmed, shipping, completed, cancelled
     
-    # S4-02: Đánh dấu đơn cần duyệt khi vượt hạn mức công nợ (SCRUM-498)
+    # Đánh dấu đơn cần duyệt khi vượt hạn mức công nợ (SCRUM-498)
     # Đánh dấu đơn cần duyệt khi giá bán dưới giá sàn hoặc vượt hạn mức (SCRUM-490, SCRUM-495)
     requires_approval = Column(Boolean, default=False, nullable=True)
     approval_reason = Column(Text, nullable=True)
@@ -67,12 +67,12 @@ class Order(Base):
         nullable=False
     )
 
-    # Tham chiếu đơn hàng gốc khi sao chép đơn (S4-09, SCRUM-241)
+    # Tham chiếu đơn hàng gốc khi sao chép đơn (SCRUM-241)
     copied_from_order_id = Column(String(50), nullable=True, index=True)
 
-    # Nguồn tạo đơn hàng: 'internal' (Backoffice/POS/NVKD) hoặc 'portal' (Đại lý tự đặt qua Cổng đại lý) (S4-10, SCRUM-242)
+    # Nguồn tạo đơn hàng: 'internal' (Backoffice/POS/NVKD) hoặc 'portal' (Đại lý tự đặt qua Cổng đại lý) (SCRUM-242)
     source = Column(String(50), default="internal", nullable=False, index=True)
-    # Cờ đánh dấu đơn chưa được phân công NVKD phụ trách (S4-10, SCRUM-242)
+    # Cờ đánh dấu đơn chưa được phân công NVKD phụ trách (SCRUM-242)
     is_unassigned = Column(Boolean, default=False, nullable=False, index=True)
 
     items = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan", lazy="joined")
@@ -95,7 +95,7 @@ class OrderItem(Base):
     # Đơn vị tính (S3-09: cái, hộp, thùng...)
     unit = Column(String(50), nullable=True, default="cái")
 
-    # Giá sàn và cờ bán dưới sàn (S4-01 / SCRUM-490)
+    # Giá sàn và cờ bán dưới sàn (SCRUM-490)
     floor_price = Column(Float, nullable=True)
     is_below_floor = Column(Boolean, default=False, nullable=True)
 

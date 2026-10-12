@@ -10,6 +10,8 @@ from app.models.order import Order
 from app.models.product_stock_profile import ProductStockProfile
 from app.models.stock_reservation import StockReservation
 from app.models.customer_warehouse_profile import CustomerWarehouseProfile
+from app.models.warehouse_stock import WarehouseStock
+from app.services.stock_ledger import map_warehouse_name_to_id
 from app.schemas.inventory_reservation import (
     SkuAvailabilityResponse,
     CheckOrderAvailabilityRequest,
@@ -164,7 +166,19 @@ def calculate_sku_availability(
         or_(StockReservation.product_id == str(prod.id), StockReservation.sku == prod.sku)
     ).scalar() or 0
 
-    physical = int(profile.physical_stock if profile.physical_stock is not None else profile.stock)
+    target_wh_id = map_warehouse_name_to_id(db, wh_name)
+    ws = None
+    if target_wh_id:
+        ws = db.query(WarehouseStock).filter(
+            WarehouseStock.product_id == str(prod.id),
+            WarehouseStock.warehouse_id == target_wh_id
+        ).first()
+
+    if ws is not None and ws.physical_stock is not None:
+        physical = int(ws.physical_stock)
+    else:
+        physical = int(profile.physical_stock if profile.physical_stock is not None else profile.stock)
+
     reserved = int(active_reserved_sum)
     available = max(0, physical - reserved)
 
@@ -325,13 +339,23 @@ def reserve_stock_for_order(
             or_(StockReservation.product_id == str(prod.id), StockReservation.sku == prod.sku)
         ).scalar() or 0
 
-        # Nếu physical_stock chưa đồng bộ khi stock bị sửa trực tiếp bởi module/test khác
-        current_reserved = int(active_reserved_sum)
-        current_stock = int(profile.stock or 0)
-        if profile.physical_stock is None or profile.physical_stock < (current_stock + current_reserved):
-            profile.physical_stock = current_stock + current_reserved
+        target_wh_id = map_warehouse_name_to_id(db, wh_name)
+        ws = None
+        if target_wh_id:
+            ws = db.query(WarehouseStock).filter(
+                WarehouseStock.product_id == str(prod.id),
+                WarehouseStock.warehouse_id == target_wh_id
+            ).first()
 
-        physical = int(profile.physical_stock)
+        current_reserved = int(active_reserved_sum)
+        if ws is not None and ws.physical_stock is not None:
+            physical = int(ws.physical_stock)
+        else:
+            current_stock = int(profile.stock or 0)
+            if profile.physical_stock is None or profile.physical_stock < (current_stock + current_reserved):
+                profile.physical_stock = current_stock + current_reserved
+            physical = int(profile.physical_stock)
+
         available = max(0, physical - current_reserved)
 
         # 3. SCRUM-506: Chặn chốt đơn nếu số lượng vượt tồn khả dụng
@@ -378,7 +402,7 @@ def release_stock_reservations_for_order(
     order_id: str
 ):
     """
-    Hủy giữ chỗ khi đơn hàng bị hủy (SCRUM-504, S4-06).
+    Hủy giữ chỗ khi đơn hàng bị hủy (SCRUM-504).
     Chuyển trạng thái reservation từ 'active' -> 'released' và nhả lại tồn khả dụng.
     """
     active_res = db.query(StockReservation).filter(
@@ -427,16 +451,37 @@ def release_stock_reservations_for_order(
 
 def fulfill_stock_reservations_for_order(
     db: Session,
-    order_id: str
+    order_id: str,
+    performer_id: Optional[int] = None,
 ):
     """
     Hoàn tất giữ chỗ khi đơn hàng xuất kho giao hàng (status -> shipping / completed).
-    Chuyển trạng thái reservation từ 'active' -> 'fulfilled', đồng thời trừ tồn vật lý (physical_stock).
+    Chuyển trạng thái reservation từ 'active' -> 'fulfilled', đồng thời trừ tồn vật lý (physical_stock)
+    và ghi nhận bút toán OUT_SALE vào sổ cái thẻ kho tập trung.
+    Tuyệt đối không nuốt lỗi: Nếu xuất kho thất bại (thiếu tồn, sai kho), ném lỗi để rollback toàn bộ dispatch.
     """
     active_res = db.query(StockReservation).filter(
-        StockReservation.order_id == order_id,
+        StockReservation.order_id == str(order_id),
         StockReservation.status == "active"
     ).all()
+
+    if not active_res:
+        return
+
+    # Xác định người thực hiện: Lấy từ tham số hoặc fallback từ order.staff_id
+    if performer_id is None:
+        from app.models.order import Order
+        ord_obj = db.query(Order).filter(Order.id == str(order_id)).first()
+        if ord_obj and ord_obj.staff_id and str(ord_obj.staff_id).isdigit():
+            performer_id = int(ord_obj.staff_id)
+        else:
+            performer_id = 1  # Fallback người vận hành hệ thống
+
+    from app.services.stock_ledger import (
+        record_stock_movement,
+        StockMovementType,
+        map_warehouse_name_to_id,
+    )
 
     for res in active_res:
         res.status = "fulfilled"
@@ -445,12 +490,36 @@ def fulfill_stock_reservations_for_order(
         prod = db.query(Product).filter(
             or_(Product.id == res.product_id, Product.sku == res.sku)
         ).first()
-        if prod:
-            profile = get_or_create_product_stock_profile(db, prod, warehouse_name=res.warehouse, for_update=True)
-            # Trừ tồn vật lý
-            current_physical = int(profile.physical_stock if profile.physical_stock is not None else profile.stock)
-            profile.physical_stock = max(0, current_physical - res.reserved_quantity)
-            profile.reserved_stock = max(0, int(profile.reserved_stock or 0) - res.reserved_quantity)
-            profile.stock = max(0, profile.physical_stock - profile.reserved_stock)
+        if not prod:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Không tìm thấy sản phẩm '{res.product_id}' để xuất kho cho đơn '{order_id}'.",
+            )
+
+        if not res.warehouse or not res.warehouse.strip():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Bản ghi giữ chỗ ID #{res.id} thiếu thông tin kho hàng phục vụ.",
+            )
+
+        wh_id = map_warehouse_name_to_id(db, res.warehouse)
+        if not wh_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Không xác định được kho hàng hợp lệ từ tên '{res.warehouse}' cho đơn hàng '{order_id}'.",
+            )
+
+        record_stock_movement(
+            db,
+            product_id=prod.id,
+            warehouse_id=wh_id,
+            quantity_base=res.reserved_quantity,
+            movement_type=StockMovementType.OUT_SALE,
+            reference_code=f"ORD-{order_id}",
+            line_ref=f"RES-{res.id}",
+            performer_id=performer_id,
+            note=f"Xuất kho giao hàng theo đơn #{order_id}",
+            auto_commit=False,
+        )
 
     db.flush()

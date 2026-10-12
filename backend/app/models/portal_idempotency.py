@@ -11,7 +11,7 @@ from app.core.database import Base
 
 
 class PortalIdempotencyRecord(Base):
-    """Bảng lưu trữ Idempotency Key theo đại lý để chống gửi trùng đơn (S4-10, SCRUM-242)."""
+    """Bảng lưu trữ Idempotency Key theo đại lý để chống gửi trùng đơn (SCRUM-242)."""
     __tablename__ = "portal_idempotency_records"
 
     id = Column(Integer, primary_key=True, autoincrement=True)

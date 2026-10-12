@@ -28,7 +28,7 @@ class ApprovalStatusEnum:
 
 class OrderApprovalRequest(Base):
     """
-    Bảng quản lý yêu cầu phê duyệt đơn hàng ngoại lệ (SCRUM-237 / S4-05).
+    Bảng quản lý yêu cầu phê duyệt đơn hàng ngoại lệ (SCRUM-237).
     Lưu trữ lý do cần duyệt và mức độ vi phạm chi tiết (vượt hạn mức / bán dưới giá sàn).
     Tuân thủ nguyên tắc Additive-Only của AGENTS.md.
     """
@@ -91,7 +91,7 @@ class OrderApprovalRequest(Base):
 
 class OrderApprovalHistory(Base):
     """
-    Bảng lưu audit trail lịch sử quyết định duyệt đơn bất biến (Append-Only) - S4-05.
+    Bảng lưu audit trail lịch sử quyết định duyệt đơn bất biến (Append-Only).
     Đảm bảo lịch sử duyệt KHÔNG THỂ SỬA VÀ KHÔNG THỂ XOÁ.
     Có thể truy vết theo người xử lý, thời điểm và nội dung quyết định.
     """

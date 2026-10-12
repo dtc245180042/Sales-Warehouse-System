@@ -13,7 +13,7 @@ from app.core.database import Base
 class CustomerWarehouseProfile(Base):
     """
     Bảng Profile 1-1 quản lý kho phục vụ đại lý (Servicing Warehouse).
-    Tuân thủ quy tắc Additive-Only của AGENTS.md (S4-03, SCRUM-505).
+    Tuân thủ quy tắc Additive-Only của AGENTS.md (SCRUM-505).
     """
     __tablename__ = "customer_warehouse_profiles"
 

@@ -74,10 +74,6 @@ import { PortalOrdersPage } from '../pages/portal/PortalOrdersPage';
 import { StockTransferList } from '../pages/inventory/StockTransferList';
 import { StockTransferCreate } from '../pages/inventory/StockTransferCreate';
 import { StockTransferDetail } from '../pages/inventory/StockTransferDetail';
-import { InventoryOverview } from '../pages/inventory/InventoryOverview';
-import { StockIn } from '../pages/inventory/StockIn';
-import { StockOut } from '../pages/inventory/StockOut';
-import { InventoryHistory } from '../pages/inventory/InventoryHistory';
 
 // All 7 business roles allowed in Sprint 1 & 2 backoffice
 const ALL_BACKOFFICE_ROLES: UserRole[] = [

@@ -15,6 +15,7 @@ import {
   Tag,
   BarChart3,
   TrendingUp,
+  TrendingDown,
   Package,
   Users,
   Store,

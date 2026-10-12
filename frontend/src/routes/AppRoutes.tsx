@@ -21,6 +21,7 @@ import { UserImportPage } from '../pages/users/UserImportPage';
 import { Settings } from '../pages/settings/Settings';
 import { Profile } from '../pages/profile/Profile';
 import { PriceListManagement } from '../pages/sales/PriceListManagement';
+import { VolumeDiscountManagementPage } from '../pages/sales/VolumeDiscountManagementPage';
 import { CategoryManagement } from '../pages/categories/CategoryManagement';
 
 // Orders & Field Sales (SCRUM-230, S3-09)
@@ -158,6 +159,16 @@ export const AppRoutes: React.FC = () => {
           element={
             <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
               <PriceListManagement />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Quản lý Chính sách chiết khấu sản lượng - Quản lý kinh doanh & Admin (SCRUM-347) */}
+        <Route
+          path="/volume-discounts"
+          element={
+            <ProtectedRoute allowedRoles={['Admin', 'SalesManager', 'Director']}>
+              <VolumeDiscountManagementPage />
             </ProtectedRoute>
           }
         />

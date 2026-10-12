@@ -59,6 +59,57 @@ def setup_customer_and_product():
     )
     db.add(stock)
 
+    from app.models.price_list import PriceList, PriceListItem
+    from datetime import datetime, timedelta, timezone
+
+    pl1 = PriceList(
+        code=f"PL-T1-{uid}",
+        name=f"Bảng giá TIER_1 {uid}",
+        customer_group="TIER_1",
+        status="APPROVED",
+        is_active=True,
+        valid_from=datetime.now(timezone.utc) - timedelta(days=1),
+        valid_to=datetime.now(timezone.utc) + timedelta(days=30),
+    )
+    db.add(pl1)
+    db.flush()
+
+    pli1 = PriceListItem(
+        price_list_id=pl1.id,
+        product_id=str(prod.id),
+        product_sku=prod.sku,
+        product_name=prod.name,
+        listed_price=100000.0,
+        floor_price=50000.0,
+        sale_price=100000.0,
+        status="APPROVED"
+    )
+    db.add(pli1)
+
+    pl2 = PriceList(
+        code=f"PL-T2-{uid}",
+        name=f"Bảng giá TIER_2 {uid}",
+        customer_group="TIER_2",
+        status="APPROVED",
+        is_active=True,
+        valid_from=datetime.now(timezone.utc) - timedelta(days=1),
+        valid_to=datetime.now(timezone.utc) + timedelta(days=30),
+    )
+    db.add(pl2)
+    db.flush()
+
+    pli2 = PriceListItem(
+        price_list_id=pl2.id,
+        product_id=str(prod.id),
+        product_sku=prod.sku,
+        product_name=prod.name,
+        listed_price=100000.0,
+        floor_price=50000.0,
+        sale_price=100000.0,
+        status="APPROVED"
+    )
+    db.add(pli2)
+
     db.commit()
     db.refresh(customer)
     db.refresh(other_customer)
@@ -71,6 +122,8 @@ def setup_customer_and_product():
     }
 
     # Dọn dẹp
+    db.query(PriceListItem).filter((PriceListItem.price_list_id == pl1.id) | (PriceListItem.price_list_id == pl2.id)).delete()
+    db.query(PriceList).filter((PriceList.id == pl1.id) | (PriceList.id == pl2.id)).delete()
     db.query(CustomerDeliveryAddress).filter(
         (CustomerDeliveryAddress.customer_id == customer.id) |
         (CustomerDeliveryAddress.customer_id == other_customer.id)

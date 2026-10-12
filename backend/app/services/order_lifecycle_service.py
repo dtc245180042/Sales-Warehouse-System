@@ -51,7 +51,7 @@ def cancel_order_service(order_id: str, reason: str, user_name: str, db: Session
 
     # 4. Lưu lịch sử đổi trạng thái (SCRUM-591)
     old_status = order.status
-    order.status = OrderStatus.CANCELLED
+    order.status = "cancelled"
 
     history = OrderStatusHistory(
         order_id=order.id,
@@ -63,4 +63,13 @@ def cancel_order_service(order_id: str, reason: str, user_name: str, db: Session
     db.add(history)
     db.commit()
 
-    return {"message": "Hủy đơn hàng thành công, đã hoàn trả lại tồn kho giữ chỗ."}
+    return {
+        "id": order.id,
+        "status": "cancelled",
+        "message": "Hủy đơn hàng thành công, đã hoàn trả lại tồn kho giữ chỗ.",
+        "order": {
+            "id": order.id,
+            "status": "cancelled",
+            "code": getattr(order, "code", order.id),
+        }
+    }

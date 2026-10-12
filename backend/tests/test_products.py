@@ -101,23 +101,23 @@ def test_scrum_376_create_product_success():
     """Tạo mới sản phẩm thành công với đầy đủ thông tin chuẩn hóa."""
     token = get_token("sales_manager_test")
     payload = {
-        "sku": "sp-vinamilk-100",
-        "name": "Sữa tươi Vinamilk 100% Không đường 1L",
-        "category": "Sữa tươi",
-        "unit": "Hộp",
-        "packaging_spec": "12 hộp/thùng",
-        "cost_price": 25000.0,
+        "sku": "tech-ip15p-128",
+        "name": "iPhone 15 Pro 128GB Titan Tự Nhiên",
+        "category": "Điện thoại thông minh (Smartphones)",
+        "unit": "Chiếc",
+        "packaging_spec": "1 chiếc/hộp",
+        "cost_price": 25000000.0,
         "status": "ACTIVE"
     }
     res = client.post("/api/v1/products", json=payload, headers={"Authorization": f"Bearer {token}"})
     assert res.status_code == 201
     data = res.json()
-    assert data["sku"] == "SP-VINAMILK-100"  # SKU tự động UPPER
+    assert data["sku"] == "TECH-IP15P-128"  # SKU tự động UPPER
     assert data["name"] == payload["name"]
     assert data["category"] == payload["category"]
     assert data["unit"] == payload["unit"]
     assert data["packaging_spec"] == payload["packaging_spec"]
-    assert data["cost_price"] == 25000.0
+    assert data["cost_price"] == 25000000.0
     assert data["status"] == "ACTIVE"
     assert data["has_transactions"] is False
 
@@ -129,10 +129,10 @@ def test_scrum_376_list_and_paginate_products():
     for i in range(1, 4):
         client.post("/api/v1/products", json={
             "sku": f"SKU-DEMO-{i}",
-            "name": f"Sản phẩm mẫu số {i}",
-            "category": "Bánh kẹo" if i < 3 else "Nước ngọt",
-            "unit": "Gói",
-            "cost_price": 10000.0 * i,
+            "name": f"Thiết bị công nghệ mẫu số {i}",
+            "category": "Laptop Gaming đồ họa" if i < 3 else "Máy tính bảng (Tablets)",
+            "unit": "Chiếc",
+            "cost_price": 1000000.0 * i,
         }, headers={"Authorization": f"Bearer {token}"})
 
     # Phân trang page 1, page_size 2
@@ -150,7 +150,7 @@ def test_scrum_376_list_and_paginate_products():
     assert res_search.json()["items"][0]["sku"] == "SKU-DEMO-1"
 
     # Lọc theo nhóm hàng
-    res_cat = client.get("/api/v1/products?category=Nước ngọt", headers={"Authorization": f"Bearer {token}"})
+    res_cat = client.get("/api/v1/products?category=Máy tính bảng (Tablets)", headers={"Authorization": f"Bearer {token}"})
     assert res_cat.status_code == 200
     assert res_cat.json()["total"] == 1
     assert res_cat.json()["items"][0]["sku"] == "SKU-DEMO-3"
@@ -161,21 +161,21 @@ def test_scrum_376_update_product():
     token = get_token("sales_manager_test")
     res = client.post("/api/v1/products", json={
         "sku": "SP-UPDATE-01",
-        "name": "Tên cũ",
-        "category": "Đồ uống",
-        "unit": "Chai",
-        "cost_price": 5000.0,
+        "name": "Tai nghe không dây Sony WH-1000XM5",
+        "category": "Âm thanh & Phụ kiện công nghệ",
+        "unit": "Chiếc",
+        "cost_price": 5000000.0,
     }, headers={"Authorization": f"Bearer {token}"})
     prod_id = res.json()["id"]
 
     # Cập nhật tên và quy cách
     update_res = client.put(f"/api/v1/products/{prod_id}", json={
-        "name": "Tên mới đã cập nhật",
-        "packaging_spec": "24 chai/thùng"
+        "name": "Tai nghe Sony WH-1000XM5 Bản Quốc Tế",
+        "packaging_spec": "1 bộ/hộp"
     }, headers={"Authorization": f"Bearer {token}"})
     assert update_res.status_code == 200
-    assert update_res.json()["name"] == "Tên mới đã cập nhật"
-    assert update_res.json()["packaging_spec"] == "24 chai/thùng"
+    assert update_res.json()["name"] == "Tai nghe Sony WH-1000XM5 Bản Quốc Tế"
+    assert update_res.json()["packaging_spec"] == "1 bộ/hộp"
 
 
 # ==============================================================================
@@ -187,17 +187,17 @@ def test_scrum_377_duplicate_sku_creation():
     token = get_token("sales_manager_test")
     client.post("/api/v1/products", json={
         "sku": "SKU-UNIQUE-01",
-        "name": "Sản phẩm A",
-        "category": "Gia dụng",
-        "unit": "Cái",
+        "name": "Chuột có dây Gaming A",
+        "category": "Thiết bị ngoại vi",
+        "unit": "Chiếc",
     }, headers={"Authorization": f"Bearer {token}"})
 
     # Cố tình tạo sản phẩm thứ 2 trùng SKU (kể cả viết thường)
     res_dup = client.post("/api/v1/products", json={
         "sku": "sku-unique-01",
-        "name": "Sản phẩm B",
-        "category": "Gia dụng",
-        "unit": "Cái",
+        "name": "Chuột có dây Gaming B",
+        "category": "Thiết bị ngoại vi",
+        "unit": "Chiếc",
     }, headers={"Authorization": f"Bearer {token}"})
     assert res_dup.status_code == 400
     assert "đã tồn tại trong hệ thống" in res_dup.json()["detail"]
@@ -208,16 +208,16 @@ def test_scrum_377_duplicate_sku_on_update():
     token = get_token("sales_manager_test")
     client.post("/api/v1/products", json={
         "sku": "SKU-PROD-A",
-        "name": "Sản phẩm A",
-        "category": "Gia dụng",
-        "unit": "Cái",
+        "name": "Bàn phím cơ văn phòng A",
+        "category": "Thiết bị ngoại vi",
+        "unit": "Chiếc",
     }, headers={"Authorization": f"Bearer {token}"})
 
     res_b = client.post("/api/v1/products", json={
         "sku": "SKU-PROD-B",
-        "name": "Sản phẩm B",
-        "category": "Gia dụng",
-        "unit": "Cái",
+        "name": "Bàn phím cơ văn phòng B",
+        "category": "Thiết bị ngoại vi",
+        "unit": "Chiếc",
     }, headers={"Authorization": f"Bearer {token}"})
     prod_b_id = res_b.json()["id"]
 
@@ -260,9 +260,9 @@ def test_scrum_378_sales_manager_can_view_and_edit_cost_price():
     sm_token = get_token("sales_manager_test")
     res = client.post("/api/v1/products", json={
         "sku": "SKU-COST-TEST",
-        "name": "Sản phẩm giá vốn",
-        "category": "Hàng tiêu dùng",
-        "unit": "Chai",
+        "name": "Tai nghe Gaming có dây",
+        "category": "Âm thanh & Phụ kiện công nghệ",
+        "unit": "Chiếc",
         "cost_price": 50000.0,
     }, headers={"Authorization": f"Bearer {sm_token}"})
     prod_id = res.json()["id"]
@@ -281,9 +281,9 @@ def test_scrum_378_sales_rep_cannot_view_or_edit_cost_price():
     sm_token = get_token("sales_manager_test")
     res = client.post("/api/v1/products", json={
         "sku": "SKU-COST-PROTECT",
-        "name": "Sản phẩm bảo vệ giá vốn",
-        "category": "Hàng tiêu dùng",
-        "unit": "Chai",
+        "name": "Bàn phím không dây văn phòng",
+        "category": "Thiết bị ngoại vi",
+        "unit": "Chiếc",
         "cost_price": 80000.0,
     }, headers={"Authorization": f"Bearer {sm_token}"})
     prod_id = res.json()["id"]
@@ -317,9 +317,9 @@ def test_scrum_379_upload_product_image():
     sm_token = get_token("sales_manager_test")
     res = client.post("/api/v1/products", json={
         "sku": "SKU-IMAGE-01",
-        "name": "Sản phẩm có ảnh",
-        "category": "Gia dụng",
-        "unit": "Bộ",
+        "name": "Cáp HDMI 2.1 8K Ultra",
+        "category": "Âm thanh & Phụ kiện công nghệ",
+        "unit": "Sợi",
     }, headers={"Authorization": f"Bearer {sm_token}"})
     prod_id = res.json()["id"]
 
@@ -340,9 +340,9 @@ def test_scrum_379_upload_invalid_extension():
     sm_token = get_token("sales_manager_test")
     res = client.post("/api/v1/products", json={
         "sku": "SKU-IMAGE-BAD",
-        "name": "Sản phẩm test ảnh lỗi",
-        "category": "Gia dụng",
-        "unit": "Bộ",
+        "name": "Cáp sạc USB-C bọc dù",
+        "category": "Âm thanh & Phụ kiện công nghệ",
+        "unit": "Sợi",
     }, headers={"Authorization": f"Bearer {sm_token}"})
     prod_id = res.json()["id"]
 
@@ -365,9 +365,9 @@ def test_scrum_375_delete_product_without_transactions():
     sm_token = get_token("sales_manager_test")
     res = client.post("/api/v1/products", json={
         "sku": "SKU-NO-TRANS",
-        "name": "Sản phẩm xóa được",
-        "category": "Đồ chơi",
-        "unit": "Cái",
+        "name": "Chuột quang văn phòng USB",
+        "category": "Thiết bị ngoại vi",
+        "unit": "Chiếc",
     }, headers={"Authorization": f"Bearer {sm_token}"})
     prod_id = res.json()["id"]
 
@@ -385,9 +385,9 @@ def test_scrum_375_cannot_delete_product_with_transactions():
     sm_token = get_token("sales_manager_test")
     res = client.post("/api/v1/products", json={
         "sku": "SKU-HAS-TRANS",
-        "name": "Sản phẩm đã bán nhiều",
-        "category": "Thực phẩm",
-        "unit": "Thùng",
+        "name": "Ổ cứng di động 1TB HDD",
+        "category": "Linh kiện máy tính",
+        "unit": "Chiếc",
     }, headers={"Authorization": f"Bearer {sm_token}"})
     prod_id = res.json()["id"]
 
@@ -424,31 +424,31 @@ def test_create_product_with_frontend_payload():
     payload = {
         "sku": "SP-FE-NEW-01",
         "barcode": "893850999999",
-        "name": "Nước tương Nam Dương đậm đặc 500ml",
-        "category": "Gia vị & Chế biến",
+        "name": "Bàn phím cơ Bluetooth RGB 87 phím",
+        "category": "Thiết bị ngoại vi",
         "supplier_id": "ncc-01",
-        "supplier_name": "Công ty CP Nam Dương",
+        "supplier_name": "Công ty CP Công Nghệ Số",
         "cost_price": 18000,
         "sale_price": 25000,
         "stock": 150,
         "min_stock": 20,
-        "unit": "Chai",
-        "packaging_specification": "24 chai/thùng",
-        "image": "https://example.com/namduong.png",
-        "description": "Nước tương thơm ngon",
+        "unit": "Chiếc",
+        "packaging_specification": "1 chiếc/hộp",
+        "image": "https://example.com/keyboard.png",
+        "description": "Bàn phím cơ gõ êm switch đỏ",
         "status": "active",
     }
     res = client.post("/api/v1/products", json=payload, headers={"Authorization": f"Bearer {token}"})
     assert res.status_code == 201
     data = res.json()
     assert data["sku"] == "SP-FE-NEW-01"
-    assert data["name"] == "Nước tương Nam Dương đậm đặc 500ml"
+    assert data["name"] == "Bàn phím cơ Bluetooth RGB 87 phím"
     assert data["price"] == 25000
     assert data["sale_price"] == 25000
     assert data["cost_price"] == 18000
     assert data["stock"] == 150
     assert data["min_stock"] == 20
-    assert data["packaging_spec"] == "24 chai/thùng"
+    assert data["packaging_spec"] == "1 chiếc/hộp"
     assert data["status"] == "ACTIVE"
 
 
@@ -457,11 +457,11 @@ def test_create_product_by_sales_rep_auto_sets_zero_cost_price():
     token = get_token("sales_rep_test")
     payload = {
         "sku": "SP-SALESREP-01",
-        "name": "Bánh quy kem dâu",
-        "category": "Bánh kẹo",
+        "name": "Cáp DisplayPort 1.4 dài 2m",
+        "category": "Âm thanh & Phụ kiện công nghệ",
         "cost_price": 50000,
         "sale_price": 60000,
-        "unit": "Hộp",
+        "unit": "Sợi",
         "status": "active",
     }
     res = client.post("/api/v1/products", json=payload, headers={"Authorization": f"Bearer {token}"})
@@ -479,9 +479,9 @@ def test_product_image_url_persisted_and_updated():
     test_img = "https://images.unsplash.com/photo-1546868871-7041f2a55e12?w=500"
     res = client.post("/api/v1/products", json={
         "sku": "SP-IMG-TEST",
-        "name": "Bánh mì hoa cúc Pháp",
-        "category": "Bánh tươi",
-        "unit": "Ổ",
+        "name": "Tai nghe Bluetooth chụp tai",
+        "category": "Âm thanh & Phụ kiện công nghệ",
+        "unit": "Chiếc",
         "image": test_img,
     }, headers={"Authorization": f"Bearer {token}"})
     assert res.status_code == 201

@@ -570,8 +570,12 @@ def create_customer(
                     User.username == customer.assigned_sales_rep
                 )
             ).first()
-            if staff_user:
-                target_staff_id = staff_user.id
+            if not staff_user or not staff_user.is_active:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Nhân viên nhận chuyển giao không còn hoạt động"
+                )
+            target_staff_id = staff_user.id
 
         assignment = CustomerAssignment(
             customer_id=customer.id,

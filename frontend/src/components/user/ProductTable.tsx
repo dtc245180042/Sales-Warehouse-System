@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ShoppingCart, Check, Package } from 'lucide-react';
+import { ShoppingCart, Check } from 'lucide-react';
 import { ProductItem } from '../../data/mockData';
 import { useUserCart } from '../../contexts/UserCartContext';
 import { useToast } from '../../contexts/ToastContext';
@@ -56,19 +56,6 @@ export const ProductTable: React.FC<ProductTableProps> = ({ products }) => {
               return (
                 <tr key={p.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors">
                   <td className="py-3 px-4">
-                    <div className="flex items-center gap-3">
-                      {p.image ? (
-                        <img
-                          src={p.image}
-                          alt={p.name}
-                          className="w-11 h-11 rounded-xl object-cover border border-slate-200 dark:border-slate-700 shrink-0"
-                          onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                        />
-                      ) : (
-                        <div className="w-11 h-11 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 flex items-center justify-center shrink-0">
-                          <Package className="w-5 h-5" />
-                        </div>
-                      )}
                       <div className="min-w-0">
                         <Link
                           to={`/user/products/${p.id}`}
@@ -80,7 +67,6 @@ export const ProductTable: React.FC<ProductTableProps> = ({ products }) => {
                           {p.code}
                         </span>
                       </div>
-                    </div>
                   </td>
                   <td className="py-3 px-4 font-mono text-slate-500 font-semibold">{p.code}</td>
                   <td className="py-3 px-4 text-slate-600 dark:text-slate-300">

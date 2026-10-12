@@ -95,7 +95,7 @@ def xem_chi_tiet_san_pham(
     summary="Cập nhật thông tin sản phẩm (SCRUM-376)"
 )
 def cap_nhat_san_pham(
-    product_id: int,
+    product_id: Union[int, str],
     data: ProductUpdateRequest,
     current_user: User = Depends(lay_nguoi_dung_hien_tai),
     db: Session = Depends(lay_phien_db),
@@ -116,13 +116,13 @@ def cap_nhat_san_pham(
     summary="Xóa sản phẩm khỏi danh mục (SCRUM-375)"
 )
 def xoa_san_pham(
-    product_id: int,
+    product_id: Union[int, str],
     current_user: User = Depends(lay_nguoi_dung_hien_tai),
     db: Session = Depends(lay_phien_db),
 ):
     """Xóa sản phẩm trong danh mục:
     - Nếu sản phẩm ĐÃ PHÁT SINH GIAO DỊCH (`has_transactions = True`): Hệ thống ngăn chặn xóa
-      và yêu cầu chuyển sang trạng thái Ngừng kinh doanh (SCRUM-375).
+    và yêu cầu chuyển sang trạng thái Ngừng kinh doanh (SCRUM-375).
     - Nếu chưa phát sinh giao dịch: Cho phép xóa khỏi danh mục.
     """
     return ProductService.delete_product(db=db, product_id=product_id)
@@ -135,7 +135,7 @@ def xoa_san_pham(
     summary="Ngừng kinh doanh sản phẩm (SCRUM-375)"
 )
 def ngung_kinh_doanh_san_pham(
-    product_id: int,
+    product_id: Union[int, str],
     current_user: User = Depends(lay_nguoi_dung_hien_tai),
     db: Session = Depends(lay_phien_db),
 ):
@@ -151,7 +151,7 @@ def ngung_kinh_doanh_san_pham(
     summary="Kích hoạt lại trạng thái Đang kinh doanh"
 )
 def kich_hoat_kinh_doanh_san_pham(
-    product_id: int,
+    product_id: Union[int, str],
     current_user: User = Depends(lay_nguoi_dung_hien_tai),
     db: Session = Depends(lay_phien_db),
 ):
@@ -172,7 +172,7 @@ MAX_IMAGE_SIZE = 5 * 1024 * 1024  # 5MB
     summary="Tải lên và quản lý ảnh sản phẩm (SCRUM-379)"
 )
 async def tai_len_anh_san_pham(
-    product_id: int,
+    product_id: Union[int, str],
     file: UploadFile = File(..., description="File ảnh sản phẩm (jpg, png, webp, max 5MB)"),
     current_user: User = Depends(lay_nguoi_dung_hien_tai),
     db: Session = Depends(lay_phien_db),

@@ -361,20 +361,23 @@ class ProductImportService:
 
                 updated_skus.append(sku)
             else:
-                new_product = Product(
-                    sku=sku,
-                    name=item["name"],
-                    category=item.get("category"),
-                    category_id=item.get("category_id"),
-                    unit=item.get("unit") or "cái",
-                    packaging_spec=item.get("packaging_spec"),
-                    cost_price=float(item.get("cost_price", 0.0)),
-                    price=float(item.get("price", 0.0)),
-                    description=item.get("description"),
-                    status=item.get("status") or ProductStatus.ACTIVE,
-                    is_active=True,
-                    has_transactions=False
-                )
+                prod_kwargs = {
+                    "sku": sku,
+                    "name": item["name"],
+                    "category": item.get("category"),
+                    "category_id": item.get("category_id"),
+                    "unit": item.get("unit") or "cái",
+                    "packaging_spec": item.get("packaging_spec"),
+                    "cost_price": float(item.get("cost_price", 0.0)),
+                    "price": float(item.get("price", 0.0)),
+                    "description": item.get("description"),
+                    "status": item.get("status") or ProductStatus.ACTIVE,
+                    "is_active": True,
+                    "has_transactions": False
+                }
+                if item.get("id"):
+                    prod_kwargs["id"] = str(item["id"])
+                new_product = Product(**prod_kwargs)
                 db.add(new_product)
                 existing_products_map[sku] = new_product
                 created_skus.append(sku)

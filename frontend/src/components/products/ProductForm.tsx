@@ -437,7 +437,7 @@ export const ProductForm: React.FC<ProductFormProps> = ({
                     <span className="font-semibold text-slate-700 dark:text-slate-300">Cấu trúc: </span>
                     <span>[MÃ_NHÓM]-[HÃNG]-[MODEL]-[THUỘC_TÍNH]</span>
                     <div className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">
-                      Ví dụ: <span className="text-indigo-600 dark:text-indigo-400 font-mono font-medium">DT-APL-IP15-128</span>, <span className="text-indigo-600 dark:text-indigo-400 font-mono font-medium">NGK-COCA-330-LON</span>
+                      Ví dụ: <span className="text-indigo-600 dark:text-indigo-400 font-mono font-medium">DT-APL-IP15-128</span>, <span className="text-indigo-600 dark:text-indigo-400 font-mono font-medium">TN-SNY-WH1000-BK</span>
                     </div>
                   </div>
                 </div>

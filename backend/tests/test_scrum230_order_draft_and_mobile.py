@@ -10,7 +10,9 @@ from app.models.customer import Customer
 from app.models.customer_delivery_address import CustomerDeliveryAddress
 from app.models.product import Product
 from app.models.product_stock_profile import ProductStockProfile
-from app.models.order import Order
+from app.models.customer_credit_profile import CustomerCreditProfile
+from app.models.order import Order, OrderItem
+from app.models.order_delivery_profile import OrderDeliveryProfile
 
 client = TestClient(app)
 
@@ -39,13 +41,23 @@ def test_data():
     customer = Customer(
         id=f"CUS-230-{uid}",
         code=f"DL-230-{uid}",
-        name=f"Đại Lý 230 {uid}",
+        name=f"Đại Lý Thiết Bị {uid}",
         phone=f"0987{uid[:4]}",
         status="active",
         total_spent=0.0,
         total_orders=0
     )
     db.add(customer)
+    db.commit()
+
+    # Cấp hạn mức tín dụng cho đại lý để không bị cản bởi kiểm tra công nợ (S4-02)
+    credit_prof = CustomerCreditProfile(
+        customer_id=customer.id,
+        credit_limit=50000000.0,
+        max_debt_days=30,
+        current_debt=0.0
+    )
+    db.add(credit_prof)
     db.commit()
 
     # Địa chỉ giao hàng hợp lệ của khách
@@ -61,10 +73,10 @@ def test_data():
     db.commit()
     db.refresh(addr)
 
-    # Sản phẩm test với packaging_spec
+    # Sản phẩm test với packaging_spec (hàng công nghệ: Bình xịt khí nén vệ sinh linh kiện)
     prod = Product(
         sku=f"SKU-230-{uid}",
-        name=f"Bia Lon Saigon Special {uid}",
+        name=f"Bình xịt khí nén vệ sinh linh kiện {uid}",
         price=15000.0,
         unit="lon",
         packaging_spec="24 lon/thùng",
@@ -90,7 +102,22 @@ def test_data():
         "stock_profile": stock_prof
     }
 
-    db.close()
+    try:
+        order_ids = [o.id for o in db.query(Order.id).filter(Order.customer_id == customer.id).all()]
+        if order_ids:
+            db.query(OrderDeliveryProfile).filter(OrderDeliveryProfile.order_id.in_(order_ids)).delete(synchronize_session=False)
+        db.query(OrderItem).filter(OrderItem.product_id == str(prod.id)).delete(synchronize_session=False)
+        db.query(Order).filter(Order.customer_id == customer.id).delete(synchronize_session=False)
+        db.query(ProductStockProfile).filter(ProductStockProfile.product_id == prod.id).delete(synchronize_session=False)
+        db.query(Product).filter(Product.id == prod.id).delete(synchronize_session=False)
+        db.query(CustomerDeliveryAddress).filter(CustomerDeliveryAddress.customer_id == customer.id).delete(synchronize_session=False)
+        db.query(CustomerCreditProfile).filter(CustomerCreditProfile.customer_id == customer.id).delete(synchronize_session=False)
+        db.query(Customer).filter(Customer.id == customer.id).delete(synchronize_session=False)
+        db.commit()
+    except Exception:
+        db.rollback()
+    finally:
+        db.close()
 
 
 def test_products_search_for_order(test_data):

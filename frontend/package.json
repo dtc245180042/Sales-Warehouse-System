@@ -9,7 +9,8 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "node scripts/test-rbac.js",
-    "test:units": "node scripts/test-unit-conversion-history.js"
+    "test:units": "node scripts/test-unit-conversion-history.js",
+    "test:pos-filter": "node scripts/test-pos-category-filter.js"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",

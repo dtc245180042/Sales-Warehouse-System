@@ -1,3 +1,4 @@
+# Database & Cache
 *.db
 *.sqlite3
 __pycache__/
@@ -5,7 +6,37 @@ __pycache__/
 .pytest_cache/
 node_modules/
 dist/
-.env
+dist-ssr/
 uploads/
 backend/uploads/
+
+# Environment Variables
+.env
+.env.*
+!.env.example
+
+# Temporary Scripts & Audit Reports
+audit_report.json
+scan_results.json
+backend/audit_report.json
+backend/scan_results.json
+backend/check_details.py
+backend/scan_non_tech.py
+
+# Logs, Backups & Dumps
+*.log
+*.sql
+*.bak
+*_bak
 ~$*
+
+# Python & IDE
+.venv/
+venv/
+.vscode/
+.idea/
+.DS_Store
+
+# Test Artifacts & Screenshots
+screenshots/
+test_screenshots/

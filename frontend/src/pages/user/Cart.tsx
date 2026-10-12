@@ -11,7 +11,6 @@ import {
   ShieldCheck, 
   CheckCircle2,
   AlertCircle,
-  Package,
 } from 'lucide-react';
 import { useUserCart } from '../../contexts/UserCartContext';
 import { Modal } from '../../components/user/Modal';
@@ -144,20 +143,6 @@ export const CartPage: React.FC = () => {
                     key={item.product.id}
                     className="p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center gap-4 hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors"
                   >
-                    {/* Image */}
-                    <div className="relative w-20 h-20 rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-800 shrink-0 border border-slate-200 dark:border-slate-700 flex items-center justify-center">
-                      {item.product.image ? (
-                        <img 
-                          src={item.product.image} 
-                          alt={item.product.name}
-                          className="w-full h-full object-cover" 
-                          onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                        />
-                      ) : (
-                        <Package className="w-8 h-8 text-slate-400" />
-                      )}
-                    </div>
-
                     {/* Product Info */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">

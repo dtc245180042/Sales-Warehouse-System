@@ -49,17 +49,119 @@ def _create_test_customer():
     }
     res = client.post("/api/v1/customers", json=payload)
     assert res.status_code == 201
-    return res.json()
+    cus_data = res.json()
+
+    # Bổ sung bảng giá mẫu và hồ sơ công nợ mẫu để không bị chặn bởi Sprint 4 pricing/credit constraint
+    db = SessionLocal()
+    try:
+        from datetime import datetime, timedelta, timezone
+        from app.models.price_list import PriceList, PriceListItem
+        from app.models.customer_credit_profile import CustomerCreditProfile
+        from app.models.product import Product
+
+        # 1. Hạn mức công nợ mẫu
+        prof = db.query(CustomerCreditProfile).filter_by(customer_id=cus_data["id"]).first()
+        if not prof:
+            prof = CustomerCreditProfile(
+                customer_id=cus_data["id"],
+                credit_limit=100000000.0,
+                max_debt_days=30,
+                current_debt=0.0,
+                updated_by="test"
+            )
+            db.add(prof)
+        else:
+            prof.credit_limit = 100000000.0
+
+        # 2. Bảng giá mẫu cho TIER_1
+        pl = db.query(PriceList).filter(
+            PriceList.customer_group == "TIER_1",
+            PriceList.status == "APPROVED",
+            PriceList.is_active == True
+        ).first()
+        if not pl:
+            pl = PriceList(
+                code=f"PL-T1-SC228-{uid}",
+                name="Bảng giá TIER_1 Test",
+                customer_group="TIER_1",
+                status="APPROVED",
+                is_active=True,
+                valid_from=datetime.now(timezone.utc) - timedelta(days=1),
+                valid_to=datetime.now(timezone.utc) + timedelta(days=365)
+            )
+            db.add(pl)
+            db.flush()
+
+        prods = db.query(Product).filter(Product.status.in_(["active", "ACTIVE"])).all()
+        for p in prods:
+            pli = db.query(PriceListItem).filter(
+                PriceListItem.price_list_id == pl.id,
+                (PriceListItem.product_id == str(p.id)) | (PriceListItem.product_sku == p.sku)
+            ).first()
+            if not pli:
+                pli = PriceListItem(
+                    price_list_id=pl.id,
+                    product_id=str(p.id),
+                    product_sku=p.sku,
+                    product_name=p.name,
+                    listed_price=float(p.price or 100000.0),
+                    floor_price=float(p.cost_price or 10000.0),
+                    sale_price=float(p.price or 100000.0),
+                    status="APPROVED"
+                )
+                db.add(pli)
+        db.commit()
+    finally:
+        db.close()
+
+    return cus_data
 
 
 def _get_active_product():
-    admin_headers = _get_headers_for_role("Admin", "admin", 1)
-    res = client.get("/api/v1/products", headers=admin_headers)
-    assert res.status_code == 200, f"Lỗi lấy sản phẩm: {res.text}"
-    data = res.json()
-    items = data.get("items") if isinstance(data, dict) else data
-    assert len(items) > 0, f"Không có sản phẩm trong items: {items}"
-    return items[0]
+    db = SessionLocal()
+    try:
+        from app.models.price_list import PriceList, PriceListItem
+        from app.models.product import Product
+        pl = db.query(PriceList).filter(
+            PriceList.customer_group == "TIER_1",
+            PriceList.status == "APPROVED",
+            PriceList.is_active == True
+        ).order_by(PriceList.version.desc(), PriceList.id.desc()).first()
+        if pl:
+            pli = db.query(PriceListItem).filter(PriceListItem.price_list_id == pl.id).first()
+            if pli:
+                p = db.query(Product).filter((Product.id == pli.product_id) | (Product.sku == pli.product_sku)).first()
+                if p:
+                    return {
+                        "id": p.id,
+                        "sku": p.sku,
+                        "name": p.name,
+                        "price": float(pli.sale_price or p.price or 100000.0),
+                        "salePrice": float(pli.sale_price or p.price or 100000.0)
+                    }
+        p = db.query(Product).filter(Product.status.in_(["active", "ACTIVE"])).first()
+        if pl and p:
+            pli = PriceListItem(
+                price_list_id=pl.id,
+                product_id=str(p.id),
+                product_sku=p.sku,
+                product_name=p.name,
+                listed_price=float(p.price or 100000.0),
+                floor_price=float(p.cost_price or 10000.0),
+                sale_price=float(p.price or 100000.0),
+                status="APPROVED"
+            )
+            db.add(pli)
+            db.commit()
+        return {
+            "id": p.id,
+            "sku": p.sku,
+            "name": p.name,
+            "price": float(p.price or 100000.0),
+            "salePrice": float(p.price or 100000.0)
+        }
+    finally:
+        db.close()
 
 
 def test_lock_status_default_active():

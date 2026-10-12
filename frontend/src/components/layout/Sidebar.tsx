@@ -230,10 +230,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
           ],
         },
         {
-          title: 'Bảng Giá & Chiết Khấu',
+          title: 'Bảng Giá & Khách Hàng',
           path: '/price-lists',
           icon: <Tag className="w-5 h-5" />,
           allowedRoles: ALL_ROLES,
+        },
+        {
+          title: 'Chiết khấu sản lượng',
+          path: '/volume-discounts',
+          icon: <TrendingDown className="w-5 h-5" />,
+          allowedRoles: ['Admin', 'SalesManager', 'Director', 'Manager'],
         },
       ],
     },

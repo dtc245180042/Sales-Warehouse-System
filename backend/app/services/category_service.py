@@ -329,8 +329,9 @@ class CategoryService:
             )
 
         # Tìm các sản phẩm thuộc nhóm nguồn khớp với danh sách product_ids
+        pid_strs = [str(p) for p in transfer_req.product_ids]
         products = db.query(Product).filter(
-            Product.id.in_(transfer_req.product_ids),
+            Product.id.in_(pid_strs),
             Product.category_id == transfer_req.source_category_id
         ).all()
 

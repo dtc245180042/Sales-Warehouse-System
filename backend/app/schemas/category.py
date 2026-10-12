@@ -1,4 +1,4 @@
-from typing import Optional, List
+from typing import Optional, List, Union
 from datetime import datetime
 from pydantic import BaseModel, Field, ConfigDict
 
@@ -66,7 +66,7 @@ class ProductCreate(ProductBase):
 
 
 class ProductResponse(ProductBase):
-    id: int
+    id: Union[str, int]
     category_name: Optional[str] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
@@ -78,7 +78,7 @@ class TransferProductsRequest(BaseModel):
     """Yêu cầu chuyển sản phẩm giữa các nhóm hàng (SCRUM-214)."""
     source_category_id: int = Field(..., description="ID nhóm hàng nguồn hiện tại")
     target_category_id: int = Field(..., description="ID nhóm hàng đích cần chuyển đến")
-    product_ids: List[int] = Field(..., min_length=1, description="Danh sách ID sản phẩm cần chuyển nhóm")
+    product_ids: List[Union[str, int]] = Field(..., min_length=1, description="Danh sách ID sản phẩm cần chuyển nhóm")
 
 
 class TransferProductsResponse(BaseModel):

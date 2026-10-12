@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Layers,
   Info,
@@ -8,11 +8,13 @@ import {
   CheckCircle2,
   RotateCcw,
   Edit3,
+  Lock,
 } from 'lucide-react';
 import {
   DiscountTier,
   volumeDiscountService,
 } from '../../services/volumeDiscountService';
+import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 
 interface VolumeDiscountPolicyModalProps {
@@ -26,15 +28,32 @@ export const VolumeDiscountPolicyModal: React.FC<VolumeDiscountPolicyModalProps>
   onClose,
   onPolicyUpdated,
 }) => {
+  const { role } = useAuth();
   const { showToast } = useToast();
   const [tiers, setTiers] = useState<DiscountTier[]>(() => volumeDiscountService.getTiers());
   const [isEditing, setIsEditing] = useState(false);
   const [editList, setEditList] = useState<DiscountTier[]>([]);
   const [validationError, setValidationError] = useState<string | null>(null);
 
+  const canManage = role === 'Admin' || role === 'SalesManager' || role === 'Director';
+
+  useEffect(() => {
+    if (isOpen) {
+      volumeDiscountService.fetchActiveTiers().then((loaded) => {
+        if (loaded && loaded.length > 0) {
+          setTiers(loaded);
+        }
+      });
+    }
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   const handleStartEdit = () => {
+    if (!canManage) {
+      showToast('Chỉ Quản lý kinh doanh hoặc Quản trị viên mới có quyền sửa chính sách.', 'error');
+      return;
+    }
     setEditList([...tiers].map((t) => ({ ...t })));
     setValidationError(null);
     setIsEditing(true);
@@ -74,7 +93,12 @@ export const VolumeDiscountPolicyModal: React.FC<VolumeDiscountPolicyModalProps>
     setEditList(updated);
   };
 
-  const handleSavePolicy = () => {
+  const handleSavePolicy = async () => {
+    if (!canManage) {
+      showToast('Bạn không có quyền lưu chính sách chiết khấu (yêu cầu vai trò Quản lý kinh doanh).', 'error');
+      return;
+    }
+
     const validation = volumeDiscountService.validateTiers(editList);
     if (!validation.valid) {
       setValidationError(validation.error || 'Dữ liệu chính sách không hợp lệ');
@@ -83,12 +107,30 @@ export const VolumeDiscountPolicyModal: React.FC<VolumeDiscountPolicyModalProps>
 
     setValidationError(null);
     const sorted = [...editList].sort((a, b) => a.minQty - b.minQty);
-    volumeDiscountService.saveTiers(sorted);
-    setTiers(sorted);
-    setIsEditing(false);
-    showToast('Đã lưu và kích hoạt chính sách chiết khấu theo sản lượng mới!', 'success');
-    if (onPolicyUpdated) {
-      onPolicyUpdated(sorted);
+    try {
+      await volumeDiscountService.create({
+        code: `VOL-POLICY-${Date.now().toString().slice(-6)}`,
+        name: 'Chính sách chiết khấu số lượng bậc thang (Bán hàng)',
+        applied_scope: 'ALL_PRODUCTS',
+        customer_group: 'ALL',
+        valid_from: new Date().toISOString(),
+        is_active: true,
+        tiers: sorted.map((t, idx) => ({
+          min_quantity: t.minQty,
+          max_quantity: sorted[idx + 1] ? sorted[idx + 1].minQty - 1 : null,
+          discount_type: 'PERCENT',
+          discount_value: t.discountPct,
+        })),
+      });
+
+      setTiers(sorted);
+      setIsEditing(false);
+      showToast('Đã lưu và kích hoạt chính sách chiết khấu theo sản lượng trên hệ thống!', 'success');
+      if (onPolicyUpdated) {
+        onPolicyUpdated(sorted);
+      }
+    } catch (err: any) {
+      showToast(err.message || 'Không thể lưu chính sách lên máy chủ', 'error');
     }
   };
 
@@ -273,10 +315,25 @@ export const VolumeDiscountPolicyModal: React.FC<VolumeDiscountPolicyModalProps>
               <button
                 type="button"
                 onClick={handleStartEdit}
-                className="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-1.5"
+                disabled={!canManage}
+                className={`px-3 py-2 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition ${
+                  canManage
+                    ? 'border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800'
+                    : 'border-slate-100 dark:border-slate-800 text-slate-400 cursor-not-allowed bg-slate-50 dark:bg-slate-800/40'
+                }`}
+                title={canManage ? 'Khai báo / Chỉnh sửa chính sách' : 'Chỉ Quản lý kinh doanh mới có quyền chỉnh sửa'}
               >
-                <Edit3 className="w-3.5 h-3.5 text-indigo-600" />
-                <span>Khai báo / Sửa chính sách</span>
+                {canManage ? (
+                  <>
+                    <Edit3 className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>Khai báo / Sửa chính sách</span>
+                  </>
+                ) : (
+                  <>
+                    <Lock className="w-3.5 h-3.5 text-slate-400" />
+                    <span>Quyền chỉ đọc (Cần quyền Quản lý)</span>
+                  </>
+                )}
               </button>
 
               <button

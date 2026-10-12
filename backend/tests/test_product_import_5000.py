@@ -54,6 +54,7 @@ def test_execute_import_batch_and_all_products():
     items = []
     for i in range(1, 201):
         items.append({
+            "id": f"PRD-BATCH-{i:06d}",
             "sku": f"DT-APL-IP{i}-128",
             "name": f"iPhone {i} 128GB",
             "category": "Điện thoại",

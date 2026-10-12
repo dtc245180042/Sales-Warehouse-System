@@ -109,8 +109,8 @@ def sample_test_order():
         order_id=order_id,
         product_id=f"SP-01-{uid}",
         sku=f"SKU-01-{uid}",
-        name="Sữa chua Vinamilk có đường 100g",
-        unit="Thùng",
+        name="Cáp sạc nhanh Anker Type-C to Lightning",
+        unit="Chiếc",
         price=240000.0,
         quantity=10,
         discount=120000.0,
@@ -122,8 +122,8 @@ def sample_test_order():
         order_id=order_id,
         product_id=f"SP-02-{uid}",
         sku=f"SKU-02-{uid}",
-        name="Sữa tươi tiệt trùng 100% 1L",
-        unit="Thùng",
+        name="Chuột máy tính không dây Logitech B175",
+        unit="Chiếc",
         price=320000.0,
         quantity=20,
         discount=640000.0,
@@ -204,7 +204,7 @@ def test_scrum614_and_615_admin_can_get_print_data_and_html(sample_test_order):
     # Kiểm tra font tiếng Việt có dấu đầy đủ
     assert "ĐƠN ĐẶT HÀNG" in html_text
     assert "Đại Lý Phân Phối Ánh Dương" in html_text
-    assert "Sữa chua Vinamilk có đường" in html_text
+    assert "Cáp sạc nhanh Anker Type-C to Lightning" in html_text
     assert "Trần Văn Kho" in html_text
     assert "ĐẠI DIỆN ĐẠI LÝ XÁC NHẬN" in html_text
     assert "ĐẠI DIỆN KINH DOANH" in html_text

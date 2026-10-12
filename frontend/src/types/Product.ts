@@ -25,6 +25,7 @@ export interface Product {
   name: string;
   category: string;
   categoryId?: number;
+  category_id?: number;
   supplierId: string;
   supplierName: string;
   costPrice: number;

@@ -155,13 +155,13 @@ def assign_single_customer(
     if not target_staff:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Nhân viên được chọn không tồn tại trong hệ thống."
+            detail="Nhân viên nhận chuyển giao không còn hoạt động"
         )
 
     if not target_staff.is_active:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Không thể phân công cho nhân viên đã bị vô hiệu hóa hoặc khóa tài khoản."
+            detail="Nhân viên nhận chuyển giao không còn hoạt động"
         )
 
     if target_staff.role != UserRole.SALES_REP.value:
@@ -397,13 +397,13 @@ def bulk_transfer_assignments(
     if not to_staff:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Nhân viên tiếp nhận không tồn tại trong hệ thống."
+            detail="Nhân viên nhận chuyển giao không còn hoạt động"
         )
 
     if not to_staff.is_active:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Nhân viên tiếp nhận đã bị vô hiệu hóa hoặc khóa tài khoản."
+            detail="Nhân viên nhận chuyển giao không còn hoạt động"
         )
 
     if to_staff.role != UserRole.SALES_REP.value:

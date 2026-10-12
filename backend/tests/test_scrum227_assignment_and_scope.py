@@ -651,3 +651,48 @@ def test_13_lock_sales_rep_with_assigned_customers_returns_warning():
 
     # Mở khóa lại cho các test tiếp theo
     client.post(f"/api/v1/users/{sra_id}/unlock", headers=headers_admin)
+
+
+# ==============================================================================
+# TEST 14: S3-06 Validation: Chuyển cho nhân viên đã nghỉ hoặc không tồn tại bị 400
+# ==============================================================================
+def test_14_transfer_validation_inactive_and_nonexistent_staff():
+    headers_mgr = _get_auth_headers("sales_mgr")
+    db = SessionLocal()
+    sra = db.query(User).filter(User.username == "sales_rep").first()
+    srb = db.query(User).filter(User.username == "sales_rep_b").first()
+    inactive_user = db.query(User).filter(User.username == "inactive_rep").first()
+    sra_id = sra.id
+    srb_id = srb.id
+    inactive_id = inactive_user.id if inactive_user else 999998
+    db.close()
+
+    # 1. Chuyển cho nhân viên đã nghỉ / bị vô hiệu hóa -> HTTP 400 với thông báo chuẩn
+    res_inactive = client.post("/api/v1/customers/assignments/bulk-transfer", json={
+        "from_staff_id": str(sra_id),
+        "to_staff_id": str(inactive_id),
+        "transfer_all": True,
+        "customer_ids": [],
+        "reason": "Điều chuyển công việc do nhân viên chuyển công tác"
+    }, headers=headers_mgr)
+    assert res_inactive.status_code == 400
+    assert "Nhân viên nhận chuyển giao không còn hoạt động" in res_inactive.json()["detail"]
+
+    # 2. Chuyển cho nhân viên không tồn tại -> HTTP 400
+    res_non_exist = client.post("/api/v1/customers/assignments/bulk-transfer", json={
+        "from_staff_id": str(sra_id),
+        "to_staff_id": "999999",
+        "transfer_all": True,
+        "customer_ids": [],
+        "reason": "Điều chuyển sang nhân viên không tồn tại"
+    }, headers=headers_mgr)
+    assert res_non_exist.status_code == 400
+    assert "Nhân viên nhận chuyển giao không còn hoạt động" in res_non_exist.json()["detail"]
+
+    # 3. Phân công đơn lẻ cho nhân viên đã nghỉ -> HTTP 400
+    res_single = client.post("/api/v1/customers/CUS-001/assign", json={
+        "assigned_staff_id": str(inactive_id),
+        "reason": "Thử phân công cho nhân viên đã nghỉ"
+    }, headers=headers_mgr)
+    assert res_single.status_code == 400
+    assert "Nhân viên nhận chuyển giao không còn hoạt động" in res_single.json()["detail"]

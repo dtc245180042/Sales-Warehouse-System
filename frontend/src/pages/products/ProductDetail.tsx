@@ -11,7 +11,6 @@ import {
   PackageCheck,
   History,
   ArrowDownLeft,
-  Package,
 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { PageContainer } from '../../components/layout/PageContainer';
@@ -101,25 +100,10 @@ export const ProductDetail: React.FC = () => {
       }
     >
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Column: Image & Quick Stats */}
+        {/* Left Column: Product Info & Supplier */}
         <div className="space-y-6">
-          <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-card text-center">
-            {product.image ? (
-              <img
-                src={product.image}
-                alt={product.name}
-                className="w-full h-64 object-cover rounded-xl border border-slate-200 dark:border-slate-700 mx-auto mb-4 bg-slate-50 dark:bg-slate-800"
-                onError={(e) => {
-                  e.currentTarget.style.display = 'none';
-                }}
-              />
-            ) : (
-              <div className="w-full h-48 rounded-xl border border-dashed border-slate-200 dark:border-slate-700 mx-auto mb-4 bg-slate-50 dark:bg-slate-800/60 flex flex-col items-center justify-center text-slate-400">
-                <Package className="w-12 h-12 stroke-[1.2] mb-1 text-slate-300 dark:text-slate-600" />
-                <span className="text-xs">Không có hình ảnh</span>
-              </div>
-            )}
-            <div className="flex items-center justify-center gap-2 mb-2">
+          <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-card">
+            <div className="flex flex-wrap items-center justify-between gap-2 pb-4 border-b border-slate-100 dark:border-slate-800">
               <Badge
                 variant={
                   product.status === 'active'
@@ -145,13 +129,15 @@ export const ProductDetail: React.FC = () => {
                 {product.category}
               </span>
             </div>
-            <div className="space-y-1 text-xs text-slate-400 mt-2">
-              <p>
-                Đơn vị tính cơ sở: <span className="font-semibold text-slate-700 dark:text-slate-200">{product.unit}</span>
-              </p>
-              <p>
-                Quy cách đóng gói: <span className="font-semibold text-slate-700 dark:text-slate-200">{product.packagingSpecification || '1 chiếc/hộp'}</span>
-              </p>
+            <div className="pt-4 space-y-2.5 text-xs text-slate-500 dark:text-slate-400">
+              <div className="flex items-center justify-between">
+                <span>Đơn vị tính cơ sở:</span>
+                <span className="font-semibold text-slate-800 dark:text-slate-200">{product.unit}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span>Quy cách đóng gói:</span>
+                <span className="font-semibold text-slate-800 dark:text-slate-200">{product.packagingSpecification || '1 chiếc/hộp'}</span>
+              </div>
             </div>
           </div>
 

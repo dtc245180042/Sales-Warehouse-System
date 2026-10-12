@@ -34,14 +34,38 @@ def validate_not_blank(value: Optional[str], field_name: str) -> Optional[str]:
     return cleaned
 
 
+NON_TECH_KEYWORDS = [
+    "sữa", "sua", "bánh", "banh", "nước ngọt", "nuoc ngot", "nước suối", "nuoc suoi",
+    "bò húc", "bo huc", "vinamilk", "thực phẩm", "thuc pham", "đồ uống", "do uong",
+    "tạp hóa", "tap hoa", "tiêu dùng", "tieu dung", "thịt", "thit", "kẹo", "keo",
+    "nước khoáng", "mì tôm", "mì gói", "rau củ", "nước tăng lực"
+]
+
+
+def validate_tech_product(name: Optional[str] = None, category: Optional[str] = None) -> None:
+    """Hệ thống Sales & Warehouse chỉ kinh doanh sản phẩm công nghệ.
+    Từ chối tuyệt đối mọi sản phẩm phi công nghệ (sữa, bánh, nước, thực phẩm, đồ uống...).
+    """
+    for text, label in [(name, "Tên"), (category, "Nhóm hàng")]:
+        if not text:
+            continue
+        text_lower = text.lower()
+        for kw in NON_TECH_KEYWORDS:
+            pattern = r"(?i)\b" + re.escape(kw) + r"\b"
+            if re.search(pattern, text_lower) or kw in text_lower:
+                raise ValueError(
+                    f"Hệ thống chỉ kinh doanh sản phẩm công nghệ. {label} '{text}' không hợp lệ do chứa từ khóa phi công nghệ ('{kw}')."
+                )
+
+
 class ProductBase(BaseModel):
     """Thông tin cơ bản của sản phẩm danh mục (SCRUM-220 & SCRUM-214)."""
-    sku: str = Field(..., description="Mã SKU duy nhất của sản phẩm", examples=["SP-VINAMILK-01"])
-    name: str = Field(..., max_length=255, description="Tên gọi sản phẩm chuẩn hóa", examples=["Sữa tươi Vinamilk 100% 1L"])
-    category: str = Field(..., max_length=100, description="Nhóm hàng danh mục", examples=["Sữa & Đồ uống"])
+    sku: str = Field(..., description="Mã SKU duy nhất của sản phẩm", examples=["IP15P-128-TI"])
+    name: str = Field(..., max_length=255, description="Tên gọi sản phẩm chuẩn hóa", examples=["iPhone 15 Pro 128GB Titan"])
+    category: str = Field(..., max_length=100, description="Nhóm hàng danh mục", examples=["Điện thoại thông minh (Smartphones)"])
     category_id: Optional[int] = Field(None, description="ID nhóm hàng trong Cây phân cấp (SCRUM-214)")
-    unit: str = Field(..., max_length=50, description="Đơn vị tính cơ sở", examples=["Hộp"])
-    packaging_spec: Optional[str] = Field(None, max_length=255, description="Quy cách đóng gói", examples=["12 hộp/thùng"])
+    unit: str = Field(..., max_length=50, description="Đơn vị tính cơ sở", examples=["Chiếc"])
+    packaging_spec: Optional[str] = Field(None, max_length=255, description="Quy cách đóng gói", examples=["1 chiếc/hộp"])
     image_url: Optional[str] = Field(None, max_length=500, description="Đường dẫn ảnh sản phẩm")
     barcode: Optional[str] = Field(None, max_length=50, description="Mã vạch sản phẩm")
     supplier_id: Optional[str] = Field(None, max_length=50, description="Mã nhà cung cấp")
@@ -74,6 +98,7 @@ class ProductBase(BaseModel):
         res = validate_not_blank(v, "Tên sản phẩm")
         if not res:
             raise ValueError("Tên sản phẩm không được để trống.")
+        validate_tech_product(name=res)
         return res
 
     @field_validator("category")
@@ -82,6 +107,7 @@ class ProductBase(BaseModel):
         res = validate_not_blank(v, "Nhóm hàng")
         if not res:
             raise ValueError("Nhóm hàng không được để trống.")
+        validate_tech_product(category=res)
         return res
 
     @field_validator("unit")
@@ -153,12 +179,18 @@ class ProductUpdateRequest(BaseModel):
     @field_validator("name")
     @classmethod
     def check_name(cls, v: Optional[str]) -> Optional[str]:
-        return validate_not_blank(v, "Tên sản phẩm")
+        res = validate_not_blank(v, "Tên sản phẩm")
+        if res:
+            validate_tech_product(name=res)
+        return res
 
     @field_validator("category")
     @classmethod
     def check_category(cls, v: Optional[str]) -> Optional[str]:
-        return validate_not_blank(v, "Nhóm hàng")
+        res = validate_not_blank(v, "Nhóm hàng")
+        if res:
+            validate_tech_product(category=res)
+        return res
 
     @field_validator("unit")
     @classmethod

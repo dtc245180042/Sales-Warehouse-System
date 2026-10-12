@@ -310,18 +310,6 @@ export const SupplierDetail: React.FC = () => {
                     className="py-3 flex items-center justify-between gap-3 hover:bg-slate-50 dark:hover:bg-slate-800/40 rounded-xl px-2 transition-colors"
                   >
                     <div className="flex items-center gap-3 min-w-0">
-                      {p.image ? (
-                        <img
-                          src={p.image}
-                          alt={p.name}
-                          className="w-10 h-10 rounded-lg object-cover bg-slate-100"
-                          onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                        />
-                      ) : (
-                        <div className="w-10 h-10 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 flex items-center justify-center shrink-0">
-                          <Package className="w-5 h-5" />
-                        </div>
-                      )}
                       <div className="truncate">
                         <Link
                           to={`/products/${p.id}`}

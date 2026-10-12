@@ -76,7 +76,7 @@ def scrum236_fixture():
     customer = Customer(
         id=f"CUS-236-{uid}",
         code=f"DL-236-{uid}",
-        name=f"Đại Lý Bia Nước Ngọt {uid}",
+        name=f"Đại Lý Thiết Bị Số {uid}",
         phone=f"0987{uid[:4]}",
         status="active",
         total_spent=50000000.0,
@@ -94,32 +94,32 @@ def scrum236_fixture():
     db.add(assignment)
     db.commit()
 
-    # 4. Tạo Sản phẩm thuộc 2 nhóm hàng khác nhau
-    # Nhóm "Nước giải khát"
+    # 4. Tạo Sản phẩm thuộc 2 nhóm hàng khác nhau (Hàng công nghệ)
+    # Nhóm "Phụ kiện sạc"
     prod_coke = Product(
-        sku=f"SKU-COKE-{uid}",
-        name="Nước ngọt Coca-Cola 330ml",
-        category="Nước giải khát",
-        unit="thùng",
+        sku=f"SKU-ANKER-{uid}",
+        name="Cáp sạc USB-C Anker 65W",
+        category="Phụ kiện sạc",
+        unit="sợi",
         price=210000.0,
         cost_price=180000.0,
         status="ACTIVE"
     )
     prod_pepsi = Product(
-        sku=f"SKU-PEPSI-{uid}",
-        name="Nước ngọt Pepsi 330ml",
-        category="Nước giải khát",
-        unit="thùng",
+        sku=f"SKU-BASEUS-{uid}",
+        name="Củ sạc nhanh Baseus GaN 65W",
+        category="Phụ kiện sạc",
+        unit="cái",
         price=205000.0,
         cost_price=175000.0,
         status="ACTIVE"
     )
-    # Nhóm "Bánh kẹo"
+    # Nhóm "Thiết bị ngoại vi"
     prod_snack = Product(
-        sku=f"SKU-SNACK-{uid}",
-        name="Bánh Snack Oishi Tôm Cay",
-        category="Bánh kẹo",
-        unit="gói",
+        sku=f"SKU-LOGI-{uid}",
+        name="Chuột không dây Logitech Pebble M350",
+        category="Thiết bị ngoại vi",
+        unit="chiếc",
         price=12000.0,
         cost_price=8000.0,
         status="ACTIVE"
@@ -140,7 +140,7 @@ def scrum236_fixture():
     # 5. Tạo đơn hàng:
     now = datetime.now(timezone.utc)
 
-    # Đơn 1: 10 ngày trước (trong 90 ngày) - Coke 10 thùng, Pepsi 5 thùng
+    # Đơn 1: 10 ngày trước (trong 90 ngày) - Coke 10 sợi, Pepsi 5 cái
     ord1 = Order(
         id=f"ORD-236-1-{uid}",
         code=f"DH-236-01-{uid}",
@@ -153,11 +153,11 @@ def scrum236_fixture():
     )
     db.add(ord1)
     db.flush()
-    itm1_1 = OrderItem(order_id=ord1.id, product_id=str(prod_coke.id), sku=prod_coke.sku, name=prod_coke.name, unit="thùng", price=210000.0, quantity=10, subtotal=2100000.0)
-    itm1_2 = OrderItem(order_id=ord1.id, product_id=str(prod_pepsi.id), sku=prod_pepsi.sku, name=prod_pepsi.name, unit="thùng", price=205000.0, quantity=5, subtotal=1025000.0)
+    itm1_1 = OrderItem(order_id=ord1.id, product_id=str(prod_coke.id), sku=prod_coke.sku, name=prod_coke.name, unit="sợi", price=210000.0, quantity=10, subtotal=2100000.0)
+    itm1_2 = OrderItem(order_id=ord1.id, product_id=str(prod_pepsi.id), sku=prod_pepsi.sku, name=prod_pepsi.name, unit="cái", price=205000.0, quantity=5, subtotal=1025000.0)
     db.add_all([itm1_1, itm1_2])
 
-    # Đơn 2: 30 ngày trước (trong 90 ngày) - Coke 20 thùng, Snack 50 gói
+    # Đơn 2: 30 ngày trước (trong 90 ngày) - Coke 20 sợi, Snack 50 chiếc
     ord2 = Order(
         id=f"ORD-236-2-{uid}",
         code=f"DH-236-02-{uid}",
@@ -170,8 +170,8 @@ def scrum236_fixture():
     )
     db.add(ord2)
     db.flush()
-    itm2_1 = OrderItem(order_id=ord2.id, product_id=str(prod_coke.id), sku=prod_coke.sku, name=prod_coke.name, unit="thùng", price=210000.0, quantity=20, subtotal=4200000.0)
-    itm2_2 = OrderItem(order_id=ord2.id, product_id=str(prod_snack.id), sku=prod_snack.sku, name=prod_snack.name, unit="gói", price=12000.0, quantity=50, subtotal=600000.0)
+    itm2_1 = OrderItem(order_id=ord2.id, product_id=str(prod_coke.id), sku=prod_coke.sku, name=prod_coke.name, unit="sợi", price=210000.0, quantity=20, subtotal=4200000.0)
+    itm2_2 = OrderItem(order_id=ord2.id, product_id=str(prod_snack.id), sku=prod_snack.sku, name=prod_snack.name, unit="chiếc", price=12000.0, quantity=50, subtotal=600000.0)
     db.add_all([itm2_1, itm2_2])
 
     # Đơn 3: Đã hủy (status = cancelled, 5 ngày trước) -> KHÔNG ĐƯỢC TÍNH VÀO LỊCH SỬ
@@ -187,7 +187,7 @@ def scrum236_fixture():
     )
     db.add(ord_cancelled)
     db.flush()
-    itm_c = OrderItem(order_id=ord_cancelled.id, product_id=str(prod_coke.id), sku=prod_coke.sku, name=prod_coke.name, unit="thùng", price=210000.0, quantity=99, subtotal=20790000.0)
+    itm_c = OrderItem(order_id=ord_cancelled.id, product_id=str(prod_coke.id), sku=prod_coke.sku, name=prod_coke.name, unit="sợi", price=210000.0, quantity=99, subtotal=20790000.0)
     db.add(itm_c)
 
     # Đơn 4: Đơn nháp (status = draft, 2 ngày trước) -> KHÔNG ĐƯỢC TÍNH VÀO LỊCH SỬ
@@ -203,7 +203,7 @@ def scrum236_fixture():
     )
     db.add(ord_draft)
     db.flush()
-    itm_d = OrderItem(order_id=ord_draft.id, product_id=str(prod_coke.id), sku=prod_coke.sku, name=prod_coke.name, unit="thùng", price=210000.0, quantity=50, subtotal=10500000.0)
+    itm_d = OrderItem(order_id=ord_draft.id, product_id=str(prod_coke.id), sku=prod_coke.sku, name=prod_coke.name, unit="sợi", price=210000.0, quantity=50, subtotal=10500000.0)
     db.add(itm_d)
 
     # Đơn 5: Đơn quá hạn 90 ngày (120 ngày trước) -> KHÔNG ĐƯỢC TÍNH VÀO LỊCH SỬ 90 NGÀY
@@ -219,7 +219,7 @@ def scrum236_fixture():
     )
     db.add(ord_old)
     db.flush()
-    itm_old = OrderItem(order_id=ord_old.id, product_id=str(prod_coke.id), sku=prod_coke.sku, name=prod_coke.name, unit="thùng", price=210000.0, quantity=80, subtotal=16800000.0)
+    itm_old = OrderItem(order_id=ord_old.id, product_id=str(prod_coke.id), sku=prod_coke.sku, name=prod_coke.name, unit="sợi", price=210000.0, quantity=80, subtotal=16800000.0)
     db.add(itm_old)
 
     db.commit()
@@ -235,7 +235,20 @@ def scrum236_fixture():
         "prod_snack": prod_snack,
     }
 
-    db.close()
+    try:
+        order_ids = [ord1.id, ord2.id, ord_cancelled.id, ord_draft.id, ord_old.id]
+        db.query(OrderItem).filter(OrderItem.order_id.in_(order_ids)).delete(synchronize_session=False)
+        db.query(Order).filter(Order.id.in_(order_ids)).delete(synchronize_session=False)
+        db.query(ProductStockProfile).filter(ProductStockProfile.product_id.in_([prod_coke.id, prod_pepsi.id, prod_snack.id])).delete(synchronize_session=False)
+        db.query(Product).filter(Product.id.in_([prod_coke.id, prod_pepsi.id, prod_snack.id])).delete(synchronize_session=False)
+        db.query(CustomerAssignment).filter(CustomerAssignment.customer_id == customer.id).delete(synchronize_session=False)
+        db.query(Customer).filter(Customer.id == customer.id).delete(synchronize_session=False)
+        db.query(User).filter(User.id.in_([rep_assigned.id, rep_unassigned.id, admin_user.id])).delete(synchronize_session=False)
+        db.commit()
+    except Exception:
+        db.rollback()
+    finally:
+        db.close()
 
 
 def test_scope_guard_unassigned_sales_rep_forbidden(scrum236_fixture):
@@ -329,16 +342,16 @@ def test_category_grouping_structure(scrum236_fixture):
     groups = res.json()["groups"]
 
     group_names = [g["category"] for g in groups]
-    assert "Nước giải khát" in group_names
-    assert "Bánh kẹo" in group_names
+    assert "Phụ kiện sạc" in group_names
+    assert "Thiết bị ngoại vi" in group_names
 
-    drink_group = next(g for g in groups if g["category"] == "Nước giải khát")
-    # Nước giải khát có 2 sản phẩm: Coke và Pepsi
+    drink_group = next(g for g in groups if g["category"] == "Phụ kiện sạc")
+    # Phụ kiện sạc có 2 sản phẩm: Coke (Cáp Anker) và Pepsi (Củ Baseus)
     assert drink_group["itemCount"] == 2
     # Tổng suggested quantity = 15.0 (Coke) + 5.0 (Pepsi) = 20.0
     assert drink_group["totalSuggestedQuantity"] == 20.0
 
-    snack_group = next(g for g in groups if g["category"] == "Bánh kẹo")
+    snack_group = next(g for g in groups if g["category"] == "Thiết bị ngoại vi")
     assert snack_group["itemCount"] == 1
     assert snack_group["totalSuggestedQuantity"] == 50.0
 
@@ -367,7 +380,7 @@ def test_anti_duplicate_merging_service_and_endpoint(scrum236_fixture):
             product_id=str(coke.id),
             sku=coke.sku,
             name=coke.name,
-            unit="thùng",
+            unit="sợi",
             price=210000.0,
             quantity=5,
             subtotal=1050000.0
@@ -379,7 +392,7 @@ def test_anti_duplicate_merging_service_and_endpoint(scrum236_fixture):
             product_id=str(coke.id),
             sku=coke.sku,
             name=coke.name,
-            unit="thùng",
+            unit="sợi",
             price=210000.0,
             quantity=15,  # Bình quân là 15
             subtotal=3150000.0
@@ -388,7 +401,7 @@ def test_anti_duplicate_merging_service_and_endpoint(scrum236_fixture):
             product_id=str(pepsi.id),
             sku=pepsi.sku,
             name=pepsi.name,
-            unit="thùng",
+            unit="cái",
             price=205000.0,
             quantity=5,
             subtotal=1025000.0

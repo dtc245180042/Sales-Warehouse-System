@@ -38,13 +38,28 @@ def test_create_and_cancel_order():
     uid = uuid.uuid4().hex[:6]
     headers = _get_auth_headers()
 
-    # Lấy 1 sản phẩm có sẵn
-    res = client.get("/api/v1/products", headers=headers).json()
-    prods = res.get("items", res) if isinstance(res, dict) else res
-    assert len(prods) >= 1, "Cần có ít nhất 1 sản phẩm trong DB"
-    prod = prods[0]
+    # Tạo 1 sản phẩm công nghệ riêng biệt cho test để đảm bảo tính cô lập tuyệt đối
+    from app.core.database import SessionLocal
+    from app.models.product import Product
+    db = SessionLocal()
+    test_p = Product(
+        id=f"PRD-ORD-{uid}",
+        sku=f"SKU-ORD-{uid}",
+        name=f"Cáp dữ liệu Type-C {uid}",
+        category="Củ sạc, Cáp sạc & Trạm sạc",
+        price=120000.0,
+        sale_price=120000.0,
+        stock=100,
+        status="active"
+    )
+    db.add(test_p)
+    db.commit()
+    db.refresh(test_p)
+    db.close()
+
+    prod = client.get(f"/api/v1/products/{test_p.id}", headers=headers).json()
     initial_stock = prod["stock"]
-    sale_price = prod.get("salePrice") or prod.get("price") or 100000.0
+    sale_price = prod.get("salePrice") or prod.get("price") or 120000.0
 
     # 1. Tạo đơn hàng mới
     payload = {

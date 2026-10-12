@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Search,
   Barcode,
@@ -16,10 +16,11 @@ import {
   TrendingDown,
   Layers,
   Info,
-  Package,
   ArrowRight,
   ShieldAlert,
   Lock,
+  FolderOpen,
+  Package,
 } from 'lucide-react';
 import { Button } from '../../components/common/Button';
 import { Modal } from '../../components/common/Modal';
@@ -28,17 +29,18 @@ import { formatCurrency, formatDate } from '../../utils/formatters';
 import { productService } from '../../services/productService';
 import { orderService } from '../../services/orderService';
 import { customerService } from '../../services/customerService';
+import { categoryService } from '../../services/categoryService';
 import { Product } from '../../types/Product';
 import { Customer } from '../../types/Customer';
+import { Category } from '../../types/Category';
 import { OrderItem, PaymentMethod } from '../../types/Order';
-import { productCategories } from '../../mock/products';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { VOLUME_DISCOUNT_TIERS, getVolumeDiscountInfo } from '../../services/volumeDiscountService';
 import { VolumeDiscountPolicyModal } from '../../components/sales/VolumeDiscountPolicyModal';
 
 interface CartItem extends OrderItem {
-  image: string;
+  image?: string;
   stock: number;
   discountPct: number;
   discountAmt: number;
@@ -51,11 +53,13 @@ export const POS: React.FC = () => {
   const { showToast } = useToast();
 
   const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>('CUS-010'); // Default Walk-in
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [search, setSearch] = useState<string>('');
   const [barcodeInput, setBarcodeInput] = useState<string>('');
+  const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
 
   // Cart
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -75,16 +79,108 @@ export const POS: React.FC = () => {
   useEffect(() => {
     productService.getAll().then(setProducts);
     customerService.getAll().then(setCustomers);
+    categoryService.getList().then((cats) => {
+      if (Array.isArray(cats)) {
+        setCategories(cats);
+      }
+    });
   }, []);
 
-  // Filter products for POS grid
+  // Tự động cuộn tab đang chọn vào vùng nhìn thấy (horizontal scroll)
+  useEffect(() => {
+    if (tabRefs.current[categoryFilter]) {
+      tabRefs.current[categoryFilter]?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'nearest',
+        inline: 'center',
+      });
+    }
+  }, [categoryFilter]);
+
+  // Danh mục nhóm hàng với số đếm sản phẩm thực tế (lấy động từ API /api/v1/categories)
+  const categoryTabs = useMemo(() => {
+    // 1. Đếm số lượng sản phẩm thực tế theo categoryId
+    const countsByCatId: Record<string, number> = {};
+    const fallbackNames: Record<string, string> = {};
+
+    products.forEach((p) => {
+      const rawId = p.categoryId !== undefined ? String(p.categoryId) : (p.category_id !== undefined ? String(p.category_id) : '');
+      const cId = rawId || 'unclassified';
+      countsByCatId[cId] = (countsByCatId[cId] || 0) + 1;
+      if (p.category && !fallbackNames[cId]) {
+        fallbackNames[cId] = p.category;
+      }
+    });
+
+    // 2. Xác định các danh mục cha/con để chỉ hiển thị các nhóm cấp lá hoặc các nhóm trực tiếp có sản phẩm
+    const parentIdSet = new Set(categories.map((c) => c.parent_id).filter(Boolean));
+
+    const mappedTabs: { id: string; name: string; count: number }[] = [];
+    const addedIds = new Set<string>();
+
+    categories.forEach((cat) => {
+      const catIdStr = String(cat.id);
+      const isLeaf = !parentIdSet.has(cat.id);
+      const actualCount = countsByCatId[catIdStr] || 0;
+
+      // Hiển thị nếu là danh mục cấp lá hoặc trực tiếp có sản phẩm gán vào
+      if (isLeaf || actualCount > 0) {
+        mappedTabs.push({
+          id: catIdStr,
+          name: cat.name,
+          count: actualCount,
+        });
+        addedIds.add(catIdStr);
+      }
+    });
+
+    // 3. Nếu có sản phẩm chưa phân loại
+    if (countsByCatId['unclassified']) {
+      mappedTabs.push({
+        id: 'unclassified',
+        name: 'Chưa phân loại',
+        count: countsByCatId['unclassified'],
+      });
+      addedIds.add('unclassified');
+    }
+
+    // 4. Bổ sung các nhóm hàng có trong products nhưng chưa có trong categories API
+    Object.keys(countsByCatId).forEach((cId) => {
+      if (!addedIds.has(cId)) {
+        mappedTabs.push({
+          id: cId,
+          name: fallbackNames[cId] || `Nhóm hàng #${cId}`,
+          count: countsByCatId[cId],
+        });
+        addedIds.add(cId);
+      }
+    });
+
+    return mappedTabs;
+  }, [products, categories]);
+
+  // Filter products for POS grid - So sánh chính xác theo Category ID và từ khóa
   const filteredProducts = useMemo(() => {
+    const q = search.toLowerCase().trim();
     return products.filter((p) => {
-      const matchCat = categoryFilter === 'all' || p.category === categoryFilter;
+      // 1. Lọc theo nhóm hàng (Category ID - so sánh ID cùng kiểu string)
+      let matchCat = categoryFilter === 'all';
+      if (!matchCat) {
+        const pCatId = p.categoryId !== undefined ? String(p.categoryId) : (p.category_id !== undefined ? String(p.category_id) : '');
+        if (categoryFilter === 'unclassified') {
+          matchCat = !pCatId;
+        } else {
+          matchCat = pCatId === String(categoryFilter);
+        }
+      }
+
+      // 2. Lọc theo từ khóa tìm kiếm (Tên, SKU, Barcode) - giữ nguyên khi đổi tab
       const matchSearch =
-        p.name.toLowerCase().includes(search.toLowerCase()) ||
-        p.sku.toLowerCase().includes(search.toLowerCase()) ||
-        p.barcode.includes(search);
+        !q ||
+        p.name.toLowerCase().includes(q) ||
+        p.sku.toLowerCase().includes(q) ||
+        (p.barcode ? String(p.barcode).toLowerCase().includes(q) : false);
+
       return matchCat && matchSearch;
     });
   }, [products, categoryFilter, search]);
@@ -297,87 +393,134 @@ export const POS: React.FC = () => {
         {/* Category Pills */}
         <div className="px-4 py-2 border-b border-slate-100 dark:border-slate-800 flex items-center gap-2 overflow-x-auto shrink-0 no-scrollbar">
           <button
+            ref={(el) => { tabRefs.current['all'] = el; }}
             onClick={() => setCategoryFilter('all')}
             className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
               categoryFilter === 'all'
                 ? 'bg-indigo-600 text-white shadow-sm'
-                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
+                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
             }`}
           >
             Tất cả ({products.length})
           </button>
-          {productCategories.map((c) => (
+          {categoryTabs.map((c) => (
             <button
               key={c.id}
-              onClick={() => setCategoryFilter(c.name)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
-                categoryFilter === c.name
+              ref={(el) => { tabRefs.current[c.id] = el; }}
+              onClick={() => setCategoryFilter(c.id)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 ${
+                categoryFilter === c.id
                   ? 'bg-indigo-600 text-white shadow-sm'
-                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
               }`}
             >
-              {c.name}
+              <span>{c.name}</span>
+              <span
+                className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                  categoryFilter === c.id
+                    ? 'bg-indigo-700 text-indigo-100'
+                    : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
+                }`}
+              >
+                {c.count}
+              </span>
             </button>
           ))}
         </div>
 
         {/* Product Cards Grid */}
-        <div className="flex-1 overflow-y-auto p-4 grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
-          {filteredProducts.map((p) => {
-            const isOutOfStock = p.stock <= 0;
-            return (
-              <div
-                key={p.id}
-                onClick={() => !isOutOfStock && addToCart(p)}
-                className={`group relative p-3 rounded-2xl border transition-all flex flex-col justify-between select-none aspect-square ${
-                  isOutOfStock
-                    ? 'border-slate-200 dark:border-slate-800 opacity-50 cursor-not-allowed bg-slate-50 dark:bg-slate-900/50'
-                    : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-850 hover:border-indigo-500 hover:shadow-md cursor-pointer active:scale-95'
-                }`}
-              >
-                {/* Phần trên: Tên sản phẩm & SKU */}
-                <div className="min-w-0">
-                  <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 line-clamp-2 leading-snug">
-                    {p.name}
-                  </h4>
-                  <span className="text-[10px] text-slate-400 block mt-1 font-mono truncate">
-                    {p.sku}
-                  </span>
-                </div>
+        <div className="flex-1 overflow-y-auto p-4">
+          {filteredProducts.length > 0 ? (
+            <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
+              {filteredProducts.map((p) => {
+                const isOutOfStock = p.stock <= 0;
+                return (
+                  <div
+                    key={p.id}
+                    onClick={() => !isOutOfStock && addToCart(p)}
+                    className={`group relative p-3 rounded-2xl border transition-all flex flex-col justify-between select-none aspect-square ${
+                      isOutOfStock
+                        ? 'border-slate-200 dark:border-slate-800 opacity-50 cursor-not-allowed bg-slate-50 dark:bg-slate-900/50'
+                        : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-850 hover:border-indigo-500 hover:shadow-md cursor-pointer active:scale-95'
+                    }`}
+                  >
+                    {/* Phần trên: Tên sản phẩm & SKU */}
+                    <div className="min-w-0">
+                      <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 line-clamp-2 leading-snug">
+                        {p.name}
+                      </h4>
+                      <span className="text-[10px] text-slate-400 block mt-1 font-mono truncate">
+                        {p.sku}
+                      </span>
+                    </div>
 
-                {/* Phần dưới: Tồn kho & CK số lượng, kèm Giá & Nút thêm */}
-                <div className="space-y-2 mt-auto">
-                  {/* Badges: Tồn kho & Chiết khấu số lượng */}
-                  <div className="flex items-center justify-between gap-1 flex-wrap">
-                    <span
-                      className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${
-                        p.stock <= 0
-                          ? 'bg-rose-500 text-white'
-                          : p.stock <= p.minStock
-                          ? 'bg-amber-500 text-white'
-                          : 'bg-slate-800 text-white dark:bg-slate-700'
-                      }`}
-                    >
-                      Tồn: {p.stock}
-                    </span>
-                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-indigo-50 text-indigo-600 dark:bg-indigo-950/60 dark:text-indigo-400">
-                      CK SL đến 15%
-                    </span>
-                  </div>
+                    {/* Phần dưới: Tồn kho & CK số lượng, kèm Giá & Nút thêm */}
+                    <div className="space-y-2 mt-auto">
+                      {/* Badges: Tồn kho & Chiết khấu số lượng */}
+                      <div className="flex items-center justify-between gap-1 flex-wrap">
+                        <span
+                          className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${
+                            p.stock <= 0
+                              ? 'bg-rose-500 text-white'
+                              : p.stock <= p.minStock
+                              ? 'bg-amber-500 text-white'
+                              : 'bg-slate-800 text-white dark:bg-slate-700'
+                          }`}
+                        >
+                          Tồn: {p.stock}
+                        </span>
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-indigo-50 text-indigo-600 dark:bg-indigo-950/60 dark:text-indigo-400">
+                          CK SL đến 15%
+                        </span>
+                      </div>
 
-                  {/* Giá bán & Nút thêm */}
-                  <div className="pt-2 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
-                    <span className="text-xs font-extrabold text-indigo-600 dark:text-indigo-400 truncate">
-                      {formatCurrency(p.salePrice)}
-                    </span>
-                    <div className="w-6 h-6 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center group-hover:bg-indigo-600 group-hover:text-white transition-colors shrink-0">
-                      <Plus className="w-3.5 h-3.5" />
+                      {/* Giá bán & Nút thêm */}
+                      <div className="pt-2 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
+                        <span className="text-xs font-extrabold text-indigo-600 dark:text-indigo-400 truncate">
+                          {formatCurrency(p.salePrice)}
+                        </span>
+                        <div className="w-6 h-6 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center group-hover:bg-indigo-600 group-hover:text-white transition-colors shrink-0">
+                          <Plus className="w-3.5 h-3.5" />
+                        </div>
+                      </div>
                     </div>
                   </div>
-                </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="h-full min-h-[300px] flex flex-col items-center justify-center text-center p-6 text-slate-400">
+              <div className="w-16 h-16 rounded-2xl bg-indigo-50/60 dark:bg-indigo-950/30 text-indigo-500 flex items-center justify-center mb-3">
+                <FolderOpen className="w-8 h-8 stroke-[1.5]" />
               </div>
-            );
-          })}
+              <h4 className="text-sm font-bold text-slate-700 dark:text-slate-200">
+                Không có sản phẩm trong nhóm này
+              </h4>
+              <p className="text-xs text-slate-400 max-w-sm mt-1">
+                {search.trim()
+                  ? `Không tìm thấy sản phẩm nào khớp với từ khóa "${search}" trong nhóm này.`
+                  : 'Nhóm hàng hiện chưa có sản phẩm kinh doanh hoặc đã hết hàng.'}
+              </p>
+              <div className="mt-4 flex items-center gap-2">
+                {search && (
+                  <button
+                    type="button"
+                    onClick={() => setSearch('')}
+                    className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 transition"
+                  >
+                    Xóa tìm kiếm
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => { setCategoryFilter('all'); setSearch(''); }}
+                  className="px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm transition"
+                >
+                  Xem tất cả sản phẩm
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

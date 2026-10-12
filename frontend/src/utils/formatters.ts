@@ -10,15 +10,35 @@ export const formatNumber = (num: number): string => {
   return new Intl.NumberFormat('vi-VN').format(num);
 };
 
-export const formatDate = (dateString: string): string => {
+/**
+ * Chuyển đổi an toàn chuỗi ngày giờ từ API thành Date object.
+ * Tự động bù múi giờ UTC nếu chuỗi ISO từ SQLite thiếu hậu tố 'Z' hoặc offset.
+ */
+export const parseSafeDate = (val: string | Date | undefined | null): Date | null => {
+  if (!val) return null;
+  if (val instanceof Date) return isNaN(val.getTime()) ? null : val;
+  let str = String(val).trim();
+  // Nếu chuỗi chứa khoảng trắng giữa ngày và giờ (định dạng SQLite 'YYYY-MM-DD HH:mm:ss')
+  if (/^\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}/.test(str)) {
+    str = str.replace(' ', 'T');
+  }
+  // Nếu là chuỗi ISO nhưng thiếu múi giờ (ví dụ "2026-10-11T02:15:00"), thêm 'Z' để hiểu đúng là UTC
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(str) && !str.endsWith('Z') && !/[+-]\d{2}:?\d{2}$/.test(str)) {
+    str += 'Z';
+  }
+  const d = new Date(str);
+  return isNaN(d.getTime()) ? null : d;
+};
+
+export const formatDate = (dateString: string | Date | undefined | null): string => {
   if (!dateString) return '-';
   try {
-    let s = dateString.trim();
+    let s = typeof dateString === 'string' ? dateString.trim() : new Date(dateString).toISOString();
     if (!s.endsWith('Z') && !/[+-]\d{2}(:\d{2})?$/.test(s)) {
       s = s.replace(' ', 'T') + 'Z';
     }
     const d = new Date(s);
-    if (isNaN(d.getTime())) return dateString;
+    if (isNaN(d.getTime())) return String(dateString);
     return new Intl.DateTimeFormat('vi-VN', {
       year: 'numeric',
       month: '2-digit',
@@ -27,26 +47,26 @@ export const formatDate = (dateString: string): string => {
       minute: '2-digit',
     }).format(d);
   } catch {
-    return dateString;
+    return String(dateString);
   }
 };
 
-export const formatDateOnly = (dateString: string): string => {
+export const formatDateOnly = (dateString: string | Date | undefined | null): string => {
   if (!dateString) return '-';
   try {
-    let s = dateString.trim();
+    let s = typeof dateString === 'string' ? dateString.trim() : new Date(dateString).toISOString();
     if (!s.endsWith('Z') && !/[+-]\d{2}(:\d{2})?$/.test(s)) {
       s = s.replace(' ', 'T') + 'Z';
     }
     const d = new Date(s);
-    if (isNaN(d.getTime())) return dateString;
+    if (isNaN(d.getTime())) return String(dateString);
     return new Intl.DateTimeFormat('vi-VN', {
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',
     }).format(d);
   } catch {
-    return dateString;
+    return String(dateString);
   }
 };
 

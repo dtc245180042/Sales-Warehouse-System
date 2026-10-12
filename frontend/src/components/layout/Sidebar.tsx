@@ -23,9 +23,11 @@ import {
   ShoppingCart,
   Warehouse,
   Layers,
+  ArrowLeftRight,
   ArrowDownLeft,
   ArrowUpRight,
   History,
+  Clock,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { UserRole } from '../../types/User';
@@ -249,6 +251,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
               title: 'Sổ tồn kho 3 cột',
               path: '/inventory',
               icon: <Layers className="w-3.5 h-3.5" />,
+              allowedRoles: ALL_ROLES,
+            },
+            {
+              title: 'Chuyển kho nội bộ',
+              path: '/inventory/transfers',
+              icon: <ArrowLeftRight className="w-3.5 h-3.5" />,
               allowedRoles: ALL_ROLES,
             },
             {

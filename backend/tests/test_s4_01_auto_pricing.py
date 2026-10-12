@@ -2,6 +2,7 @@ import uuid
 from datetime import datetime, timezone, timedelta
 from decimal import Decimal
 import pytest
+from sqlalchemy import text
 from fastapi.testclient import TestClient
 
 from main import app
@@ -224,8 +225,39 @@ def pricing_fixtures():
         "pl_t2": pl_t2,
         "disc_policy": disc_policy,
     }
-    yield data
-    db.close()
+    try:
+        yield data
+    finally:
+        db.close()
+        cleanup_db = SessionLocal()
+        try:
+            p_ids = [str(prod1.id), str(prod2.id), str(prod_no_pl.id)]
+            c_ids = [str(cus_t1.id), str(cus_t2.id), str(cus_no_pl.id)]
+            pl_ids = [str(pl_t1.id), str(pl_t2.id)]
+            dp_id = str(disc_policy.id)
+
+            for cid in c_ids:
+                cleanup_db.execute(text("DELETE FROM order_items WHERE order_id IN (SELECT id FROM orders WHERE customer_id = :cid)"), {"cid": cid})
+                cleanup_db.execute(text("DELETE FROM orders WHERE customer_id = :cid"), {"cid": cid})
+                cleanup_db.execute(text("DELETE FROM customers WHERE id = :cid"), {"cid": cid})
+
+            for pid in p_ids:
+                cleanup_db.execute(text("DELETE FROM order_items WHERE product_id = :pid"), {"pid": pid})
+                cleanup_db.execute(text("DELETE FROM warehouse_stocks WHERE product_id = :pid"), {"pid": pid})
+                cleanup_db.execute(text("DELETE FROM products WHERE id = :pid"), {"pid": pid})
+
+            cleanup_db.execute(text("DELETE FROM volume_discount_tiers WHERE policy_id = :dpid"), {"dpid": dp_id})
+            cleanup_db.execute(text("DELETE FROM volume_discount_policies WHERE id = :dpid"), {"dpid": dp_id})
+
+            for plid in pl_ids:
+                cleanup_db.execute(text("DELETE FROM price_list_items WHERE price_list_id = :plid"), {"plid": plid})
+                cleanup_db.execute(text("DELETE FROM price_lists WHERE id = :plid"), {"plid": plid})
+
+            cleanup_db.commit()
+        except Exception:
+            cleanup_db.rollback()
+        finally:
+            cleanup_db.close()
 
 
 def test_lookup_line_pricing_default_by_customer_group(pricing_fixtures):

@@ -1,6 +1,7 @@
 import uuid
 from datetime import datetime, timedelta, timezone
 import pytest
+from sqlalchemy import text
 from fastapi.testclient import TestClient
 from main import app
 from app.core.database import SessionLocal
@@ -8,6 +9,7 @@ from app.core.security import tao_token_truy_cap
 from app.models.auth import User, UserRole
 from app.models.customer import Customer
 from app.models.customer_delivery_address import CustomerDeliveryAddress
+from app.models.customer_credit_profile import CustomerCreditProfile
 from app.models.product import Product
 from app.models.product_stock_profile import ProductStockProfile
 from app.models.customer_credit_profile import CustomerCreditProfile
@@ -78,6 +80,7 @@ def test_data():
         sku=f"SKU-230-{uid}",
         name=f"Bình xịt khí nén vệ sinh linh kiện {uid}",
         price=15000.0,
+        cost_price=10000.0,
         unit="lon",
         packaging_spec="24 lon/thùng",
         status="ACTIVE"
@@ -95,29 +98,33 @@ def test_data():
     db.commit()
     db.refresh(stock_prof)
 
-    yield {
-        "customer": customer,
-        "address": addr,
-        "product": prod,
-        "stock_profile": stock_prof
-    }
-
     try:
-        order_ids = [o.id for o in db.query(Order.id).filter(Order.customer_id == customer.id).all()]
-        if order_ids:
-            db.query(OrderDeliveryProfile).filter(OrderDeliveryProfile.order_id.in_(order_ids)).delete(synchronize_session=False)
-        db.query(OrderItem).filter(OrderItem.product_id == str(prod.id)).delete(synchronize_session=False)
-        db.query(Order).filter(Order.customer_id == customer.id).delete(synchronize_session=False)
-        db.query(ProductStockProfile).filter(ProductStockProfile.product_id == prod.id).delete(synchronize_session=False)
-        db.query(Product).filter(Product.id == prod.id).delete(synchronize_session=False)
-        db.query(CustomerDeliveryAddress).filter(CustomerDeliveryAddress.customer_id == customer.id).delete(synchronize_session=False)
-        db.query(CustomerCreditProfile).filter(CustomerCreditProfile.customer_id == customer.id).delete(synchronize_session=False)
-        db.query(Customer).filter(Customer.id == customer.id).delete(synchronize_session=False)
-        db.commit()
-    except Exception:
-        db.rollback()
+        yield {
+            "customer": customer,
+            "address": addr,
+            "product": prod,
+            "stock_profile": stock_prof
+        }
     finally:
         db.close()
+        cleanup_db = SessionLocal()
+        try:
+            cid = str(customer.id)
+            pid = str(prod.id)
+            cleanup_db.execute(text("DELETE FROM order_approval_requests WHERE order_id IN (SELECT id FROM orders WHERE customer_id = :cid)"), {"cid": cid})
+            cleanup_db.execute(text("DELETE FROM order_delivery_profiles WHERE order_id IN (SELECT id FROM orders WHERE customer_id = :cid)"), {"cid": cid})
+            cleanup_db.execute(text("DELETE FROM order_items WHERE order_id IN (SELECT id FROM orders WHERE customer_id = :cid)"), {"cid": cid})
+            cleanup_db.execute(text("DELETE FROM orders WHERE customer_id = :cid"), {"cid": cid})
+            cleanup_db.execute(text("DELETE FROM customer_delivery_addresses WHERE customer_id = :cid"), {"cid": cid})
+            cleanup_db.execute(text("DELETE FROM customer_credit_profiles WHERE customer_id = :cid"), {"cid": cid})
+            cleanup_db.execute(text("DELETE FROM customers WHERE id = :cid"), {"cid": cid})
+            cleanup_db.execute(text("DELETE FROM product_stock_profiles WHERE product_id = :pid"), {"pid": pid})
+            cleanup_db.execute(text("DELETE FROM products WHERE id = :pid"), {"pid": pid})
+            cleanup_db.commit()
+        except Exception:
+            cleanup_db.rollback()
+        finally:
+            cleanup_db.close()
 
 
 def test_products_search_for_order(test_data):

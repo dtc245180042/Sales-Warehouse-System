@@ -67,6 +67,15 @@ import { InventoryHistory } from '../pages/inventory/InventoryHistory';
 import { PortalOrderPage } from '../pages/portal/PortalOrderPage';
 import { PortalOrdersPage } from '../pages/portal/PortalOrdersPage';
 
+// Kho & Chuyển kho nội bộ (S5-07, EP-05, SCRUM-574, SCRUM-576, SCRUM-577, SCRUM-578)
+import { StockTransferList } from '../pages/inventory/StockTransferList';
+import { StockTransferCreate } from '../pages/inventory/StockTransferCreate';
+import { StockTransferDetail } from '../pages/inventory/StockTransferDetail';
+import { InventoryOverview } from '../pages/inventory/InventoryOverview';
+import { StockIn } from '../pages/inventory/StockIn';
+import { StockOut } from '../pages/inventory/StockOut';
+import { InventoryHistory } from '../pages/inventory/InventoryHistory';
+
 // All 7 business roles allowed in Sprint 1 & 2 backoffice
 const ALL_BACKOFFICE_ROLES: UserRole[] = [
   'Admin',
@@ -364,6 +373,74 @@ export const AppRoutes: React.FC = () => {
           element={
             <ProtectedRoute allowedRoles={['Admin', 'SalesManager', 'WarehouseManager', 'Director', 'Manager']}>
               <ProductEdit />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* ============================================================ */}
+        {/* KHO & CHUYỂN KHO NỘI BỘ (S5-07, EP-05, SCRUM-574 - 578)       */}
+        {/* ============================================================ */}
+        <Route
+          path="/inventory"
+          element={
+            <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
+              <InventoryOverview />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/inventory/overview"
+          element={
+            <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
+              <InventoryOverview />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/inventory/transfers"
+          element={
+            <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
+              <StockTransferList />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/inventory/transfers/create"
+          element={
+            <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
+              <StockTransferCreate />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/inventory/transfers/:id"
+          element={
+            <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
+              <StockTransferDetail />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/inventory/stock-in"
+          element={
+            <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
+              <StockIn />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/inventory/stock-out"
+          element={
+            <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
+              <StockOut />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/inventory/history"
+          element={
+            <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
+              <InventoryHistory />
             </ProtectedRoute>
           }
         />

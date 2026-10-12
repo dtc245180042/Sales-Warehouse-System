@@ -1,6 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 import pytest
+from sqlalchemy import text
 from fastapi.testclient import TestClient
 from main import app
 from app.core.database import SessionLocal
@@ -195,8 +196,31 @@ def copy_test_data():
         "sp2": sp2,
         "source_order": source_order,
     }
-    yield data
-    db.close()
+    try:
+        yield data
+    finally:
+        db.close()
+        cleanup_db = SessionLocal()
+        try:
+            cid = str(customer.id)
+            p1_id = str(prod1.id)
+            p2_id = str(prod2.id)
+            cleanup_db.execute(text("DELETE FROM order_delivery_profiles WHERE order_id IN (SELECT id FROM orders WHERE customer_id = :cid)"), {"cid": cid})
+            cleanup_db.execute(text("DELETE FROM order_items WHERE order_id IN (SELECT id FROM orders WHERE customer_id = :cid)"), {"cid": cid})
+            cleanup_db.execute(text("DELETE FROM orders WHERE customer_id = :cid"), {"cid": cid})
+            cleanup_db.execute(text("DELETE FROM customer_assignments WHERE customer_id = :cid"), {"cid": cid})
+            cleanup_db.execute(text("DELETE FROM customer_credit_profiles WHERE customer_id = :cid"), {"cid": cid})
+            cleanup_db.execute(text("DELETE FROM customers WHERE id = :cid"), {"cid": cid})
+            cleanup_db.execute(text("DELETE FROM product_stock_profiles WHERE product_id IN (:p1, :p2)"), {"p1": p1_id, "p2": p2_id})
+            cleanup_db.execute(text("DELETE FROM products WHERE id IN (:p1, :p2)"), {"p1": p1_id, "p2": p2_id})
+            # Clean up test users
+            for u in [admin_user, sales_rep_1, sales_rep_2, warehouse_user]:
+                cleanup_db.execute(text("DELETE FROM users WHERE id = :uid"), {"uid": u.id})
+            cleanup_db.commit()
+        except Exception:
+            cleanup_db.rollback()
+        finally:
+            cleanup_db.close()
 
 
 def test_copy_order_success_as_draft(copy_test_data):

@@ -144,12 +144,13 @@
   animation: slideLeft 0.25s ease-out forwards;
 }
 
-/* Print styles for POS receipt */
+/* Print styles for POS receipt and Stock Transfer documents */
 @media print {
   body * {
     visibility: hidden;
   }
-  #printable-receipt, #printable-receipt * {
+  #printable-receipt, #printable-receipt *,
+  #printable-transfer, #printable-transfer * {
     visibility: visible;
   }
   #printable-receipt {
@@ -159,6 +160,17 @@
     width: 80mm;
     margin: 0;
     padding: 10px;
+  }
+  #printable-transfer {
+    display: block !important;
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    margin: 0;
+    padding: 10mm;
+    background: #ffffff !important;
+    color: #000000 !important;
   }
 }
 

@@ -32,7 +32,7 @@ class CustomerBase(BaseModel):
         if not v:
             return "RETAIL"
         v = v.strip().upper()
-        allowed = {"TIER_1", "TIER_2", "WHOLESALE", "RETAIL", "VIP"}
+        allowed = {"TIER_1", "TIER_2", "WHOLESALE", "RETAIL", "VIP", "WHOLESALE_NOPL"}
         if v not in allowed:
             raise ValueError(f"Nhóm khách hàng không hợp lệ. Chỉ chấp nhận một trong các nhóm: {', '.join(allowed)}")
         return v

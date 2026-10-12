@@ -16,6 +16,9 @@ from app.schemas.portal import (
     PortalOrderResponse,
     PortalOrderListPaginationResponse,
     PortalOrderDetailResponse,
+    PortalReorderPreviewResponse,
+    PortalReorderRequest,
+    PortalReorderResponse,
 )
 from app.schemas.customer_delivery_address import DeliveryAddressResponse
 from app.services import portal_service
@@ -181,4 +184,64 @@ def get_portal_order_detail(
         db=db,
         customer=current_customer,
         order_id=order_id,
+    )
+
+
+@router.get(
+    "/orders/{order_id}/reorder-preview",
+    response_model=PortalReorderPreviewResponse,
+    summary="Xem trước đơn đặt lại kèm phân loại mặt hàng ngừng kinh doanh và giá mới (S5-02 / SC-244)"
+)
+def get_portal_reorder_preview(
+    order_id: str,
+    db: Session = Depends(lay_phien_db),
+    current_customer: Customer = Depends(lay_dai_ly_hien_tai),
+):
+    """
+    Lấy chi tiết đơn cũ để chọn lại:
+    - Danh sách dòng hàng có thể đặt lại với giá hiện hành mới
+    - Danh sách dòng hàng bị loại do ngừng kinh doanh
+    - Cảnh báo biến động giá
+    - Chống IDOR
+    """
+    return portal_service.get_portal_reorder_preview(
+        db=db,
+        customer=current_customer,
+        order_id=order_id,
+    )
+
+
+@router.post(
+    "/orders/{order_id}/reorder",
+    response_model=PortalReorderResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Tạo đơn đặt lại từ đơn cũ (toàn bộ hoặc một phần) (S5-02 / SC-244)"
+)
+def create_portal_reorder(
+    order_id: str,
+    req: PortalReorderRequest,
+    request: Request,
+    response: Response,
+    x_idempotency_key: str = Header(..., alias="X-Idempotency-Key", description="Khóa định danh chống gửi trùng lặp đơn đặt lại"),
+    db: Session = Depends(lay_phien_db),
+    current_customer: Customer = Depends(lay_dai_ly_hien_tai),
+    current_user: User = Depends(lay_nguoi_dung_hien_tai),
+):
+    """
+    Tạo đơn mới dựa trên một đơn lịch sử:
+    - Cho phép chọn toàn bộ hoặc một phần dòng hàng
+    - Tự động bỏ các mặt hàng ngừng kinh doanh khỏi đơn mới
+    - Áp lại giá theo bảng giá hiện hành của đại lý
+    - Kiểm tra công nợ khả dụng
+    """
+    client_ip = request.client.host if request.client else "127.0.0.1"
+    return portal_service.create_portal_reorder(
+        db=db,
+        customer=current_customer,
+        order_id=order_id,
+        data=req,
+        idempotency_key=x_idempotency_key,
+        client_ip=client_ip,
+        user_id=current_user.id,
+        username=current_user.username,
     )

@@ -31,6 +31,12 @@ from app.schemas.portal import (
     PortalOrderListItemResponse,
     PortalOrderListPaginationResponse,
     PortalOrderDetailResponse,
+    PortalReorderItemPreview,
+    PortalReorderDiscontinuedItem,
+    PortalReorderPreviewResponse,
+    PortalReorderItemIn,
+    PortalReorderRequest,
+    PortalReorderResponse,
 )
 from app.services.volume_discount_service import calculate_volume_discount
 
@@ -722,3 +728,429 @@ def get_portal_order_detail(
         items=item_responses,
         has_short_delivery=has_order_short_delivery,
     )
+
+
+# ==============================================================================
+# QUẢN LÝ ĐẶT LẠI ĐƠN HÀNG ĐÃ MUA ĐỊNH KỲ (S5-02 / SC-244)
+# ==============================================================================
+
+def _get_customer_price_map(db: Session, customer: Customer) -> Dict[str, float]:
+    """Lấy bản đồ giá hiện hành theo bảng giá nhóm của đại lý."""
+    price_list = _get_active_price_list_for_customer(db, customer)
+    price_map: Dict[str, float] = {}
+    if price_list and price_list.items:
+        for pli in price_list.items:
+            # Ưu tiên sale_price (chuẩn PriceListItem), rồi custom_price, rồi price
+            pval = getattr(pli, "sale_price", None)
+            if pval is None:
+                pval = getattr(pli, "custom_price", None)
+            if pval is None:
+                pval = getattr(pli, "price", None)
+            pval_float = float(pval or 0.0)
+            pid_str = str(pli.product_id)
+            price_map[pid_str] = pval_float
+            if getattr(pli, "product_sku", None):
+                price_map[str(pli.product_sku).strip()] = pval_float
+    return price_map
+
+
+def _find_product_in_db(db: Session, product_id_or_sku: str) -> Optional[Product]:
+    """Tìm sản phẩm theo id (int/str) hoặc sku."""
+    query = db.query(Product).filter(
+        (Product.id == product_id_or_sku) | (Product.sku == product_id_or_sku)
+    )
+    prod = query.first()
+    if not prod and str(product_id_or_sku).isdigit():
+        prod = db.query(Product).filter(Product.id == int(product_id_or_sku)).first()
+    return prod
+
+
+def _is_product_discontinued(product: Optional[Product]) -> tuple[bool, str]:
+    """Kiểm tra sản phẩm có bị ngừng kinh doanh hay không."""
+    if not product:
+        return True, "Sản phẩm không còn tồn tại trong hệ thống danh mục"
+    st = str(product.status or "").strip().lower()
+    if st in ["discontinued", "inactive", "suspended", "locked", "deleted", "ngung_kinh_doanh"]:
+        return True, f"Mặt hàng đã ngừng kinh doanh (Trạng thái: {product.status})"
+    if st and st != "active":
+        return True, f"Mặt hàng tạm ngưng giao dịch (Trạng thái: {product.status})"
+    return False, ""
+
+
+def get_portal_reorder_preview(
+    db: Session,
+    customer: Customer,
+    order_id: str,
+) -> PortalReorderPreviewResponse:
+    """
+    Lấy chi tiết đơn cũ để chọn lại, bao gồm danh sách dòng hàng, số lượng và trạng thái mặt hàng (S5-02 / SC-244).
+    - Bảo mật: Đại lý chỉ được xem trước đơn của chính mình (chống IDOR).
+    - Tách biệt rõ mặt hàng ngừng kinh doanh (bị loại) và mặt hàng khả dụng.
+    - Áp lại giá theo bảng giá hiện hành và tính chênh lệch giá.
+    """
+    order = db.query(Order).filter(
+        (Order.id == order_id) | (Order.code == order_id)
+    ).first()
+
+    if not order:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Không tìm thấy đơn hàng yêu cầu để đặt lại."
+        )
+
+    # Chống IDOR: Chỉ cho phép đại lý sở hữu đơn hàng (Subtask 1)
+    if order.customer_id != customer.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Bạn không có quyền đặt lại đơn hàng của đại lý khác."
+        )
+
+    price_map = _get_customer_price_map(db, customer)
+
+    available_items: List[PortalReorderItemPreview] = []
+    discontinued_items: List[PortalReorderDiscontinuedItem] = []
+
+    for it in (order.items or []):
+        prod = _find_product_in_db(db, str(it.product_id)) or _find_product_in_db(db, str(it.sku or ""))
+        is_disc, disc_reason = _is_product_discontinued(prod)
+
+        old_qty = it.quantity or 1
+        old_price = float(it.price or 0.0)
+
+        if is_disc:
+            discontinued_items.append(
+                PortalReorderDiscontinuedItem(
+                    product_id=str(it.product_id),
+                    sku=prod.sku if prod else getattr(it, "sku", None),
+                    name=prod.name if prod else it.name,
+                    old_quantity=old_qty,
+                    old_price=old_price,
+                    reason=disc_reason,
+                )
+            )
+        else:
+            # Tra cứu giá hiện hành
+            p_id_str = str(prod.id)
+            p_sku_str = str(prod.sku or "").strip()
+            current_price = price_map.get(p_id_str) or price_map.get(p_sku_str)
+            if current_price is None:
+                current_price = float(prod.price or 0.0)
+            if current_price <= 0 and old_price > 0:
+                current_price = old_price
+
+            price_diff = current_price - old_price
+            is_changed = abs(price_diff) > 0.001
+            est_subtotal = old_qty * current_price
+
+            available_items.append(
+                PortalReorderItemPreview(
+                    item_id=it.id,
+                    product_id=str(prod.id),
+                    sku=prod.sku or it.sku,
+                    name=prod.name or it.name,
+                    unit=prod.unit or it.unit or "cái",
+                    old_quantity=old_qty,
+                    default_quantity=old_qty,
+                    old_price=old_price,
+                    current_price=current_price,
+                    is_price_changed=is_changed,
+                    price_difference=price_diff,
+                    estimated_subtotal=est_subtotal,
+                )
+            )
+
+    has_disc = len(discontinued_items) > 0
+    has_price_changes = any(i.is_price_changed for i in available_items)
+    estimated_total = sum(i.estimated_subtotal for i in available_items)
+
+    created_at_val = order.created_at.isoformat() if hasattr(order.created_at, "isoformat") else str(order.created_at or "")
+
+    notices = []
+    if has_disc:
+        notices.append(f"Có {len(discontinued_items)} mặt hàng đã ngừng kinh doanh được tự động loại khỏi đơn mới.")
+    if has_price_changes:
+        notices.append("Các mặt hàng được áp dụng lại theo bảng giá hiện hành của đại lý.")
+
+    return PortalReorderPreviewResponse(
+        original_order_id=order.id,
+        original_order_code=order.code or order.id,
+        original_order_created_at=created_at_val,
+        available_items=available_items,
+        discontinued_items=discontinued_items,
+        has_discontinued_items=has_disc,
+        has_price_changes=has_price_changes,
+        estimated_total=estimated_total,
+        notice=" ".join(notices) if notices else None,
+    )
+
+
+def create_portal_reorder(
+    db: Session,
+    customer: Customer,
+    order_id: str,
+    data: PortalReorderRequest,
+    idempotency_key: str,
+    client_ip: str,
+    user_id: int,
+    username: str,
+) -> PortalReorderResponse:
+    """
+    Tạo đơn đặt lại từ đơn cũ, hỗ trợ đặt lại toàn bộ hoặc một phần dòng hàng (S5-02 / SC-244).
+    - Bắt buộc Header X-Idempotency-Key chống gửi trùng đơn.
+    - Loại bỏ mặt hàng ngừng kinh doanh khỏi đơn mới kèm cảnh báo.
+    - Áp lại giá theo bảng giá hiện hành (không dùng giá cũ).
+    - Đánh dấu copied_from_order_id để truy vết nguồn gốc.
+    """
+    order = db.query(Order).filter(
+        (Order.id == order_id) | (Order.code == order_id)
+    ).first()
+
+    if not order:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Không tìm thấy đơn hàng gốc để đặt lại."
+        )
+
+    # Chống IDOR: Chỉ cho phép đại lý sở hữu đơn hàng đặt lại
+    if order.customer_id != customer.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Bạn không có quyền đặt lại đơn hàng của đại lý khác."
+        )
+
+    # 1. Kiểm tra Idempotency chống gửi trùng lặp
+    req_body_dict = data.model_dump()
+    req_hash = hashlib.sha256(json.dumps(req_body_dict, sort_keys=True).encode()).hexdigest()
+
+    existing_record = db.query(PortalIdempotencyRecord).filter(
+        PortalIdempotencyRecord.customer_id == customer.id,
+        PortalIdempotencyRecord.idempotency_key == idempotency_key
+    ).first()
+
+    if existing_record:
+        if existing_record.request_hash == req_hash:
+            cached_resp = json.loads(existing_record.response_payload or "{}")
+            return PortalReorderResponse(**cached_resp)
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Khóa Idempotency đã được sử dụng với nội dung khác. Vui lòng thử lại."
+            )
+
+    price_map = _get_customer_price_map(db, customer)
+
+    # 2. Xây dựng danh sách dòng hàng hợp lệ và loại bỏ mặt hàng ngừng kinh doanh
+    valid_items_to_create: List[Dict[str, Any]] = []
+    removed_discontinued: List[PortalReorderDiscontinuedItem] = []
+    price_change_warnings: List[str] = []
+
+    # Map các item trong đơn cũ để đối chiếu giá cũ
+    old_items_map: Dict[str, OrderItem] = {}
+    for oit in (order.items or []):
+        old_items_map[str(oit.product_id)] = oit
+        if oit.sku:
+            old_items_map[str(oit.sku).strip()] = oit
+
+    for sel in data.selected_items:
+        prod = _find_product_in_db(db, str(sel.product_id))
+        is_disc, disc_reason = _is_product_discontinued(prod)
+
+        old_it = old_items_map.get(str(sel.product_id))
+        old_p = float(old_it.price if old_it else (prod.price if prod else 0.0))
+
+        if is_disc:
+            removed_discontinued.append(
+                PortalReorderDiscontinuedItem(
+                    product_id=str(sel.product_id),
+                    sku=prod.sku if prod else (old_it.sku if old_it else None),
+                    name=prod.name if prod else (old_it.name if old_it else str(sel.product_id)),
+                    old_quantity=sel.quantity,
+                    old_price=old_p,
+                    reason=disc_reason,
+                )
+            )
+            continue
+
+        # Định giá lại theo bảng giá hiện hành
+        p_id_str = str(prod.id)
+        p_sku_str = str(prod.sku or "").strip()
+        current_price = price_map.get(p_id_str) or price_map.get(p_sku_str)
+        if current_price is None:
+            current_price = float(prod.price or 0.0)
+        if current_price <= 0 and old_p > 0:
+            current_price = old_p
+
+        # Cảnh báo nếu giá bị thay đổi
+        if abs(current_price - old_p) > 0.001:
+            diff_text = f"+{current_price - old_p:,.0f} đ" if current_price > old_p else f"{current_price - old_p:,.0f} đ"
+            price_change_warnings.append(
+                f"Sản phẩm '{prod.name}' ({prod.sku}): Giá cũ {old_p:,.0f} đ -> Áp giá hiện hành {current_price:,.0f} đ ({diff_text})"
+            )
+
+        line_subtotal = float(sel.quantity * current_price)
+
+        valid_items_to_create.append({
+            "product_id": str(prod.id),
+            "sku": prod.sku,
+            "name": prod.name,
+            "unit": prod.unit or "cái",
+            "price": current_price,
+            "quantity": sel.quantity,
+            "subtotal": line_subtotal,
+        })
+
+    # Nếu tất cả các mặt hàng được chọn đều bị ngừng kinh doanh
+    if not valid_items_to_create:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Tất cả mặt hàng bạn chọn đều đã ngừng kinh doanh hoặc không còn phân phối. Không thể tạo đơn mới."
+        )
+
+    # 3. Tính toán tổng tiền theo giá hiện hành
+    total_subtotal = sum(i["subtotal"] for i in valid_items_to_create)
+    total_amount = total_subtotal
+
+    # 4. Kiểm tra hạn mức công nợ
+    credit_res = check_portal_order_credit_limit(db, customer.id, int(round(total_amount)))
+    if not credit_res.get("allowed", True):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=credit_res.get("error_message") or "Đơn hàng vượt quá hạn mức công nợ khả dụng của đại lý."
+        )
+
+    # 5. Phân công NVKD phụ trách (nếu có)
+    assignment = db.query(CustomerAssignment).filter(
+        CustomerAssignment.customer_id == customer.id
+    ).first()
+    staff_id = str(assignment.assigned_staff_id) if (assignment and assignment.assigned_staff_id) else None
+    staff_name = (assignment.staff.full_name or assignment.staff.username) if (assignment and assignment.staff) else None
+    is_unassigned = staff_id is None
+
+    # 6. Tạo đơn hàng mới
+    now_utc = datetime.now(timezone.utc)
+    new_order_id = f"ORD-{uuid.uuid4().hex[:12].upper()}"
+    new_order_code = f"DH-{now_utc.strftime('%Y%m%d')}-{uuid.uuid4().hex[:4].upper()}"
+
+    new_order = Order(
+        id=new_order_id,
+        code=new_order_code,
+        customer_id=customer.id,
+        customer_name=customer.name,
+        customer_phone=customer.phone,
+        subtotal=total_subtotal,
+        discount=0.0,
+        tax=0.0,
+        total=total_amount,
+        paid_amount=0.0,
+        change_amount=0.0,
+        payment_method="transfer",
+        payment_status="unpaid",
+        status="pending",
+        requires_approval=False,
+        staff_id=staff_id,
+        staff_name=staff_name,
+        source="portal",
+        is_unassigned=is_unassigned,
+        copied_from_order_id=order.id,  # Lưu vết nguồn gốc đơn cũ S5-02
+        note=f"Đặt lại từ đơn cũ #{order.code or order.id}. {data.delivery_notes or ''}".strip(),
+        created_at=now_utc,
+        updated_at=now_utc,
+    )
+    db.add(new_order)
+    db.flush()
+
+    # 7. Thêm các dòng hàng với đơn giá hiện hành
+    for vitem in valid_items_to_create:
+        new_item = OrderItem(
+            order_id=new_order.id,
+            product_id=vitem["product_id"],
+            sku=vitem["sku"],
+            name=vitem["name"],
+            price=vitem["price"],
+            quantity=vitem["quantity"],
+            discount=0.0,
+            subtotal=vitem["subtotal"],
+            unit=vitem["unit"],
+            delivered_quantity=None,
+        )
+        db.add(new_item)
+
+    # 8. Sao chép OrderDeliveryProfile từ đơn cũ nếu có
+    old_profile = db.query(OrderDeliveryProfile).filter(
+        OrderDeliveryProfile.order_id == order.id
+    ).first()
+
+    expected_date = data.expected_delivery_date
+    if not expected_date and old_profile and old_profile.expected_delivery_date:
+        expected_date = old_profile.expected_delivery_date
+
+    rec_name = old_profile.delivery_receiver_name if old_profile else customer.name
+    rec_phone = old_profile.delivery_phone if old_profile else customer.phone
+    rec_addr = old_profile.delivery_address if old_profile else customer.address
+    addr_id = old_profile.delivery_address_id if old_profile else None
+    addr_name = old_profile.delivery_address_name if old_profile else None
+
+    new_delivery_profile = OrderDeliveryProfile(
+        order_id=new_order.id,
+        delivery_address_id=addr_id,
+        delivery_address_name=addr_name,
+        delivery_receiver_name=rec_name,
+        delivery_phone=rec_phone,
+        delivery_address=rec_addr,
+        delivery_notes=data.delivery_notes or (old_profile.delivery_notes if old_profile else None),
+        expected_delivery_date=expected_date,
+        created_at=now_utc,
+        updated_at=now_utc,
+    )
+    db.add(new_delivery_profile)
+
+    # 9. Ghi Audit Log
+    audit = AuditLog(
+        entity_type="ORDER",
+        entity_id=new_order.id,
+        entity_name=f"Đơn hàng Portal {new_order.code}",
+        action="PORTAL_REORDER_CREATED",
+        change_summary=f"Đại lý '{customer.name}' đặt lại từ đơn #{order.code or order.id} (Tổng tiền: {total_amount:,.0f} đ, {len(valid_items_to_create)} mặt hàng)",
+        user_id=user_id,
+        username=username or customer.code or customer.id,
+        user_fullname=customer.name,
+        ip_address=client_ip,
+        new_values={
+            "copied_from_order_id": order.id,
+            "copied_from_order_code": order.code,
+            "total_items": len(valid_items_to_create),
+            "total_amount": total_amount,
+            "removed_discontinued_count": len(removed_discontinued),
+            "price_changed_count": len(price_change_warnings),
+        },
+        created_at=now_utc,
+    )
+    db.add(audit)
+
+    # 10. Lưu kết quả Idempotency
+    resp_obj = PortalReorderResponse(
+        order_id=new_order.id,
+        order_code=new_order.code,
+        customer_id=customer.id,
+        status=new_order.status,
+        subtotal=total_subtotal,
+        total=total_amount,
+        items_count=len(valid_items_to_create),
+        copied_from_order_id=order.id,
+        removed_discontinued_items=removed_discontinued,
+        price_change_warnings=price_change_warnings,
+        created_at=now_utc.isoformat(),
+    )
+
+    idemp_rec = PortalIdempotencyRecord(
+        customer_id=customer.id,
+        idempotency_key=idempotency_key,
+        request_hash=req_hash,
+        order_id=new_order.id,
+        response_payload=json.dumps(resp_obj.model_dump()),
+        created_at=now_utc,
+    )
+    db.add(idemp_rec)
+
+    db.commit()
+    return resp_obj

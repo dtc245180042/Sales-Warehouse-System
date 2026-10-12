@@ -329,18 +329,28 @@ export const AgentList: React.FC = () => {
       showToast('Vui lòng nhập tên và số điện thoại đại lý', 'warning');
       return;
     }
+    const trimmedTaxCode = (formData.taxCode || '').trim();
+    if (trimmedTaxCode) {
+      const taxRegex = /^(\d{10}|\d{10}-\d{3}|\d{13})$/;
+      if (!taxRegex.test(trimmedTaxCode)) {
+        showToast('Mã số thuế không hợp lệ. Vui lòng nhập 10 số (ví dụ: 0301234567) hoặc 13 số.', 'warning');
+        return;
+      }
+    }
+
     try {
       if (editingAgent) {
         await agentService.update(editingAgent.id, formData);
-        showToast('Cập nhật thông tin đại lý thành công!', 'success');
+        showToast('Cập nhật thông tin đại lý thành công vào CSDL!', 'success');
       } else {
         await agentService.create(formData);
-        showToast('Thêm mới đại lý thành công!', 'success');
+        showToast('Thêm mới đại lý thành công vào CSDL!', 'success');
       }
       setIsModalOpen(false);
       loadAgents();
-    } catch {
-      showToast('Có lỗi xảy ra, vui lòng thử lại', 'error');
+    } catch (err: any) {
+      const errorMsg = err?.response?.data?.detail || err?.message || 'Có lỗi xảy ra khi lưu đại lý vào CSDL';
+      showToast(errorMsg, 'error');
     }
   };
 

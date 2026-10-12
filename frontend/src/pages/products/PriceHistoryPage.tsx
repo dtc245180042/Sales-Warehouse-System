@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   TrendingUp,
   TrendingDown,
@@ -51,6 +52,9 @@ const CUSTOMER_GROUP_LABELS: Record<string, string> = {
 };
 
 export const PriceHistoryPage: React.FC = () => {
+  const [searchParams] = useSearchParams();
+  const urlProductId = searchParams.get('productId') || '';
+
   const [items, setItems] = useState<ProductPriceHistoryItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [total, setTotal] = useState<number>(0);
@@ -59,12 +63,12 @@ export const PriceHistoryPage: React.FC = () => {
   const [totalPages, setTotalPages] = useState<number>(1);
 
   // Filters
-  const [search, setSearch] = useState<string>('');
+  const [search, setSearch] = useState<string>(urlProductId);
   const [selectedGroup, setSelectedGroup] = useState<string>('ALL');
   const [selectedPriceType, setSelectedPriceType] = useState<string>('ALL');
   const [fromDate, setFromDate] = useState<string>('');
   const [toDate, setToDate] = useState<string>('');
-  const [selectedProductId, setSelectedProductId] = useState<string>('');
+  const [selectedProductId, setSelectedProductId] = useState<string>(urlProductId);
 
   const loadData = useCallback(async () => {
     setLoading(true);

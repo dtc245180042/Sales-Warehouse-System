@@ -87,6 +87,11 @@ export const ProductDetail: React.FC = () => {
               Nhập hàng mã này
             </Button>
           </Link>
+          <Link to={`/products/price-history?productId=${product.sku || product.id}`}>
+            <Button variant="outline" size="sm" leftIcon={<History className="w-4 h-4 text-indigo-500" />}>
+              Lịch sử giá
+            </Button>
+          </Link>
           <Link to={`/products/${product.id}/edit`}>
             <Button variant="primary" size="sm" leftIcon={<Edit className="w-4 h-4" />}>
               Chỉnh sửa
@@ -171,7 +176,17 @@ export const ProductDetail: React.FC = () => {
           {/* Key Metrics */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-card">
-              <span className="text-xs font-bold text-slate-400 uppercase">Giá Bán Lẻ</span>
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-400 uppercase">Giá Bán Lẻ</span>
+                <Link
+                  to={`/products/price-history?productId=${product.sku || product.id}`}
+                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 hover:underline transition"
+                  title="Xem lịch sử điều chỉnh giá bán"
+                >
+                  <History className="w-3.5 h-3.5" />
+                  Lịch sử giá
+                </Link>
+              </div>
               <p className="text-2xl font-extrabold text-indigo-600 dark:text-indigo-400 mt-1">
                 {formatCurrency(product.salePrice)}
               </p>

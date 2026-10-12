@@ -196,32 +196,57 @@ export const customerService = {
   },
 
   create: async (data: Omit<Customer, 'id' | 'code' | 'createdAt' | 'totalOrders' | 'totalSpent'>): Promise<Customer> => {
+    const payload: any = {
+      name: data.name?.trim(),
+      phone: data.phone?.trim() || null,
+      email: data.email?.trim() || null,
+      address: data.address?.trim() || null,
+      customer_group: (data.customer_group || (data as any).customerGroup || 'RETAIL').toUpperCase(),
+      region: data.region?.trim() || 'Miền Bắc',
+      assigned_sales_rep: data.assigned_sales_rep || (data as any).assignedSalesRep || null,
+      status: data.status || 'active',
+    };
+
+    const rawTax = data.tax_code ?? (data as any).taxCode;
+    if (rawTax && String(rawTax).trim()) {
+      payload.tax_code = String(rawTax).trim();
+    } else {
+      payload.tax_code = null;
+    }
+
     try {
-      const res = await apiClient.post('/customers', data);
+      const res = await apiClient.post('/customers', payload);
       const created = mapApiCustomer(res.data);
       const cached = getStorageItem<Customer[]>(STORAGE_KEY, initialCustomers);
-      setStorageItem(STORAGE_KEY, [created, ...cached]);
+      setStorageItem(STORAGE_KEY, [created, ...cached.filter((c) => c.id !== created.id)]);
       return created;
-    } catch (err) {
-      console.warn('[customerService] Backend error, fallback to local create:', err);
-      const customers = getStorageItem<Customer[]>(STORAGE_KEY, initialCustomers);
-      const newCustomer: Customer = {
-        ...data,
-        id: `CUS-${String(customers.length + 1).padStart(3, '0')}`,
-        code: `KH-${1000 + customers.length + 1}`,
-        totalOrders: 0,
-        totalSpent: 0,
-        createdAt: new Date().toISOString().split('T')[0],
-        status: 'active',
-      };
-      setStorageItem(STORAGE_KEY, [newCustomer, ...customers]);
-      return newCustomer;
+    } catch (err: any) {
+      console.error('[customerService] Lỗi khi tạo đại lý/khách hàng lên CSDL:', err);
+      throw err;
     }
   },
 
   update: async (id: string, data: Partial<Customer>): Promise<Customer> => {
+    const payload: any = {};
+    if (data.name !== undefined) payload.name = data.name.trim();
+    if (data.phone !== undefined) payload.phone = data.phone.trim();
+    if (data.email !== undefined) payload.email = data.email?.trim() || null;
+    if (data.address !== undefined) payload.address = data.address?.trim() || null;
+    if (data.customer_group !== undefined || (data as any).customerGroup !== undefined) {
+      payload.customer_group = (data.customer_group || (data as any).customerGroup || 'RETAIL').toUpperCase();
+    }
+    const rawTax = data.tax_code ?? (data as any).taxCode;
+    if (rawTax !== undefined) {
+      payload.tax_code = rawTax && String(rawTax).trim() ? String(rawTax).trim() : null;
+    }
+    if (data.region !== undefined) payload.region = data.region;
+    if (data.assigned_sales_rep !== undefined || (data as any).assignedSalesRep !== undefined) {
+      payload.assigned_sales_rep = data.assigned_sales_rep ?? (data as any).assignedSalesRep ?? null;
+    }
+    if (data.status !== undefined) payload.status = data.status;
+
     try {
-      const res = await apiClient.put(`/customers/${encodeURIComponent(id)}`, data);
+      const res = await apiClient.put(`/customers/${encodeURIComponent(id)}`, payload);
       const updated = mapApiCustomer(res.data);
       const customers = getStorageItem<Customer[]>(STORAGE_KEY, initialCustomers);
       const idx = customers.findIndex((c) => c.id === id);
@@ -231,29 +256,21 @@ export const customerService = {
       }
       return updated;
     } catch (err) {
-      console.warn('[customerService] Backend error, fallback to local update:', err);
-      const customers = getStorageItem<Customer[]>(STORAGE_KEY, initialCustomers);
-      const idx = customers.findIndex((c) => c.id === id);
-      if (idx !== -1) {
-        const updated = { ...customers[idx], ...data };
-        customers[idx] = updated;
-        setStorageItem(STORAGE_KEY, [...customers]);
-        return updated;
-      }
-      throw new Error('Customer not found');
+      console.error('[customerService] Lỗi khi cập nhật đại lý lên CSDL:', err);
+      throw err;
     }
   },
 
   delete: async (id: string): Promise<boolean> => {
     try {
       await apiClient.delete(`/customers/${encodeURIComponent(id)}`);
-    } catch (e) {
-      console.warn(e);
+      const customers = getStorageItem<Customer[]>(STORAGE_KEY, initialCustomers);
+      setStorageItem(STORAGE_KEY, customers.filter((c) => c.id !== id));
+      return true;
+    } catch (err) {
+      console.error('[customerService] Lỗi khi xóa đại lý trong CSDL:', err);
+      throw err;
     }
-    const customers = getStorageItem<Customer[]>(STORAGE_KEY, initialCustomers);
-    const filtered = customers.filter((c) => c.id !== id);
-    setStorageItem(STORAGE_KEY, filtered);
-    return true;
   },
 
   getSalesReps: async (): Promise<SalesRep[]> => {

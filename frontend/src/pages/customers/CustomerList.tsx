@@ -350,6 +350,15 @@ export const CustomerList: React.FC = () => {
       return;
     }
 
+    const trimmedTaxCode = formData.tax_code.trim();
+    if (trimmedTaxCode) {
+      const taxRegex = /^(\d{10}|\d{10}-\d{3}|\d{13})$/;
+      if (!taxRegex.test(trimmedTaxCode)) {
+        showToast('Mã số thuế không hợp lệ. Vui lòng nhập 10 số (ví dụ: 0301234567) hoặc 13 số (ví dụ: 0301234567-001).', 'warning');
+        return;
+      }
+    }
+
     try {
       if (editingCustomer) {
         await customerService.update(editingCustomer.id, {
@@ -359,13 +368,13 @@ export const CustomerList: React.FC = () => {
           address: formData.address.trim() || undefined,
           customer_group: formData.customer_group,
           customerGroup: formData.customer_group,
-          tax_code: formData.tax_code.trim() || undefined,
+          tax_code: trimmedTaxCode || undefined,
           region: formData.region,
           assigned_sales_rep: formData.assigned_sales_rep,
           assignedSalesRep: formData.assigned_sales_rep,
           status: formData.status,
         });
-        showToast('Cập nhật đại lý thành công!', 'success');
+        showToast('Cập nhật thông tin đại lý thành công vào CSDL!', 'success');
       } else {
         await customerService.create({
           name: formData.name.trim(),
@@ -374,18 +383,19 @@ export const CustomerList: React.FC = () => {
           address: formData.address.trim() || undefined,
           customer_group: formData.customer_group,
           customerGroup: formData.customer_group,
-          tax_code: formData.tax_code.trim() || undefined,
+          tax_code: trimmedTaxCode || undefined,
           region: formData.region,
           assigned_sales_rep: formData.assigned_sales_rep,
           assignedSalesRep: formData.assigned_sales_rep,
           status: formData.status,
         });
-        showToast('Thêm đại lý mới thành công!', 'success');
+        showToast('Thêm mới đại lý thành công vào CSDL!', 'success');
       }
       setIsModalOpen(false);
       loadCustomers();
-    } catch {
-      showToast('Có lỗi xảy ra khi lưu thông tin đại lý', 'error');
+    } catch (err: any) {
+      const errorMsg = err?.response?.data?.detail || err?.message || 'Có lỗi xảy ra khi lưu thông tin đại lý vào CSDL';
+      showToast(errorMsg, 'error');
     }
   };
 

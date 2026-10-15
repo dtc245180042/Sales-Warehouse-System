@@ -60,7 +60,7 @@ if endpoints_dir.is_dir():
             try:
                 mod = importlib.import_module(f"app.api.endpoints.{name}")
                 if hasattr(mod, "router") and isinstance(getattr(mod, "router"), APIRouter):
-                    deps = [] if name in ["portal", "auth", "invoices", "payments", "returns"] else [Depends(chan_tai_khoan_customer_noi_bo)]
+                    deps = [] if name in ["portal", "auth", "invoices", "payments", "returns", "credit_notes"] else [Depends(chan_tai_khoan_customer_noi_bo)]
                     api_v1_router.include_router(getattr(mod, "router"), dependencies=deps)
                     api_router.include_router(getattr(mod, "router"), dependencies=deps)
             except Exception as e:

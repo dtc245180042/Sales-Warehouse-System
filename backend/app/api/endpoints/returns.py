@@ -14,14 +14,14 @@ from app.schemas.return_order import (
 )
 from app.services.return_service import ReturnService
 
-router = APIRouter(prefix="/returns", tags=["Phiếu trả hàng & Nhập kho (Sales Returns - Story S8-01)"])
+router = APIRouter(prefix="/returns", tags=["Phiếu trả hàng & Nhập kho"])
 
 
 @router.post(
     "",
     response_model=ReturnOrderResponse,
     status_code=status.HTTP_201_CREATED,
-    summary="Lập phiếu yêu cầu trả hàng từ đại lý (Story S8-01)",
+    summary="Lập phiếu yêu cầu trả hàng từ đại lý",
 )
 def lap_yeu_cau_tra_hang(
     data: ReturnOrderCreateRequest,
@@ -49,7 +49,7 @@ def lap_yeu_cau_tra_hang(
     "/{id}/confirm",
     response_model=ReturnOrderResponse,
     status_code=status.HTTP_200_OK,
-    summary="Quản lý kho xác nhận nhận hàng và cập nhật tồn kho (Story S8-01)",
+    summary="Quản lý kho xác nhận nhận hàng và cập nhật tồn kho",
 )
 def xac_nhan_nhan_hang_tra(
     id: str,
@@ -78,7 +78,7 @@ def xac_nhan_nhan_hang_tra(
     "/{id}/cancel",
     response_model=ReturnOrderResponse,
     status_code=status.HTTP_200_OK,
-    summary="Hủy phiếu yêu cầu trả hàng (Story S8-01)",
+    summary="Hủy phiếu yêu cầu trả hàng",
 )
 def huy_yeu_cau_tra_hang(
     id: str,

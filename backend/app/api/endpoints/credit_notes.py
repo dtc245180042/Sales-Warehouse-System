@@ -12,14 +12,14 @@ from app.schemas.credit_note import (
 )
 from app.services.credit_note_service import CreditNoteService
 
-router = APIRouter(prefix="/credit-notes", tags=["Chứng từ giảm nợ khi trả hàng (Credit Note - Story S8-02)"])
+router = APIRouter(prefix="/credit-notes", tags=["Chứng từ giảm nợ khi trả hàng"])
 
 
 @router.post(
     "",
     response_model=CreditNoteResponse,
     status_code=status.HTTP_201_CREATED,
-    summary="Lập chứng từ điều chỉnh giảm trừ công nợ khi trả hàng (Story S8-02)",
+    summary="Lập chứng từ điều chỉnh giảm trừ công nợ khi trả hàng",
 )
 def lap_chung_tu_giam_no(
     data: CreditNoteCreateRequest,

@@ -87,25 +87,25 @@ export const ReturnListPage: React.FC = () => {
   >([
     {
       invoice_item_id: 101,
-      product_name: 'Thuốc Kháng Sinh Amox 500',
-      sku: 'SKU-01',
+      product_name: 'iPhone 15 Pro Max 256GB Titan Tự Nhiên',
+      sku: 'IP15PM-256-TI',
       lot_id: 10,
-      lot_number: 'LOT-2026-A1',
-      quantity: 2,
+      lot_number: 'LOT-2026-IP15P-01',
+      quantity: 1,
       condition: 'GOOD',
-      unit_price: 100000,
-      subtotal: 198000,
+      unit_price: 26990000,
+      subtotal: 26990000,
     },
     {
-      invoice_item_id: 101,
-      product_name: 'Thuốc Kháng Sinh Amox 500',
-      sku: 'SKU-01',
-      lot_id: 11,
-      lot_number: 'LOT-2026-A2',
+      invoice_item_id: 102,
+      product_name: 'Tai nghe Chống Ồn Sony WH-1000XM5 Đen',
+      sku: 'SNY-WH1000XM5',
+      lot_id: null,
+      lot_number: 'N/A',
       quantity: 1,
       condition: 'DAMAGED',
-      unit_price: 100000,
-      subtotal: 99000,
+      unit_price: 7990000,
+      subtotal: 7990000,
     },
   ]);
 
@@ -255,7 +255,7 @@ export const ReturnListPage: React.FC = () => {
 
   return (
     <PageContainer
-      title="Phiếu Trả Hàng & Nhập Kho (Story S8-01)"
+      title="Phiếu Trả Hàng & Nhập Kho"
       subtitle="Tiếp nhận hàng trả, kiểm đếm phân loại hàng tốt về kho gốc và hàng hỏng vào kho lỗi (WH-99)"
       actions={
         <Button
@@ -462,7 +462,7 @@ export const ReturnListPage: React.FC = () => {
                         {/* Nút sinh chứng từ giảm nợ nếu đã nhận kho */}
                         {item.status === 'CONFIRMED' && (
                           <button
-                            title="Lập chứng từ giảm nợ (S8-02)"
+                            title="Lập chứng từ giảm nợ"
                             onClick={() => {
                               setSelectedReturn(item);
                               setIsCreditNoteModalOpen(true);
@@ -629,7 +629,7 @@ export const ReturnListPage: React.FC = () => {
           <div className="bg-emerald-50/80 dark:bg-emerald-950/40 p-3 rounded-xl border border-emerald-200 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200">
             <p className="font-semibold mb-1 flex items-center gap-1.5">
               <ShieldCheck className="w-4 h-4 text-emerald-600" />
-              Quy tắc nhập kho tự động (Story S8-01):
+              Quy tắc nhập kho tự động:
             </p>
             <ul className="list-disc pl-4 space-y-1 text-emerald-800 dark:text-emerald-300">
               <li>Hàng tốt (GOOD) sẽ tự động cộng tồn vào đúng kho gốc #{selectedReturn?.origin_warehouse_id}.</li>
@@ -646,7 +646,7 @@ export const ReturnListPage: React.FC = () => {
               rows={3}
               value={confirmNotes}
               onChange={(e) => setConfirmNotes(e.target.value)}
-              placeholder="VD: Đã kiểm đếm thực tế đủ 3 hộp thuốc, nguyên tem niêm phong..."
+              placeholder="VD: Đã kiểm đếm thực tế đủ thiết bị, nguyên tem bảo hành..."
               className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
           </div>
@@ -835,12 +835,12 @@ export const ReturnListPage: React.FC = () => {
       </Modal>
 
       {/* ========================================================================= */}
-      {/* 8. MODAL LẬP CHỨNG TỪ GIẢM NỢ NHANH (S8-02)                               */}
+      {/* 8. MODAL LẬP CHỨNG TỪ GIẢM NỢ NHANH                                       */}
       {/* ========================================================================= */}
       <Modal
         isOpen={isCreditNoteModalOpen}
         onClose={() => setIsCreditNoteModalOpen(false)}
-        title="Lập chứng từ điều chỉnh giảm nợ (Story S8-02)"
+        title="Lập chứng từ điều chỉnh giảm nợ"
         subtitle={`Căn cứ phiếu trả: ${selectedReturn?.id} - Hóa đơn gốc: ${selectedReturn?.invoice_id}`}
         maxWidth="md"
         footer={

@@ -108,14 +108,14 @@ def setup_credit_note_test_database():
     c1 = Customer(
         id="CUST-001",
         code="DL-001",
-        name="Đại lý Dược Phẩm Hà Nội",
+        name="Đại lý Dương Quang Trung",
         address="100 Phố Huế, HN",
         tax_code="0101010101",
     )
     c2 = Customer(
         id="CUST-002",
         code="DL-002",
-        name="Đại lý Dược Phẩm Sài Gòn",
+        name="Đại lý Trần Trung Hiếu",
         address="200 Nguyễn Huệ, TP.HCM",
         tax_code="0202020202",
     )
@@ -125,8 +125,8 @@ def setup_credit_note_test_database():
     p1 = Product(
         id="PROD-01",
         sku="SKU-01",
-        name="Thuốc Kháng Sinh Amox 500",
-        unit="hộp",
+        name="iPhone 15 Pro Max 256GB Titan Tự Nhiên",
+        unit="Chiếc",
         price=100000,
         stock=100,
         manage_by_lot=True,
@@ -151,7 +151,7 @@ def setup_credit_note_test_database():
         dispatch_id=dispatch.id,
         product_id="PROD-01",
         sku="SKU-01",
-        product_name="Thuốc Kháng Sinh Amox 500",
+        product_name="iPhone 15 Pro Max 256GB Titan Tự Nhiên",
         ordered_quantity=10,
         dispatched_quantity=10,
         shortfall_quantity=0,
@@ -163,7 +163,7 @@ def setup_credit_note_test_database():
     inv1 = Invoice(
         id="HD-2026-0000001",
         customer_id="CUST-001",
-        customer_name="Đại lý Dược Phẩm Hà Nội",
+        customer_name="Đại lý Dương Quang Trung",
         subtotal_amount=1000000,
         discount_amount=100000,
         vat_amount=90000,
@@ -182,8 +182,8 @@ def setup_credit_note_test_database():
         order_id="ORD-001",
         product_id="PROD-01",
         sku="SKU-01",
-        product_name="Thuốc Kháng Sinh Amox 500",
-        unit="hộp",
+        product_name="iPhone 15 Pro Max 256GB Titan Tự Nhiên",
+        unit="Chiếc",
         quantity=10,
         unit_price=100000,
         discount_amount=100000,
@@ -196,7 +196,7 @@ def setup_credit_note_test_database():
     inv2 = Invoice(
         id="HD-2026-0000002",
         customer_id="CUST-002",
-        customer_name="Đại lý Dược Phẩm Sài Gòn",
+        customer_name="Đại lý Trần Trung Hiếu",
         subtotal_amount=500000,
         discount_amount=0,
         vat_amount=50000,
@@ -209,12 +209,12 @@ def setup_credit_note_test_database():
     )
     db.add(inv2)
 
-    # Phiếu trả hàng 1 (CONFIRMED) cho HD-2026-0000001: Trả 3 hộp, subtotal = 297,000
+    # Phiếu trả hàng 1 (CONFIRMED) cho HD-2026-0000001: Trả 3 chiếc, subtotal = 297,000
     ret1 = ReturnOrder(
         id="TH-2026-0000001",
         invoice_id="HD-2026-0000001",
         customer_id="CUST-001",
-        customer_name="Đại lý Dược Phẩm Hà Nội",
+        customer_name="Đại lý Dương Quang Trung",
         status=ReturnStatus.CONFIRMED.value,
         return_reason=ReturnReason.DEFECTIVE_PRODUCT.value,
         origin_warehouse_id=1,
@@ -229,8 +229,8 @@ def setup_credit_note_test_database():
         invoice_item_id=101,
         product_id="PROD-01",
         sku="SKU-01",
-        product_name="Thuốc Kháng Sinh Amox 500",
-        unit="hộp",
+        product_name="iPhone 15 Pro Max 256GB Titan Tự Nhiên",
+        unit="Chiếc",
         quantity=3,
         condition=ItemCondition.GOOD.value,
         unit_price=100000,
@@ -245,7 +245,7 @@ def setup_credit_note_test_database():
         id="TH-2026-0000002",
         invoice_id="HD-2026-0000001",
         customer_id="CUST-001",
-        customer_name="Đại lý Dược Phẩm Hà Nội",
+        customer_name="Đại lý Dương Quang Trung",
         status=ReturnStatus.REQUESTED.value,
         return_reason=ReturnReason.DAMAGED_IN_TRANSIT.value,
         origin_warehouse_id=1,

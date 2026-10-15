@@ -130,7 +130,7 @@ export const CreditNoteListPage: React.FC = () => {
 
   return (
     <PageContainer
-      title="Chứng Từ Giảm Nợ Khi Trả Hàng (Story S8-02)"
+      title="Chứng Từ Giảm Nợ Khi Trả Hàng"
       subtitle="Quản lý và phát hành chứng từ Credit Note điều chỉnh giảm trừ công nợ theo giá bán gốc của hóa đơn"
       actions={
         isAccountantOrAdmin && (

@@ -68,9 +68,11 @@ export const Orders: React.FC = () => {
   const urlStartDate = searchParams.get('from') || '';
   const urlEndDate = searchParams.get('to') || '';
 
-  // Local filter states
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [agents, setAgents] = useState<Agent[]>([]);
+  // Local filter states - Nạp tức thì từ cache RAM (0ms) khi chuyển trang
+  const [orders, setOrders] = useState<Order[]>(() => orderService.getCached());
+  const [agents, setAgents] = useState<Agent[]>(() => agentService.getCached());
+  const [isInitialLoading, setIsInitialLoading] = useState<boolean>(() => orderService.getCached().length === 0);
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [search, setSearch] = useState(urlSearch);
   const [statusFilter, setStatusFilter] = useState<string>(urlStatus);
   const [agentFilter, setAgentFilter] = useState<string>(urlAgent);
@@ -172,29 +174,54 @@ export const Orders: React.FC = () => {
     setEndDate(urlEndDate);
   }, [urlSearch, urlStatus, urlAgent, urlStaff, urlRegion, urlStartDate, urlEndDate]);
 
-  // Load orders & agents
-  const loadOrders = async () => {
-    const [ordersData, agentsData] = await Promise.all([
-      orderService.getAll(),
-      agentService.getAll().catch(() => [] as Agent[]),
-    ]);
-    setOrders(ordersData);
-    setAgents(agentsData);
+  // Load orders & agents ngầm mà không làm trắng/chớp màn hình
+  const loadOrders = async (silent: boolean = true, forceRefresh: boolean = false) => {
+    if (!silent) setIsInitialLoading(true);
+    setIsSyncing(true);
+    try {
+      const [ordersData, agentsData] = await Promise.all([
+        orderService.getAll(forceRefresh),
+        agentService.getAll().catch(() => [] as Agent[]),
+      ]);
+      setOrders(ordersData);
+      setAgents(agentsData);
+      if (forceRefresh) {
+        showToast(`Đã làm mới danh sách đơn hàng (${ordersData.length} đơn)`, 'success');
+      }
+    } catch (err) {
+      console.warn('[Orders] Lỗi tải dữ liệu:', err);
+      if (forceRefresh) {
+        showToast('Không thể kết nối đến máy chủ để làm mới đơn hàng', 'error');
+      }
+    } finally {
+      setIsInitialLoading(false);
+      setIsSyncing(false);
+    }
   };
 
   useEffect(() => {
-    loadOrders();
+    // Nếu đã có cache thì render 0ms ngay và gọi ngầm, nếu chưa có thì hiện loading
+    const hasCachedData = orders.length > 0;
+    loadOrders(hasCachedData);
   }, []);
 
   // Trích xuất danh sách nhân viên từ danh sách đơn hàng
   const staffOptions = useMemo(() => {
     const map = new Map<string, string>();
+    let hasCustomerOrder = false;
     orders.forEach((o) => {
-      if (o.staffName) {
+      const isCustomerPlaced = !o.staffId && (o.staffName === o.customerName || !o.staffName);
+      if (isCustomerPlaced) {
+        hasCustomerOrder = true;
+      } else if (o.staffName && o.staffName.trim()) {
         map.set(o.staffId || o.staffName, o.staffName);
       }
     });
-    return Array.from(map.entries()).map(([value, label]) => ({ value, label }));
+    const list = Array.from(map.entries()).map(([value, label]) => ({ value, label }));
+    if (hasCustomerOrder) {
+      list.push({ value: '__customer__', label: 'Khách hàng tự đặt (Portal/Online)' });
+    }
+    return list;
   }, [orders]);
 
   // Helper detect region from address or order
@@ -328,13 +355,13 @@ export const Orders: React.FC = () => {
   // Filtered orders list
   const filteredOrders = useMemo(() => {
     return orders.filter((o) => {
-      // 1. Keyword search (Code, Customer name, Phone, Staff name)
+      // 1. Keyword search (Code, Customer name, Phone, Staff/Creator name)
       if (search.trim()) {
         const q = search.toLowerCase();
-        const matchCode = o.code.toLowerCase().includes(q);
-        const matchCustomer = o.customerName.toLowerCase().includes(q);
-        const matchPhone = o.customerPhone.includes(q);
-        const matchStaff = o.staffName.toLowerCase().includes(q);
+        const matchCode = (o.code || '').toLowerCase().includes(q);
+        const matchCustomer = (o.customerName || '').toLowerCase().includes(q);
+        const matchPhone = (o.customerPhone || '').includes(q);
+        const matchStaff = (o.staffName || o.customerName || '').toLowerCase().includes(q);
         if (!matchCode && !matchCustomer && !matchPhone && !matchStaff) {
           return false;
         }
@@ -356,8 +383,13 @@ export const Orders: React.FC = () => {
 
       // 4. Staff filter
       if (staffFilter !== 'all') {
-        const matchStaff = o.staffId === staffFilter || o.staffName === staffFilter;
-        if (!matchStaff) return false;
+        if (staffFilter === '__customer__') {
+          const isCustomerPlaced = !o.staffId && (o.staffName === o.customerName || !o.staffName);
+          if (!isCustomerPlaced) return false;
+        } else {
+          const matchStaff = o.staffId === staffFilter || o.staffName === staffFilter;
+          if (!matchStaff) return false;
+        }
       }
 
       // 5. Region filter
@@ -448,12 +480,22 @@ export const Orders: React.FC = () => {
 
   const handleCancelOrder = async () => {
     if (!cancelOrderId) return;
+    const targetId = cancelOrderId;
+    setCancelOrderId(null);
     try {
-      await orderService.cancelOrder(cancelOrderId);
+      // Optimistic update: Đổi trạng thái hủy tức thì trên giao diện (0ms)
+      setOrders((prev) =>
+        prev.map((o) =>
+          o.id === targetId || o.code === targetId
+            ? { ...o, status: 'cancelled' }
+            : o
+        )
+      );
+      await orderService.cancelOrder(targetId);
       showToast('Đã hủy đơn hàng và hoàn lại số lượng tồn kho thành công', 'success');
-      setCancelOrderId(null);
-      loadOrders();
     } catch (err: any) {
+      // Rollback lại từ server nếu phát sinh lỗi
+      loadOrders(false);
       showToast(err?.message || 'Lỗi khi hủy đơn hàng', 'error');
     }
   };
@@ -597,23 +639,40 @@ export const Orders: React.FC = () => {
       header: 'Người Tạo Đơn',
       sortable: true,
       render: (o) => {
-        const isCurrentUser = user && (user.name === o.staffName || String(user.id) === String(o.staffId));
+        const isCustomerPlaced = !o.staffId && (o.staffName === o.customerName || !o.staffName);
+        const creatorName = (o.staffName && o.staffName.trim())
+          || (o.customerName && o.customerName.trim())
+          || 'Khách vãng lai';
+        const isCurrentUser = user && (user.name === creatorName || String(user.id) === String(o.staffId));
+        const avatarBg = isCustomerPlaced ? '0284c7' : '6366f1';
         const avatarSrc = isCurrentUser && user?.avatar
           ? user.avatar
-          : (o as any).staffAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(o.staffName)}&background=6366f1&color=fff&size=128`;
+          : (o as any).staffAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(creatorName)}&background=${avatarBg}&color=fff&size=128`;
+
         return (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
             <img
               src={avatarSrc}
-              alt={o.staffName}
-              className="w-7 h-7 rounded-full object-cover ring-2 ring-indigo-500/20 shadow-sm shrink-0"
+              alt={creatorName}
+              className={`w-7 h-7 rounded-full object-cover ring-2 ${isCustomerPlaced ? 'ring-sky-500/30' : 'ring-indigo-500/20'} shadow-sm shrink-0`}
               onError={(e) => {
-                (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${encodeURIComponent(o.staffName)}&background=6366f1&color=fff&size=128`;
+                (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${encodeURIComponent(creatorName)}&background=${avatarBg}&color=fff&size=128`;
               }}
             />
-            <span className="text-xs font-semibold text-slate-700 dark:text-slate-300 whitespace-nowrap">
-              {o.staffName}
-            </span>
+            <div className="flex flex-col min-w-0">
+              <span className="text-xs font-semibold text-slate-700 dark:text-slate-300 whitespace-nowrap truncate max-w-[130px]" title={creatorName}>
+                {creatorName}
+              </span>
+              {isCustomerPlaced ? (
+                <span className="text-[10px] text-sky-600 dark:text-sky-400 font-medium leading-none">
+                  (Khách tự đặt)
+                </span>
+              ) : (
+                <span className="text-[10px] text-slate-400 dark:text-slate-500 leading-none">
+                  Nhân viên
+                </span>
+              )}
+            </div>
           </div>
         );
       },
@@ -658,6 +717,17 @@ export const Orders: React.FC = () => {
       subtitle={`Theo dõi và xử lý ${orders.length} đơn hàng trên toàn hệ thống`}
       actions={
         <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => loadOrders(false, true)}
+            disabled={isSyncing}
+            leftIcon={<RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin text-indigo-600' : ''}`} />}
+            title="Tải lại danh sách đơn hàng mới nhất từ hệ thống"
+          >
+            {isSyncing ? 'Đang tải...' : 'Tải lại đơn hàng'}
+          </Button>
+
           <Button
             variant="outline"
             size="sm"
@@ -1047,11 +1117,13 @@ export const Orders: React.FC = () => {
         </div>
       </div>
 
-      {/* ── BẢNG DANH SÁCH & PHÂN TRANG KẾT QUẢ ── */}
+      {/* ── BẢNG DANH SÁCH & PHÂN TRANG KẾT QUẢ (20 dòng/trang) ── */}
       <DataTable
         data={filteredOrders}
         columns={columns}
+        defaultPageSize={20}
         keyExtractor={(o) => o.id}
+        loading={isInitialLoading}
         emptyTitle="Không tìm thấy đơn hàng"
         emptyDescription="Thử nới lỏng hoặc xóa các tiêu chí bộ lọc để hiển thị nhiều kết quả hơn."
       />

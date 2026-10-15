@@ -118,6 +118,8 @@ def health_check():
 
 # Bí danh tương thích ngược (aliases)
 read_root = health_check
+
+
 kiem_tra_suc_khoe_he_thong = health_check
 quan_ly_vong_doi_ung_dung = lifespan
 seed_initial_users = khoi_tao_tai_khoan_ban_dau

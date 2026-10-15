@@ -30,6 +30,12 @@ import {
   ArrowUpRight,
   History,
   Clock,
+  RotateCcw,
+  FileCheck2,
+  FileText,
+  CreditCard,
+  Truck,
+  CalendarClock,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { UserRole } from '../../types/User';
@@ -111,7 +117,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     'User',
   ];
 
-  const menuSections: { heading?: string; items: MenuItem[] }[] = [
+  const menuSections = useMemo<{ heading?: string; items: MenuItem[] }[]>(() => [
     {
       heading: 'BẢNG ĐIỀU KHIỂN',
       items: [
@@ -133,7 +139,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           allowedRoles: ALL_ROLES,
         },
         {
-          title: 'Tạo đơn hiện trường',
+          title: 'Tạo đơn hàng',
           path: '/orders/create',
           icon: <ShoppingCart className="w-5 h-5" />,
           allowedRoles: ALL_ROLES,
@@ -143,6 +149,30 @@ export const Sidebar: React.FC<SidebarProps> = ({
           path: '/sales/pos',
           icon: <Store className="w-5 h-5" />,
           allowedRoles: ALL_ROLES.filter((r) => r !== 'User'),
+        },
+        {
+          title: 'Hóa đơn bán hàng',
+          path: '/invoices',
+          icon: <FileText className="w-5 h-5" />,
+          allowedRoles: ALL_ROLES,
+        },
+        {
+          title: 'Phiếu thu công nợ',
+          path: '/payments',
+          icon: <CreditCard className="w-5 h-5" />,
+          allowedRoles: ALL_ROLES,
+        },
+        {
+          title: 'Phiếu trả hàng',
+          path: '/returns',
+          icon: <RotateCcw className="w-5 h-5" />,
+          allowedRoles: ALL_ROLES,
+        },
+        {
+          title: 'Chứng từ giảm nợ',
+          path: '/credit-notes',
+          icon: <FileCheck2 className="w-5 h-5" />,
+          allowedRoles: ALL_ROLES,
         },
       ],
     },
@@ -253,6 +283,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
               title: 'Sổ tồn kho 3 cột',
               path: '/inventory',
               icon: <Layers className="w-3.5 h-3.5" />,
+              allowedRoles: ALL_ROLES,
+            },
+            {
+              title: 'Quản lý lô & Hạn dùng (FEFO)',
+              path: '/inventory/lots',
+              icon: <CalendarClock className="w-3.5 h-3.5" />,
+              allowedRoles: ALL_ROLES,
+            },
+            {
+              title: 'Phiếu xuất kho điều phối',
+              path: '/inventory/dispatches',
+              icon: <Truck className="w-3.5 h-3.5" />,
+              allowedRoles: ALL_ROLES,
+            },
+            {
+              title: 'Nợ hàng & Giao bù (Backorder)',
+              path: '/inventory/backorders',
+              icon: <RotateCcw className="w-3.5 h-3.5" />,
               allowedRoles: ALL_ROLES,
             },
             {
@@ -367,7 +415,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         },
       ],
     },
-  ];
+  ], []);
 
   const allTopLevelPaths = useMemo(() => {
     return menuSections
@@ -477,7 +525,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all outline-none focus:outline-none ${isItemActive
                       ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/25'
                       : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60'
-                    }`}
+                      }`}
                     title={isCollapsed ? item.title : undefined}
                     aria-current={isItemActive ? 'page' : undefined}
                   >

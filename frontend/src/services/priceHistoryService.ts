@@ -29,7 +29,13 @@ function mapApiHistoryItem(data: any): ProductPriceHistoryItem {
   };
 }
 
+let memoryCachePriceHistory: ProductPriceHistoryListResponse | null = null;
+
 export const priceHistoryService = {
+  getCached: (): ProductPriceHistoryListResponse | null => {
+    return memoryCachePriceHistory;
+  },
+
   getAllPriceHistories: async (
     params: ProductPriceHistoryFilterParams = {}
   ): Promise<ProductPriceHistoryListResponse> => {
@@ -50,14 +56,15 @@ export const priceHistoryService = {
       if (params.toDate) queryParams.to_date = params.toDate;
 
       const res = await apiClient.get('/price-histories', { params: queryParams });
-      const raw = res.data;
-      return {
+      const result: ProductPriceHistoryListResponse = {
         items: Array.isArray(raw.items) ? raw.items.map(mapApiHistoryItem) : [],
         total: raw.total || 0,
         page: raw.page || 1,
         limit: raw.limit || 20,
         totalPages: raw.total_pages || raw.totalPages || 1,
       };
+      memoryCachePriceHistory = result;
+      return result;
     } catch (error) {
       console.warn('[priceHistoryService] Error fetching all price histories:', error);
       return { items: [], total: 0, page: 1, limit: 20, totalPages: 1 };

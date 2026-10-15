@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 from typing import List
-from backend.app.api.stock_threshold_api import db_thresholds
-from backend.app.api.stock_warning_service import check_low_stock
+from app.api.stock_threshold_api import db_thresholds
+from app.api.stock_warning_service import check_low_stock
 
 router = APIRouter(prefix="/stock-dashboard", tags=["Stock Dashboard"])
 

@@ -164,33 +164,32 @@ def get_all_orders(
     if customer_id:
         query = query.filter(Order.customer_id == customer_id)
     orders = query.order_by(Order.created_at.desc()).all()
-    for o in orders:
-        _attach_delivery_profile(o, db)
+    if orders:
+        from app.models.order_delivery_profile import OrderDeliveryProfile
+        order_ids = [o.id for o in orders]
+        profiles = db.query(OrderDeliveryProfile).filter(OrderDeliveryProfile.order_id.in_(order_ids)).all()
+        profile_map = {p.order_id: p for p in profiles}
+        for o in orders:
+            prof = profile_map.get(o.id)
+            if prof:
+                o.delivery_address_id = prof.delivery_address_id
+                o.delivery_address_name = getattr(prof, "delivery_address_name", None)
+                o.delivery_receiver_name = prof.delivery_receiver_name
+                o.delivery_phone = prof.delivery_phone
+                o.delivery_address = prof.delivery_address
+                o.delivery_notes = prof.delivery_notes
+                o.expected_delivery_date = getattr(prof, "expected_delivery_date", None)
+            else:
+                o.delivery_address_id = None
+                o.delivery_address_name = None
+                o.delivery_receiver_name = None
+                o.delivery_phone = None
+                o.delivery_address = None
+                o.delivery_notes = None
+                o.expected_delivery_date = None
+            if not getattr(o, "staff_name", None) or not str(o.staff_name).strip():
+                o.staff_name = o.customer_name or "Khách hàng"
     return orders
-
-
-def _attach_delivery_profile(order: Optional[Order], db: Session) -> Optional[Order]:
-    if not order:
-        return None
-    from app.models.order_delivery_profile import OrderDeliveryProfile
-    prof = db.query(OrderDeliveryProfile).filter(OrderDeliveryProfile.order_id == order.id).first()
-    if prof:
-        order.delivery_address_id = prof.delivery_address_id
-        order.delivery_address_name = getattr(prof, "delivery_address_name", None)
-        order.delivery_receiver_name = prof.delivery_receiver_name
-        order.delivery_phone = prof.delivery_phone
-        order.delivery_address = prof.delivery_address
-        order.delivery_notes = prof.delivery_notes
-        order.expected_delivery_date = getattr(prof, "expected_delivery_date", None)
-    else:
-        order.delivery_address_id = None
-        order.delivery_address_name = None
-        order.delivery_receiver_name = None
-        order.delivery_phone = None
-        order.delivery_address = None
-        order.delivery_notes = None
-        order.expected_delivery_date = None
-    return order
 
 
 def _enrich_order_lock_warning(db: Session, order: Order) -> Order:
@@ -210,6 +209,30 @@ def _enrich_order_lock_warning(db: Session, order: Order) -> Order:
     else:
         order.customer_is_locked = False
         order.customer_lock_warning = None
+    return order
+
+
+def _attach_delivery_profile(order: Order, db: Session) -> Order:
+    if not order:
+        return order
+    from app.models.order_delivery_profile import OrderDeliveryProfile
+    prof = db.query(OrderDeliveryProfile).filter(OrderDeliveryProfile.order_id == order.id).first()
+    if prof:
+        order.delivery_address_id = prof.delivery_address_id
+        order.delivery_address_name = getattr(prof, "delivery_address_name", None)
+        order.delivery_receiver_name = prof.delivery_receiver_name
+        order.delivery_phone = prof.delivery_phone
+        order.delivery_address = prof.delivery_address
+        order.delivery_notes = prof.delivery_notes
+        order.expected_delivery_date = getattr(prof, "expected_delivery_date", None)
+    else:
+        order.delivery_address_id = None
+        order.delivery_address_name = None
+        order.delivery_receiver_name = None
+        order.delivery_phone = None
+        order.delivery_address = None
+        order.delivery_notes = None
+        order.expected_delivery_date = None
     return order
 
 
@@ -240,6 +263,8 @@ def get_order_by_id(db: Session, order_id: str, current_user: Optional[User] = N
                 )
 
     order = _attach_delivery_profile(order, db)
+    if not getattr(order, "staff_name", None) or not str(order.staff_name).strip():
+        order.staff_name = order.customer_name or "Khách hàng"
     return _enrich_order_lock_warning(db, order)
 
 
@@ -422,12 +447,15 @@ def create_order(db: Session, order_in: OrderCreate, current_user: Optional[User
 
     from app.models.stock_reservation import StockReservation
     from app.models.order_delivery_profile import OrderDeliveryProfile
+    from app.models.customer import Customer
+    from app.models.order_approval import OrderApprovalHistory
     count = db.query(Order).count() + 1
     order_id = f"ORD-{str(count).zfill(3)}"
     while (
         db.query(Order).filter(Order.id == order_id).first() or
         db.query(StockReservation).filter(StockReservation.order_id == order_id).first() or
-        db.query(OrderDeliveryProfile).filter(OrderDeliveryProfile.order_id == order_id).first()
+        db.query(OrderDeliveryProfile).filter(OrderDeliveryProfile.order_id == order_id).first() or
+        db.query(OrderApprovalHistory).filter(OrderApprovalHistory.order_id == order_id).first()
     ):
         count += 1
         order_id = f"ORD-{str(count).zfill(3)}"
@@ -465,6 +493,15 @@ def create_order(db: Session, order_in: OrderCreate, current_user: Optional[User
     if current_user and not order_data.get("staff_id"):
         order_data["staff_id"] = str(current_user.id)
         order_data["staff_name"] = current_user.full_name or current_user.username
+    elif not order_data.get("staff_name"):
+        if current_user:
+            order_data["staff_name"] = current_user.full_name or current_user.username
+        else:
+            cus = db.query(Customer).filter(Customer.id == order_in.customer_id).first() if order_in.customer_id else None
+            if cus and cus.assigned_sales_rep:
+                order_data["staff_name"] = cus.assigned_sales_rep
+            elif order_data.get("customer_name"):
+                order_data["staff_name"] = order_data["customer_name"]
 
     if not order_data.get("total") or order_data.get("total") == 0.0:
         computed_total = sum(item.subtotal for item in order_in.items)
@@ -885,6 +922,43 @@ def get_draft_orders(
     for o in orders:
         _attach_delivery_profile(o, db)
     return orders
+
+
+def delete_draft_order(
+    db: Session,
+    order_id: str,
+    current_user: Optional[User] = None
+) -> dict:
+    """Xóa một đơn hàng nháp đang soạn dở (Chỉ cho phép xóa đơn status == 'draft')."""
+    order = db.query(Order).filter(
+        (Order.id == order_id) | (Order.code == order_id)
+    ).first()
+    if not order:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Không tìm thấy đơn hàng '{order_id}'."
+        )
+    if order.status != "draft":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Không thể xóa đơn hàng '{order.code}' vì đơn không ở trạng thái nháp (trạng thái hiện tại: {order.status})."
+        )
+    try:
+        from app.models.order_delivery_profile import OrderDeliveryProfile
+        db.query(OrderDeliveryProfile).filter(OrderDeliveryProfile.order_id == order.id).delete(synchronize_session=False)
+    except Exception:
+        pass
+
+    order_code = order.code
+    order_internal_id = order.id
+    db.delete(order)
+    db.commit()
+    return {
+        "success": True,
+        "message": f"Đã xóa vĩnh viễn đơn nháp '{order_code}' thành công.",
+        "id": order_internal_id,
+        "code": order_code,
+    }
 
 
 def copy_order_to_draft(

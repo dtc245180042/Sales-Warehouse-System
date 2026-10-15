@@ -55,12 +55,15 @@ export const PriceHistoryPage: React.FC = () => {
   const [searchParams] = useSearchParams();
   const urlProductId = searchParams.get('productId') || '';
 
-  const [items, setItems] = useState<ProductPriceHistoryItem[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [total, setTotal] = useState<number>(0);
+  // Nạp tức thì từ RAM cache (0ms) khi chuyển trang
+  const cachedHistory = priceHistoryService.getCached();
+  const [items, setItems] = useState<ProductPriceHistoryItem[]>(() => cachedHistory?.items || []);
+  const [loading, setLoading] = useState<boolean>(() => !cachedHistory || cachedHistory.items.length === 0);
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const [total, setTotal] = useState<number>(() => cachedHistory?.total || 0);
   const [page, setPage] = useState<number>(1);
   const [pageSize] = useState<number>(15);
-  const [totalPages, setTotalPages] = useState<number>(1);
+  const [totalPages, setTotalPages] = useState<number>(() => cachedHistory?.totalPages || 1);
 
   // Filters
   const [search, setSearch] = useState<string>(urlProductId);
@@ -70,8 +73,9 @@ export const PriceHistoryPage: React.FC = () => {
   const [toDate, setToDate] = useState<string>('');
   const [selectedProductId, setSelectedProductId] = useState<string>(urlProductId);
 
-  const loadData = useCallback(async () => {
-    setLoading(true);
+  const loadData = useCallback(async (showSpinner: boolean = false) => {
+    if (showSpinner) setLoading(true);
+    setIsSyncing(true);
     try {
       const res = await priceHistoryService.getAllPriceHistories({
         search: search.trim() || undefined,
@@ -90,11 +94,13 @@ export const PriceHistoryPage: React.FC = () => {
       console.error('Failed to load price history:', err);
     } finally {
       setLoading(false);
+      setIsSyncing(false);
     }
   }, [search, selectedProductId, selectedGroup, selectedPriceType, fromDate, toDate, page, pageSize]);
 
   useEffect(() => {
-    loadData();
+    const hasCache = items.length > 0;
+    loadData(!hasCache);
   }, [loadData]);
 
   // Statistics KPIs

@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, timezone, timedelta
 from fastapi.testclient import TestClient
 from main import app
 from app.core.security import tao_token_truy_cap
@@ -42,6 +43,8 @@ def _get_headers_for_role(role: str, username: str = None, user_id: int = None):
 def _create_test_customer():
     uid = uuid.uuid4().hex[:6]
     payload = {
+        "id": f"CUS-T228-{uid}",
+        "code": f"KH-T228-{uid}",
         "name": f"Đại Lý Test {uid}",
         "phone": f"09{uid[:8].zfill(8)}",
         "email": f"daily_{uid}@test.vn",
@@ -54,7 +57,9 @@ def _create_test_customer():
     # Bổ sung bảng giá mẫu và hồ sơ công nợ mẫu để không bị chặn bởi Sprint 4 pricing/credit constraint
     db = SessionLocal()
     try:
-        from datetime import datetime, timedelta, timezone
+        from app.models.customer_lock import CustomerLockProfile
+        db.query(CustomerLockProfile).filter(CustomerLockProfile.customer_id == cus_data["id"]).delete()
+        db.commit()
         from app.models.price_list import PriceList, PriceListItem
         from app.models.customer_credit_profile import CustomerCreditProfile
         from app.models.product import Product
@@ -73,12 +78,16 @@ def _create_test_customer():
         else:
             prof.credit_limit = 100000000.0
 
-        # 2. Bảng giá mẫu cho TIER_1
+        # 2. Bảng giá mẫu cho TIER_1 (phải còn hiệu lực)
+        from sqlalchemy import or_
+        now_dt = datetime.now(timezone.utc)
         pl = db.query(PriceList).filter(
             PriceList.customer_group == "TIER_1",
             PriceList.status == "APPROVED",
-            PriceList.is_active == True
-        ).first()
+            PriceList.is_active == True,
+            PriceList.valid_from <= now_dt,
+            or_(PriceList.valid_to == None, PriceList.valid_to >= now_dt)
+        ).order_by(PriceList.version.desc(), PriceList.id.desc()).first()
         if not pl:
             pl = PriceList(
                 code=f"PL-T1-SC228-{uid}",
@@ -86,13 +95,13 @@ def _create_test_customer():
                 customer_group="TIER_1",
                 status="APPROVED",
                 is_active=True,
-                valid_from=datetime.now(timezone.utc) - timedelta(days=1),
-                valid_to=datetime.now(timezone.utc) + timedelta(days=365)
+                valid_from=now_dt - timedelta(days=1),
+                valid_to=now_dt + timedelta(days=365)
             )
             db.add(pl)
             db.flush()
 
-        prods = db.query(Product).filter(Product.status.in_(["active", "ACTIVE"])).all()
+        prods = db.query(Product).filter(Product.status.in_(["active", "ACTIVE"])).limit(5).all()
         for p in prods:
             pli = db.query(PriceListItem).filter(
                 PriceListItem.price_list_id == pl.id,
@@ -122,10 +131,14 @@ def _get_active_product():
     try:
         from app.models.price_list import PriceList, PriceListItem
         from app.models.product import Product
+        from sqlalchemy import or_
+        now_dt = datetime.now(timezone.utc)
         pl = db.query(PriceList).filter(
             PriceList.customer_group == "TIER_1",
             PriceList.status == "APPROVED",
-            PriceList.is_active == True
+            PriceList.is_active == True,
+            PriceList.valid_from <= now_dt,
+            or_(PriceList.valid_to == None, PriceList.valid_to >= now_dt)
         ).order_by(PriceList.version.desc(), PriceList.id.desc()).first()
         if pl:
             pli = db.query(PriceListItem).filter(PriceListItem.price_list_id == pl.id).first()

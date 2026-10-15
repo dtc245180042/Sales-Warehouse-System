@@ -82,9 +82,10 @@ export const AgentList: React.FC = () => {
   const urlPage = parseInt(searchParams.get('page') || '1', 10);
   const urlPageSize = parseInt(searchParams.get('size') || '10', 10);
 
-  // ── Local state ──
-  const [agents, setAgents] = useState<Agent[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  // ── Local state - Nạp tức thì từ RAM cache (0ms) khi chuyển trang ──
+  const [agents, setAgents] = useState<Agent[]>(() => agentService.getCached());
+  const [isLoading, setIsLoading] = useState<boolean>(() => agentService.getCached().length === 0);
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState(urlSearch);
   const [regionFilter, setRegionFilter] = useState(urlRegion);
@@ -125,8 +126,9 @@ export const AgentList: React.FC = () => {
     setPageSize(urlPageSize);
   }, [urlSearch, urlRegion, urlGroup, urlStaff, urlStatus, urlPage, urlPageSize]);
 
-  const loadAgents = async () => {
-    setIsLoading(true);
+  const loadAgents = async (showSpinner: boolean = false) => {
+    if (showSpinner) setIsLoading(true);
+    setIsSyncing(true);
     setLoadError(null);
     try {
       const data = await agentService.getAll();
@@ -135,11 +137,13 @@ export const AgentList: React.FC = () => {
       setLoadError('Không thể tải danh sách đại lý. Vui lòng kiểm tra kết nối mạng và thử lại.');
     } finally {
       setIsLoading(false);
+      setIsSyncing(false);
     }
   };
 
   useEffect(() => {
-    loadAgents();
+    const hasCache = agents.length > 0;
+    loadAgents(!hasCache);
   }, []);
 
   // Danh sách nhân viên phụ trách trích xuất từ dữ liệu (SCRUM-469)

@@ -28,8 +28,10 @@ import {
   Banknote,
   QrCode,
   Receipt,
+  Tag,
 } from 'lucide-react';
 import { CustomerCreditBanner, CustomerCreditStatusInfo } from '../../components/orders/CustomerCreditBanner';
+import { DraftOrdersDrawer } from '../../components/orders/DraftOrdersDrawer';
 import { customerService } from '../../services/customerService';
 import { deliveryAddressService } from '../../services/deliveryAddressService';
 import { orderService } from '../../services/orderService';
@@ -85,7 +87,7 @@ export const CreateOrder: React.FC = () => {
   // Customer selection
   const [customerSearch, setCustomerSearch] = useState('');
   const [isCustomerDropdownOpen, setIsCustomerDropdownOpen] = useState(false);
-  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>(() => customerService.getCached());
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [creditStatus, setCreditStatus] = useState<CustomerCreditStatusInfo | null>(null);
   const [effectivePriceList, setEffectivePriceList] = useState<EffectivePriceListResponse | null>(null);
@@ -127,27 +129,38 @@ export const CreateOrder: React.FC = () => {
   const [calculatedDiscount, setCalculatedDiscount] = useState(0);
   const [calculatedTotal, setCalculatedTotal] = useState(0);
 
+  // Tổng chiết khấu sản lượng theo chính sách tự động (S3-01 / S4-01 / SCRUM-491)
+  const totalDiscount = useMemo(() => {
+    const linesDiscount = items.reduce((sum, itm) => sum + (itm.discount || 0), 0);
+    return Math.max(calculatedDiscount, linesDiscount);
+  }, [items, calculatedDiscount]);
+
+  const finalTotal = useMemo(() => {
+    return Math.max(0, calculatedSubtotal - totalDiscount);
+  }, [calculatedSubtotal, totalDiscount]);
+
   // Payment & Settlement State (Thanh toán tại chỗ / Quyết toán công nợ)
   const [paymentMode, setPaymentMode] = useState<'credit' | 'full' | 'partial'>('credit');
   const [paidAmount, setPaidAmount] = useState<number>(0);
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'transfer'>('transfer');
 
   const unpaidAmount = useMemo(() => {
-    return Math.max(0, calculatedTotal - paidAmount);
-  }, [calculatedTotal, paidAmount]);
+    return Math.max(0, finalTotal - paidAmount);
+  }, [finalTotal, paidAmount]);
 
   // Đồng bộ số tiền thanh toán khi tổng tiền hoặc chế độ quyết toán thay đổi
   useEffect(() => {
     if (paymentMode === 'full') {
-      setPaidAmount(calculatedTotal);
+      setPaidAmount(finalTotal);
     } else if (paymentMode === 'credit') {
       setPaidAmount(0);
     } else if (paymentMode === 'partial') {
-      if (paidAmount > calculatedTotal) {
-        setPaidAmount(calculatedTotal);
+      if (paidAmount > finalTotal) {
+        setPaidAmount(finalTotal);
       }
     }
-  }, [calculatedTotal, paymentMode]);
+  }, [finalTotal, paymentMode]);
+
 
   // Drafts Drawer State
   const [isDraftsDrawerOpen, setIsDraftsDrawerOpen] = useState(false);
@@ -644,6 +657,7 @@ export const CreateOrder: React.FC = () => {
     setItems((prev) => prev.filter((i) => i.productId !== productId));
   };
 
+
   // Build Payload
   const buildPayload = (status: 'draft' | 'pending') => {
     if (!selectedCustomer) {
@@ -676,11 +690,11 @@ export const CreateOrder: React.FC = () => {
         is_below_floor: i.isBelowFloor,
       })),
       subtotal: calculatedSubtotal,
-      discount: calculatedDiscount,
-      total: calculatedTotal,
+      discount: totalDiscount,
+      total: finalTotal,
       paidAmount: paidAmount,
       paymentMethod: paymentMethod,
-      paymentStatus: (paidAmount >= calculatedTotal && calculatedTotal > 0
+      paymentStatus: (paidAmount >= finalTotal && finalTotal > 0
         ? 'paid'
         : paidAmount > 0
         ? 'partial'
@@ -703,6 +717,7 @@ export const CreateOrder: React.FC = () => {
       expectedDeliveryDate: expectedDeliveryDate || todayStr,
     };
   };
+
 
   // Handle Save Draft
   const handleSaveDraft = async () => {
@@ -903,6 +918,7 @@ export const CreateOrder: React.FC = () => {
     showToast('Đã bắt đầu đơn hàng mới', 'info');
   };
 
+
   // Quick chips for date
   const setQuickDate = (daysToAdd: number) => {
     const d = new Date();
@@ -930,10 +946,10 @@ export const CreateOrder: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pb-6 text-slate-800 dark:text-slate-100">
-      {/* Top Header Optimized for Mobile 360px */}
-      <header className="sticky top-0 z-30 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-3 py-2.5 shadow-sm">
-        <div className="max-w-2xl mx-auto flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 min-w-0">
+      {/* Top Header Full-width */}
+      <header className="sticky top-0 z-30 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-4 sm:px-6 lg:px-8 py-2.5 shadow-xs">
+        <div className="w-full flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2.5 min-w-0">
             <button
               onClick={() => navigate(-1)}
               className="p-2 -ml-1 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors active:scale-95"
@@ -942,22 +958,22 @@ export const CreateOrder: React.FC = () => {
               <ArrowLeft className="w-5 h-5" />
             </button>
             <div className="truncate">
-              <h1 className="text-base font-bold text-slate-900 dark:text-white leading-tight truncate">
+              <h1 className="text-base lg:text-lg font-bold text-slate-900 dark:text-white leading-tight truncate">
                 Tạo Đơn Hàng
               </h1>
               <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
-                Tối ưu hiển thị thiết bị di động
+                Quản lý & tạo đơn hàng bán buôn, đại lý
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5 shrink-0">
+          <div className="flex items-center gap-2 shrink-0">
             <button
               onClick={() => setIsDraftsDrawerOpen(true)}
-              className="relative flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800/80 hover:bg-amber-100 active:scale-95 transition-all"
+              className="relative flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800/80 hover:bg-amber-100 active:scale-95 transition-all shadow-2xs"
             >
               <Bookmark className="w-3.5 h-3.5" />
-              <span>Nháp</span>
+              <span>Đơn nháp</span>
               {draftOrders.length > 0 && (
                 <span className="ml-0.5 px-1.5 py-0.2 text-[10px] font-bold rounded-full bg-amber-500 text-white">
                   {draftOrders.length}
@@ -968,11 +984,11 @@ export const CreateOrder: React.FC = () => {
         </div>
       </header>
 
-      {/* Main Content Area */}
-      <main className="max-w-2xl mx-auto px-3 py-3 space-y-3.5">
+      {/* Main Content Area - Full width responsive */}
+      <main className="w-full px-4 sm:px-6 lg:px-8 py-4 space-y-4">
         {/* Banner if editing a draft */}
         {currentDraftId && (
-          <div className="flex items-center justify-between p-2.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-xl text-xs text-amber-800 dark:text-amber-200">
+          <div className="flex items-center justify-between p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-xl text-xs text-amber-800 dark:text-amber-200 shadow-2xs">
             <div className="flex items-center gap-2 truncate">
               <Clock className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
               <span className="truncate">
@@ -981,15 +997,19 @@ export const CreateOrder: React.FC = () => {
             </div>
             <button
               onClick={handleResetForm}
-              className="ml-2 px-2 py-1 text-[11px] font-medium bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-md hover:bg-slate-50 active:scale-95 shrink-0"
+              className="ml-2 px-2.5 py-1 text-[11px] font-semibold bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 active:scale-95 shrink-0 transition-all shadow-2xs"
             >
               Tạo đơn mới
             </button>
           </div>
         )}
 
-        {/* SECTION 1: Chọn Khách hàng & Điểm giao */}
-        <section className="bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-2xl p-3.5 shadow-sm space-y-3">
+        {/* 2-Column Responsive Layout: Cột trái (Khách & Mặt hàng ~68-75%), Cột phải (Quyết toán & Chốt đơn ~25-32% sticky) */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+          {/* CỘT TRÁI: Khối 1 & Khối 2 */}
+          <div className="lg:col-span-8 xl:col-span-8 2xl:col-span-9 space-y-4">
+            {/* SECTION 1: Chọn Khách hàng & Điểm giao */}
+            <section className="bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-2xl p-4 shadow-sm space-y-3">
           <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
             <div className="flex items-center gap-2">
               <span className="flex items-center justify-center w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-950/80 text-blue-600 dark:text-blue-400 text-xs font-bold">
@@ -1410,10 +1430,8 @@ export const CreateOrder: React.FC = () => {
             <div className="flex flex-wrap items-center gap-1.5 pt-2">
               <span className="text-[11px] font-semibold text-slate-500 shrink-0">Thêm nhanh:</span>
               {[
-                { id: 'PRD-001', name: 'iPhone 15 Pro', sku: 'IP15P-128-TI', price: 26990000, unit: 'cái', stock: 100 },
-                { id: 'PRD-002', name: 'Samsung S24 Ultra', sku: 'SAM-S24U-512', price: 29990000, unit: 'cái', stock: 100 },
-                { id: 'PRD-005', name: 'Tai nghe Sony', sku: 'SN-WH1000XM5-BK', price: 7990000, unit: 'cái', stock: 100 },
-                { id: 'PRD-006', name: 'AirPods Pro 2', sku: 'AP-PRO-2-USBC', price: 5690000, unit: 'hộp', stock: 100 },
+                { id: '1', name: 'iPhone 15 Pro', sku: 'IP15P-128-TI', price: 26990000, unit: 'cái', stock: 100 },
+                { id: '4', name: 'Tai nghe Sony', sku: 'SN-WH1000XM5-BK', price: 7990000, unit: 'cái', stock: 100 },
               ].map((quick) => (
                 <button
                   key={quick.id}
@@ -1504,21 +1522,20 @@ export const CreateOrder: React.FC = () => {
 
           {/* Items List */}
           {items.length === 0 ? (
-            <div className="py-6 px-4 text-center text-slate-400 dark:text-slate-500 border border-dashed border-slate-200 dark:border-slate-800 rounded-xl space-y-3">
-              <Boxes className="w-8 h-8 mx-auto text-slate-300 dark:text-slate-600" />
+            <div className="py-8 px-4 text-center text-slate-400 dark:text-slate-500 border border-dashed border-slate-200 dark:border-slate-800 rounded-xl space-y-3">
+              <Boxes className="w-9 h-9 mx-auto text-slate-300 dark:text-slate-600" />
               <div>
-                <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">
                   Chưa có mặt hàng nào trong đơn
                 </p>
-                <p className="text-[11px] text-slate-400 mt-0.5">
+                <p className="text-xs text-slate-400 mt-0.5">
                   Bấm một trong các nút bên dưới để thêm nhanh sản phẩm vào đơn:
                 </p>
               </div>
               <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
                 {[
-                  { id: 'PRD-001', name: 'iPhone 15 Pro 128GB', sku: 'IP15P-128-TI', price: 26990000, unit: 'cái', stock: 100 },
-                  { id: 'PRD-002', name: 'Samsung Galaxy S24 Ultra', sku: 'SAM-S24U-512', price: 29990000, unit: 'cái', stock: 100 },
-                  { id: 'PRD-005', name: 'Tai nghe Sony WH-1000XM5', sku: 'SN-WH1000XM5-BK', price: 7990000, unit: 'cái', stock: 100 },
+                  { id: '1', name: 'iPhone 15 Pro 128GB', sku: 'IP15P-128-TI', price: 26990000, unit: 'cái', stock: 100 },
+                  { id: '4', name: 'Tai nghe Sony WH-1000XM5', sku: 'SN-WH1000XM5-BK', price: 7990000, unit: 'cái', stock: 100 },
                 ].map((quick) => (
                   <button
                     key={quick.id}
@@ -1533,192 +1550,405 @@ export const CreateOrder: React.FC = () => {
               </div>
             </div>
           ) : (
-            <div className="space-y-2.5">
-              {items.map((item) => (
-                <div
-                  key={item.productId}
-                  className={`p-3 rounded-xl space-y-2 border transition-all ${
-                    typeof item.availableStock === 'number' && item.quantity > item.availableStock
-                      ? 'bg-rose-50/70 dark:bg-rose-950/40 border-rose-400 dark:border-rose-700/80 shadow-xs ring-1 ring-rose-400/30'
-                      : item.isBelowFloor
-                      ? 'bg-amber-50/70 dark:bg-amber-950/40 border-amber-300 dark:border-amber-700/80 shadow-xs'
-                      : 'bg-slate-50/80 dark:bg-slate-800/50 border-slate-200/80 dark:border-slate-700/70'
-                  }`}
-                >
-                  {/* Row 1: Name, SKU, Floor Price, Tồn khả dụng (SCRUM-503) & Delete */}
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0 flex-1">
-                      <h4 className="font-semibold text-xs text-slate-900 dark:text-white leading-tight">
-                        {item.name}
-                      </h4>
-                      <div className="flex flex-wrap items-center gap-2 mt-0.5 text-[10px] text-slate-500">
-                        <span className="font-mono bg-white dark:bg-slate-800 px-1 py-0.5 rounded border border-slate-200 dark:border-slate-700">
-                          {item.sku}
-                        </span>
-                        {item.floorPrice && item.floorPrice > 0 ? (
-                          <span className="text-slate-500 dark:text-slate-400">
-                            Giá sàn: <strong className="font-semibold text-slate-700 dark:text-slate-300">{formatCurrency(item.floorPrice)}</strong>
-                          </span>
-                        ) : null}
-                      </div>
+            <>
+              {/* BẢNG MẶT HÀNG RỘNG DÀNH CHO DESKTOP (>= 1024px) */}
+              <div className="hidden lg:block overflow-x-auto rounded-xl border border-slate-200/90 dark:border-slate-800">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-100/90 dark:bg-slate-800/90 text-slate-600 dark:text-slate-300 border-b border-slate-200 dark:border-slate-700 font-bold uppercase tracking-wider text-[11px]">
+                    <tr>
+                      <th className="py-3 px-3">Sản phẩm & SKU</th>
+                      <th className="py-3 px-2 text-center w-24">ĐVT</th>
+                      <th className="py-3 px-3 text-right w-36">Đơn giá</th>
+                      <th className="py-3 px-3 text-center w-36">Số lượng</th>
+                      <th className="py-3 px-3 text-right w-36">Chiết khấu</th>
+                      <th className="py-3 px-3 text-right w-36">Thành tiền</th>
+                      <th className="py-3 px-2 text-center w-12"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800 bg-white dark:bg-slate-900">
+                    {items.map((item) => (
+                      <tr
+                        key={item.productId}
+                        className={`hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors ${
+                          typeof item.availableStock === 'number' && item.quantity > item.availableStock
+                            ? 'bg-rose-50/50 dark:bg-rose-950/30'
+                            : item.isBelowFloor
+                            ? 'bg-amber-50/40 dark:bg-amber-950/20'
+                            : ''
+                        }`}
+                      >
+                        {/* Cột 1: Tên & SKU */}
+                        <td className="py-2.5 px-3">
+                          <div className="font-semibold text-slate-900 dark:text-white leading-tight">
+                            {item.name}
+                          </div>
+                          <div className="flex flex-wrap items-center gap-1.5 mt-1 text-[10px]">
+                            <span className="font-mono bg-slate-100 dark:bg-slate-800 px-1 py-0.2 rounded border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400">
+                              {item.sku}
+                            </span>
+                            <span className={`px-1.5 py-0.2 rounded font-bold ${
+                              (item.availableStock ?? 999) <= 0
+                                ? 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300'
+                                : (item.availableStock ?? 999) <= 10
+                                ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                                : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                            }`}>
+                              Khả dụng: {item.availableStock ?? item.stock ?? '...'} {item.unit}
+                            </span>
+                            {item.warehouse && (
+                              <span className="text-slate-400 text-[10px]">({item.warehouse})</span>
+                            )}
+                          </div>
+                          {item.floorPrice && item.floorPrice > 0 ? (
+                            <div className="text-[10px] text-slate-400 mt-0.5">
+                              Giá sàn: <strong className="text-slate-600 dark:text-slate-300">{formatCurrency(item.floorPrice)}</strong>
+                            </div>
+                          ) : null}
+                        </td>
 
-                      {/* Hiển thị Tồn khả dụng theo từng dòng hàng (SCRUM-503) */}
-                      <div className="flex flex-wrap items-center gap-2 mt-1">
-                        <div className="flex items-center gap-1.5 text-[11px]">
-                          <Boxes className="w-3.5 h-3.5 text-blue-500 shrink-0" />
-                          <span className="text-slate-500 dark:text-slate-400">Tồn khả dụng:</span>
-                          <span className={`px-2 py-0.5 rounded-md font-bold text-[11px] ${
-                            (item.availableStock ?? 999) <= 0
-                              ? 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300 border border-rose-300 dark:border-rose-800'
-                              : (item.availableStock ?? 999) <= 10
-                              ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300 dark:border-amber-800'
-                              : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800'
-                          }`}>
-                            {item.availableStock ?? item.stock ?? '...'} {item.unit}
-                          </span>
-                          {item.warehouse && (
-                            <span className="text-[10px] text-slate-400 font-normal">
-                              ({item.warehouse})
+                        {/* Cột 2: ĐVT */}
+                        <td className="py-2.5 px-2 text-center">
+                          <select
+                            value={item.unit}
+                            onChange={(e) => handleUpdateUnit(item.productId, e.target.value)}
+                            className="w-full px-2 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          >
+                            {item.availableUnits.map((u) => (
+                              <option key={u} value={u}>{u}</option>
+                            ))}
+                          </select>
+                        </td>
+
+                        {/* Cột 3: Đơn giá */}
+                        <td className="py-2.5 px-3 text-right">
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            value={item.price === 0 ? '' : formatCurrencyInput(item.price)}
+                            placeholder="0"
+                            onFocus={(e) => e.target.select()}
+                            onChange={(e) => {
+                              const raw = e.target.value.replace(/\D/g, '').replace(/^0+(?=\d)/, '');
+                              const num = raw === '' ? 0 : parseInt(raw, 10);
+                              handleUpdatePrice(item.productId, isNaN(num) ? 0 : num);
+                            }}
+                            className={`w-full px-2 py-1.5 text-xs font-bold rounded-lg border text-right transition-colors ${
+                              item.isBelowFloor
+                                ? 'bg-amber-100 dark:bg-amber-950/80 border-amber-500 text-amber-950 dark:text-amber-200 ring-2 ring-amber-400/30'
+                                : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500'
+                            }`}
+                            title={item.floorPrice ? `Giá sàn: ${formatCurrency(item.floorPrice)}` : 'Đơn giá bán'}
+                          />
+                          {item.isBelowFloor && (
+                            <span className="block text-[10px] font-semibold text-amber-600 dark:text-amber-400 text-right mt-0.5">
+                              Dưới giá sàn!
                             </span>
                           )}
+                        </td>
+
+                        {/* Cột 4: Số lượng */}
+                        <td className="py-2.5 px-3">
+                          <div className="flex items-center justify-center bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden shadow-2xs mx-auto w-fit">
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateQty(item.productId, item.quantity - 1)}
+                              disabled={item.quantity <= 1}
+                              className="w-7 h-7 flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-40 active:scale-95 transition-all"
+                            >
+                              <Minus className="w-3.5 h-3.5" />
+                            </button>
+                            <input
+                              type="number"
+                              min="1"
+                              value={item.quantity}
+                              onChange={(e) =>
+                                handleUpdateQty(item.productId, parseInt(e.target.value, 10) || 1)
+                              }
+                              className="w-10 h-7 text-center text-xs font-bold bg-transparent text-slate-900 dark:text-white focus:outline-none"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateQty(item.productId, item.quantity + 1)}
+                              disabled={typeof item.availableStock === 'number' && item.quantity >= item.availableStock}
+                              className="w-7 h-7 flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed active:scale-95 transition-all"
+                              title={typeof item.availableStock === 'number' && item.quantity >= item.availableStock ? 'Đã đạt tồn khả dụng tối đa' : 'Tăng số lượng'}
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                          {typeof item.availableStock === 'number' && item.quantity > item.availableStock && (
+                            <div className="text-center mt-1">
+                              <button
+                                type="button"
+                                onClick={() => handleUpdateQty(item.productId, Math.max(0, item.availableStock || 0))}
+                                className="px-2 py-0.5 text-[10px] font-bold rounded bg-rose-600 hover:bg-rose-700 text-white shadow-2xs"
+                              >
+                                Đặt tối đa ({item.availableStock})
+                              </button>
+                            </div>
+                          )}
+                        </td>
+
+                        {/* Cột 5: Chiết khấu sản lượng tự động (S3-01 / S4-01 / SCRUM-491) */}
+                        <td className="py-2.5 px-3 text-right">
+                          {item.discount > 0 ? (
+                            <div>
+                              <div className="font-bold text-xs text-emerald-600 dark:text-emerald-400">
+                                -{formatCurrency(item.discount)}
+                              </div>
+                              {item.appliedDiscountName ? (
+                                <span className="inline-flex items-center gap-1 mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                                  <Sparkles className="w-2.5 h-2.5" />
+                                  <span className="truncate max-w-[120px]" title={item.appliedDiscountName}>
+                                    {item.appliedDiscountName}
+                                  </span>
+                                </span>
+                              ) : null}
+                            </div>
+                          ) : (
+                            <div>
+                              <span className="text-xs font-semibold text-slate-400">0 đ</span>
+                              <div className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">
+                                Mua ≥ 10 để nhận CK
+                              </div>
+                            </div>
+                          )}
+                        </td>
+
+                        {/* Cột 6: Thành tiền */}
+                        <td className="py-2.5 px-3 text-right">
+                          <span className="font-bold text-xs text-slate-900 dark:text-white">
+                            {formatCurrency(item.subtotal)}
+                          </span>
+                        </td>
+
+                        {/* Cột 7: Xóa dòng */}
+                        <td className="py-2.5 px-2 text-center">
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveItem(item.productId)}
+                            className="p-1.5 text-slate-400 hover:text-red-500 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors"
+                            title="Xóa dòng này"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* THẺ DÒNG HÀNG CHO MOBILE / TABLET (< 1024px) */}
+              <div className="lg:hidden space-y-2.5">
+                {items.map((item) => (
+                  <div
+                    key={item.productId}
+                    className={`p-3 rounded-xl space-y-2 border transition-all ${
+                      typeof item.availableStock === 'number' && item.quantity > item.availableStock
+                        ? 'bg-rose-50/70 dark:bg-rose-950/40 border-rose-400 dark:border-rose-700/80 shadow-xs ring-1 ring-rose-400/30'
+                        : item.isBelowFloor
+                        ? 'bg-amber-50/70 dark:bg-amber-950/40 border-amber-300 dark:border-amber-700/80 shadow-xs'
+                        : 'bg-slate-50/80 dark:bg-slate-800/50 border-slate-200/80 dark:border-slate-700/70'
+                    }`}
+                  >
+                    {/* Row 1: Name, SKU, Floor Price, Tồn khả dụng (SCRUM-503) & Delete */}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <h4 className="font-semibold text-xs text-slate-900 dark:text-white leading-tight">
+                          {item.name}
+                        </h4>
+                        <div className="flex flex-wrap items-center gap-2 mt-0.5 text-[10px] text-slate-500">
+                          <span className="font-mono bg-white dark:bg-slate-800 px-1 py-0.5 rounded border border-slate-200 dark:border-slate-700">
+                            {item.sku}
+                          </span>
+                          {item.floorPrice && item.floorPrice > 0 ? (
+                            <span className="text-slate-500 dark:text-slate-400">
+                              Giá sàn: <strong className="font-semibold text-slate-700 dark:text-slate-300">{formatCurrency(item.floorPrice)}</strong>
+                            </span>
+                          ) : null}
+                        </div>
+
+                        {/* Hiển thị Tồn khả dụng theo từng dòng hàng (SCRUM-503) */}
+                        <div className="flex flex-wrap items-center gap-2 mt-1">
+                          <div className="flex items-center gap-1.5 text-[11px]">
+                            <Boxes className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                            <span className="text-slate-500 dark:text-slate-400">Tồn khả dụng:</span>
+                            <span className={`px-2 py-0.5 rounded-md font-bold text-[11px] ${
+                              (item.availableStock ?? 999) <= 0
+                                ? 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300 border border-rose-300 dark:border-rose-800'
+                                : (item.availableStock ?? 999) <= 10
+                                ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300 dark:border-amber-800'
+                                : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800'
+                            }`}>
+                              {item.availableStock ?? item.stock ?? '...'} {item.unit}
+                            </span>
+                            {item.warehouse && (
+                              <span className="text-[10px] text-slate-400 font-normal">
+                                ({item.warehouse})
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveItem(item.productId)}
-                      className="p-1.5 text-slate-400 hover:text-red-500 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors"
-                      title="Xóa dòng"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-
-                  {/* Row 2: Price editor, Unit selector & Stepper Quantity & Subtotal */}
-                  <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-200/50 dark:border-slate-700/50">
-                    {/* Unit Selector */}
-                    <div className="flex items-center gap-1.5">
-                      <label className="text-[11px] text-slate-500 shrink-0">ĐVT:</label>
-                      <select
-                        value={item.unit}
-                        onChange={(e) => handleUpdateUnit(item.productId, e.target.value)}
-                        className="px-2 py-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      >
-                        {item.availableUnits.map((u) => (
-                          <option key={u} value={u}>
-                            {u}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    {/* Price Input with Floor validation (SCRUM-490 & SCRUM-495) */}
-                    <div className="flex items-center gap-1">
-                      <label className="text-[11px] text-slate-500 shrink-0">Giá:</label>
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        value={item.price === 0 ? '' : formatCurrencyInput(item.price)}
-                        placeholder="0"
-                        onFocus={(e) => e.target.select()}
-                        onChange={(e) => {
-                          const raw = e.target.value.replace(/\D/g, '').replace(/^0+(?=\d)/, '');
-                          const num = raw === '' ? 0 : parseInt(raw, 10);
-                          handleUpdatePrice(item.productId, isNaN(num) ? 0 : num);
-                        }}
-                        className={`w-32 px-2 py-1 text-xs font-bold rounded-lg border text-right transition-colors ${
-                          item.isBelowFloor
-                            ? 'bg-amber-100 dark:bg-amber-950/80 border-amber-500 text-amber-950 dark:text-amber-200 ring-2 ring-amber-400/30'
-                            : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500'
-                        }`}
-                        title={item.floorPrice ? `Giá sàn: ${formatCurrency(item.floorPrice)}` : 'Đơn giá bán'}
-                      />
-                    </div>
-
-                    {/* Stepper Quantity (Touch friendly >= 44px; Chặn tăng khi đạt mức tồn khả dụng - SCRUM-508) */}
-                    <div className="flex items-center bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden shadow-2xs">
                       <button
                         type="button"
-                        onClick={() => handleUpdateQty(item.productId, item.quantity - 1)}
-                        disabled={item.quantity <= 1}
-                        className="w-8 h-8 flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-40 active:scale-95 transition-all"
+                        onClick={() => handleRemoveItem(item.productId)}
+                        className="p-1.5 text-slate-400 hover:text-red-500 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors"
+                        title="Xóa dòng"
                       >
-                        <Minus className="w-3.5 h-3.5" />
-                      </button>
-                      <input
-                        type="number"
-                        min="1"
-                        value={item.quantity}
-                        onChange={(e) =>
-                          handleUpdateQty(item.productId, parseInt(e.target.value, 10) || 1)
-                        }
-                        className="w-10 h-8 text-center text-xs font-bold bg-transparent text-slate-900 dark:text-white focus:outline-none"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => handleUpdateQty(item.productId, item.quantity + 1)}
-                        disabled={typeof item.availableStock === 'number' && item.quantity >= item.availableStock}
-                        className="w-8 h-8 flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed active:scale-95 transition-all"
-                        title={typeof item.availableStock === 'number' && item.quantity >= item.availableStock ? 'Đã đạt tồn khả dụng tối đa' : 'Tăng số lượng'}
-                      >
-                        <Plus className="w-3.5 h-3.5" />
+                        <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
 
-                    {/* Line Total */}
-                    <div className="text-right shrink-0">
-                      <span className="font-bold text-xs text-slate-900 dark:text-white">
-                        {formatCurrency(item.subtotal)}
-                      </span>
-                    </div>
-                  </div>
+                    {/* Row 2: Price editor, Unit selector & Stepper Quantity & Subtotal */}
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-200/50 dark:border-slate-700/50">
+                      {/* Unit Selector */}
+                      <div className="flex items-center gap-1.5">
+                        <label className="text-[11px] text-slate-500 shrink-0">ĐVT:</label>
+                        <select
+                          value={item.unit}
+                          onChange={(e) => handleUpdateUnit(item.productId, e.target.value)}
+                          className="px-2 py-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                          {item.availableUnits.map((u) => (
+                            <option key={u} value={u}>
+                              {u}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
 
-                  {/* Warning exceeding available stock & quick max action (SCRUM-506, SCRUM-508) */}
-                  {typeof item.availableStock === 'number' && item.quantity > item.availableStock && (
-                    <div className="flex items-center justify-between gap-2 p-2 rounded-lg bg-rose-100/90 dark:bg-rose-950/80 border border-rose-300 dark:border-rose-700 text-[11px] text-rose-900 dark:text-rose-200">
-                      <div className="flex items-center gap-1.5 min-w-0">
-                        <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
-                        <span className="truncate">
-                          Vượt tồn khả dụng! Còn <strong>{item.availableStock} {item.unit}</strong> khả dụng (yêu cầu {item.quantity}).
+                      {/* Price Input with Floor validation (SCRUM-490 & SCRUM-495) */}
+                      <div className="flex items-center gap-1">
+                        <label className="text-[11px] text-slate-500 shrink-0">Giá:</label>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={item.price === 0 ? '' : formatCurrencyInput(item.price)}
+                          placeholder="0"
+                          onFocus={(e) => e.target.select()}
+                          onChange={(e) => {
+                            const raw = e.target.value.replace(/\D/g, '').replace(/^0+(?=\d)/, '');
+                            const num = raw === '' ? 0 : parseInt(raw, 10);
+                            handleUpdatePrice(item.productId, isNaN(num) ? 0 : num);
+                          }}
+                          className={`w-32 px-2 py-1 text-xs font-bold rounded-lg border text-right transition-colors ${
+                            item.isBelowFloor
+                              ? 'bg-amber-100 dark:bg-amber-950/80 border-amber-500 text-amber-950 dark:text-amber-200 ring-2 ring-amber-400/30'
+                              : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500'
+                          }`}
+                          title={item.floorPrice ? `Giá sàn: ${formatCurrency(item.floorPrice)}` : 'Đơn giá bán'}
+                        />
+                      </div>
+
+                      {/* Stepper Quantity (Touch friendly >= 44px; Chặn tăng khi đạt mức tồn khả dụng - SCRUM-508) */}
+                      <div className="flex items-center bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden shadow-2xs">
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateQty(item.productId, item.quantity - 1)}
+                          disabled={item.quantity <= 1}
+                          className="w-8 h-8 flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-40 active:scale-95 transition-all"
+                        >
+                          <Minus className="w-3.5 h-3.5" />
+                        </button>
+                        <input
+                          type="number"
+                          min="1"
+                          value={item.quantity}
+                          onChange={(e) =>
+                            handleUpdateQty(item.productId, parseInt(e.target.value, 10) || 1)
+                          }
+                          className="w-10 h-8 text-center text-xs font-bold bg-transparent text-slate-900 dark:text-white focus:outline-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateQty(item.productId, item.quantity + 1)}
+                          disabled={typeof item.availableStock === 'number' && item.quantity >= item.availableStock}
+                          className="w-8 h-8 flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed active:scale-95 transition-all"
+                          title={typeof item.availableStock === 'number' && item.quantity >= item.availableStock ? 'Đã đạt tồn khả dụng tối đa' : 'Tăng số lượng'}
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+
+                      {/* Line Total */}
+                      <div className="text-right shrink-0">
+                        <span className="font-bold text-xs text-slate-900 dark:text-white">
+                          {formatCurrency(item.subtotal)}
                         </span>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => handleUpdateQty(item.productId, Math.max(0, item.availableStock || 0))}
-                        className="px-2.5 py-1 text-[10px] font-bold rounded-md bg-rose-600 hover:bg-rose-700 text-white active:scale-95 transition-all shadow-xs shrink-0"
-                      >
-                        Đặt tối đa ({item.availableStock})
-                      </button>
                     </div>
-                  )}
 
-                  {/* Warning below floor price (SCRUM-495) */}
-                  {item.isBelowFloor && (
-                    <div className="flex items-center gap-1.5 text-[11px] font-semibold text-amber-800 dark:text-amber-300 bg-amber-100/80 dark:bg-amber-950/70 px-2.5 py-1.5 rounded-lg border border-amber-300 dark:border-amber-700">
-                      <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                      <span>
-                        Giá nhập {formatCurrency(item.price)} thấp hơn giá sàn ({formatCurrency(item.floorPrice || 0)}) &bull; Đơn hàng sẽ chuyển sang <strong>Cần duyệt</strong>
+                    {/* Chiết khấu theo chính sách sản lượng Mobile (S3-01 / S4-01) */}
+                    <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-100 dark:border-slate-800">
+                      <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">
+                        Chiết khấu sản lượng:
                       </span>
+                      {item.discount > 0 ? (
+                        <div className="text-right">
+                          <span className="font-bold text-xs text-emerald-600 dark:text-emerald-400">
+                            -{formatCurrency(item.discount)}
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="text-right text-[11px] text-slate-400">
+                          0 đ <span className="text-[10px] text-slate-400">(Mua ≥ 10 nhận CK)</span>
+                        </div>
+                      )}
                     </div>
-                  )}
 
-                  {/* Volume Discount Badge (S3-01 & SCRUM-491) */}
-                  {item.appliedDiscountName && (
-                    <div className="flex items-center gap-1.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 px-2 py-1 rounded-md border border-emerald-200/80 dark:border-emerald-800/60">
-                      <Sparkles className="w-3 h-3 text-emerald-600 shrink-0" />
-                      <span className="truncate">
-                        {item.appliedDiscountName}: -{formatCurrency(item.discount)}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
+                    {/* Warning exceeding available stock & quick max action (SCRUM-506, SCRUM-508) */}
+                    {typeof item.availableStock === 'number' && item.quantity > item.availableStock && (
+                      <div className="flex items-center justify-between gap-2 p-2 rounded-lg bg-rose-100/90 dark:bg-rose-950/80 border border-rose-300 dark:border-rose-700 text-[11px] text-rose-900 dark:text-rose-200">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                          <span className="truncate">
+                            Vượt tồn khả dụng! Còn <strong>{item.availableStock} {item.unit}</strong> khả dụng (yêu cầu {item.quantity}).
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateQty(item.productId, Math.max(0, item.availableStock || 0))}
+                          className="px-2.5 py-1 text-[10px] font-bold rounded-md bg-rose-600 hover:bg-rose-700 text-white active:scale-95 transition-all shadow-xs shrink-0"
+                        >
+                          Đặt tối đa ({item.availableStock})
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Warning below floor price (SCRUM-495) */}
+                    {item.isBelowFloor && (
+                      <div className="flex items-center gap-1.5 text-[11px] font-semibold text-amber-800 dark:text-amber-300 bg-amber-100/80 dark:bg-amber-950/70 px-2.5 py-1.5 rounded-lg border border-amber-300 dark:border-amber-700">
+                        <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                        <span>
+                          Giá nhập {formatCurrency(item.price)} thấp hơn giá sàn ({formatCurrency(item.floorPrice || 0)}) &bull; Đơn hàng sẽ chuyển sang <strong>Cần duyệt</strong>
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Volume Discount Badge (S3-01 & SCRUM-491) */}
+                    {item.appliedDiscountName && (
+                      <div className="flex items-center gap-1.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 px-2 py-1 rounded-md border border-emerald-200/80 dark:border-emerald-800/60">
+                        <Sparkles className="w-3 h-3 text-emerald-600 shrink-0" />
+                        <span className="truncate">
+                          {item.appliedDiscountName}: -{formatCurrency(item.discount)}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </>
           )}
         </section>
+      </div>
 
+      {/* CỘT PHẢI: Khối 3 Thanh toán & Quyết toán công nợ (~25-32% trên Desktop, Sticky Top) */}
+      <div className="lg:col-span-4 xl:col-span-4 2xl:col-span-3 lg:sticky lg:top-16 space-y-4">
         {/* SECTION 3: Thanh toán & Quyết toán công nợ tại hiện trường */}
         <section className="bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-2xl p-4 shadow-sm space-y-4 text-xs">
+
           {/* Cảnh báo giá sàn đơn hàng */}
           {hasBelowFloor && (
             <div className="p-3 bg-amber-50 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-700/80 rounded-xl flex items-start gap-2.5 text-xs text-amber-900 dark:text-amber-200">
@@ -1753,7 +1983,7 @@ export const CreateOrder: React.FC = () => {
               <span className="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
                 Ghi nợ: {formatCurrency(unpaidAmount)}
               </span>
-            ) : calculatedTotal > 0 ? (
+            ) : finalTotal > 0 ? (
               <span className="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
                 Đã thu đủ 100%
               </span>
@@ -1802,7 +2032,7 @@ export const CreateOrder: React.FC = () => {
                 type="button"
                 onClick={() => {
                   setPaymentMode('full');
-                  setPaidAmount(calculatedTotal);
+                  setPaidAmount(finalTotal);
                 }}
                 className={`flex flex-col items-center justify-center p-2.5 rounded-xl border text-center transition-all ${
                   paymentMode === 'full'
@@ -1819,8 +2049,8 @@ export const CreateOrder: React.FC = () => {
                 type="button"
                 onClick={() => {
                   setPaymentMode('partial');
-                  if (paidAmount === 0 && calculatedTotal > 0) {
-                    setPaidAmount(Math.round(calculatedTotal * 0.3));
+                  if (paidAmount === 0 && finalTotal > 0) {
+                    setPaidAmount(Math.round(finalTotal * 0.3));
                   }
                 }}
                 className={`flex flex-col items-center justify-center p-2.5 rounded-xl border text-center transition-all ${
@@ -1880,7 +2110,7 @@ export const CreateOrder: React.FC = () => {
                       Số tiền trả trước / đặt cọc:
                     </label>
                     <span className="text-[10px] text-slate-500">
-                      Tối đa: {formatCurrency(calculatedTotal)}
+                      Tối đa: {formatCurrency(finalTotal)}
                     </span>
                   </div>
                   <div className="relative">
@@ -1893,7 +2123,7 @@ export const CreateOrder: React.FC = () => {
                       onChange={(e) => {
                         const raw = e.target.value.replace(/\D/g, '').replace(/^0+(?=\d)/, '');
                         const val = raw === '' ? 0 : parseInt(raw, 10);
-                        setPaidAmount(Math.min(calculatedTotal, Math.max(0, val)));
+                        setPaidAmount(Math.min(finalTotal, Math.max(0, val)));
                       }}
                       className="w-full pl-3 pr-14 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
@@ -1909,10 +2139,10 @@ export const CreateOrder: React.FC = () => {
                       <button
                         key={pct}
                         type="button"
-                        onClick={() => setPaidAmount(Math.round(calculatedTotal * pct))}
+                        onClick={() => setPaidAmount(Math.round(finalTotal * pct))}
                         className="px-2 py-0.5 rounded text-[10px] font-medium bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-100"
                       >
-                        {pct * 100}% ({formatCurrency(Math.round(calculatedTotal * pct))})
+                        {pct * 100}% ({formatCurrency(Math.round(finalTotal * pct))})
                       </button>
                     ))}
                   </div>
@@ -1920,6 +2150,50 @@ export const CreateOrder: React.FC = () => {
               )}
             </div>
           )}
+
+          {/* KHỐI CHIẾT KHẤU SẢN LƯỢNG (Chính sách S3-01 / S4-01 / SCRUM-491) */}
+          <div className="p-3 bg-emerald-50/70 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/80 rounded-xl space-y-2.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-800 dark:text-emerald-300">
+                <Tag className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                <span>Chiết Khấu Sản Lượng (S3/S4)</span>
+              </div>
+              <span className="text-xs font-black text-emerald-700 dark:text-emerald-300">
+                {totalDiscount > 0 ? `-${formatCurrency(totalDiscount)}` : '0 đ'}
+              </span>
+            </div>
+
+            {/* Chi tiết chiết khấu từng mặt hàng nếu có */}
+            {items.some((i) => (i.discount || 0) > 0) ? (
+              <div className="space-y-1.5 pt-1.5 border-t border-emerald-200/60 dark:border-emerald-800/60">
+                <div className="text-[10px] font-semibold text-emerald-800 dark:text-emerald-300">
+                  Mặt hàng được áp dụng chiết khấu bậc thang:
+                </div>
+                {items
+                  .filter((i) => (i.discount || 0) > 0)
+                  .map((i) => (
+                    <div
+                      key={i.productId}
+                      className="text-[10px] text-emerald-700 dark:text-emerald-400 flex items-center justify-between bg-white/70 dark:bg-slate-900/50 p-1.5 rounded-lg border border-emerald-200/50 dark:border-emerald-800/50"
+                    >
+                      <div className="min-w-0 pr-2">
+                        <p className="font-semibold truncate">{i.name}</p>
+                        <p className="text-[9px] text-slate-500 dark:text-slate-400">
+                          {i.appliedDiscountName || 'Chính sách chiết khấu SL'} (SL: {i.quantity} {i.unit})
+                        </p>
+                      </div>
+                      <span className="font-bold text-emerald-700 dark:text-emerald-300 shrink-0">
+                        -{formatCurrency(i.discount)}
+                      </span>
+                    </div>
+                  ))}
+              </div>
+            ) : (
+              <div className="text-[10px] text-slate-600 dark:text-slate-400 pt-1 border-t border-emerald-200/60 dark:border-emerald-800/60 leading-relaxed">
+                Hệ thống tự động áp dụng <strong>Chiết khấu Sản lượng (CKSL)</strong> theo chính sách S3/S4 khi đạt số lượng bậc thang (từ 10 sản phẩm trở lên nhận 5%, từ 50 sản phẩm nhận 10%).
+              </div>
+            )}
+          </div>
 
           {/* Tóm tắt tiền hàng & Dòng tiền */}
           <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-1.5">
@@ -1930,20 +2204,20 @@ export const CreateOrder: React.FC = () => {
               </span>
             </div>
 
-            {calculatedDiscount > 0 && (
-              <div className="flex items-center justify-between text-emerald-600 dark:text-emerald-400 font-medium">
-                <span className="flex items-center gap-1">
-                  <Sparkles className="w-3.5 h-3.5" />
-                  Chiết khấu sản lượng:
-                </span>
-                <span>-{formatCurrency(calculatedDiscount)}</span>
-              </div>
-            )}
+            <div className="flex items-center justify-between text-emerald-600 dark:text-emerald-400 font-medium">
+              <span className="flex items-center gap-1">
+                <Tag className="w-3.5 h-3.5" />
+                Chiết khấu sản lượng:
+              </span>
+              <span className="font-bold">
+                {totalDiscount > 0 ? `-${formatCurrency(totalDiscount)}` : '0 đ'}
+              </span>
+            </div>
 
             <div className="flex items-center justify-between text-slate-800 dark:text-slate-200 font-bold">
               <span>Tổng giá trị đơn hàng:</span>
               <span className="font-extrabold text-slate-900 dark:text-white">
-                {formatCurrency(calculatedTotal)}
+                {formatCurrency(finalTotal)}
               </span>
             </div>
 
@@ -1974,20 +2248,90 @@ export const CreateOrder: React.FC = () => {
                 {formatCurrency(unpaidAmount)}
               </span>
             </div>
+
+            {/* Desktop Action Buttons: Nằm gọn ngay trong khối quyết toán bên phải (chỉ hiện trên Desktop) */}
+            <div className="hidden lg:flex items-center gap-2 pt-3 border-t border-slate-200 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={handleSaveDraft}
+                disabled={isSavingDraft || isSubmitting || items.length === 0}
+                className="flex-1 flex items-center justify-center gap-1.5 px-3.5 py-2.5 text-xs font-semibold rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 hover:bg-slate-200 disabled:opacity-50 active:scale-95 transition-all shadow-2xs"
+              >
+                <Bookmark className="w-3.5 h-3.5 text-amber-500" />
+                <span>{isSavingDraft ? 'Đang lưu...' : 'Lưu nháp'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleSubmitOrder}
+                disabled={isSubmitting || isSavingDraft || items.length === 0 || Boolean(creditStatus?.isBlocked) || hasExceedingStock}
+                className={`flex-2 flex items-center justify-center gap-1.5 px-4 py-2.5 text-xs font-bold rounded-xl text-white shadow-md transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed ${
+                  items.length === 0
+                    ? 'bg-slate-400 dark:bg-slate-700'
+                    : hasExceedingStock
+                    ? 'bg-rose-600 hover:bg-rose-700 shadow-rose-500/20'
+                    : creditStatus?.isBlocked
+                    ? 'bg-rose-600 hover:bg-rose-700 shadow-rose-500/20'
+                    : creditStatus?.requiresApproval
+                    ? 'bg-amber-600 hover:bg-amber-700 shadow-amber-500/20'
+                    : 'bg-blue-600 hover:bg-blue-700 shadow-blue-500/20'
+                }`}
+                title={
+                  items.length === 0
+                    ? 'Vui lòng thêm sản phẩm vào mục (2) Mặt Hàng để chốt đơn'
+                    : hasExceedingStock
+                    ? `Bị chặn: Có ${exceedingStockItems.length} mặt hàng vượt số lượng tồn khả dụng`
+                    : creditStatus?.isBlocked
+                    ? 'Bị chặn do đại lý có nợ quá hạn'
+                    : creditStatus?.requiresApproval
+                    ? 'Đơn vượt hạn mức - Sẽ chuyển sang Chờ duyệt'
+                    : 'Chốt đơn hàng'
+                }
+              >
+                {items.length === 0 ? (
+                  <>
+                    <Boxes className="w-3.5 h-3.5" />
+                    <span>Chưa có sản phẩm</span>
+                  </>
+                ) : hasExceedingStock ? (
+                  <>
+                    <Ban className="w-3.5 h-3.5" />
+                    <span>Vượt tồn ({exceedingStockItems.length})</span>
+                  </>
+                ) : creditStatus?.isBlocked ? (
+                  <>
+                    <Ban className="w-3.5 h-3.5" />
+                    <span>Bị chặn quá hạn</span>
+                  </>
+                ) : creditStatus?.requiresApproval ? (
+                  <>
+                    <AlertCircle className="w-3.5 h-3.5" />
+                    <span>{isSubmitting ? 'Đang gửi...' : 'Gửi chờ duyệt'}</span>
+                  </>
+                ) : (
+                  <>
+                    <Send className="w-3.5 h-3.5" />
+                    <span>{isSubmitting ? 'Đang gửi...' : 'Chốt đơn'}</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </section>
+      </div>
+      </div>
       </main>
 
-      {/* Sticky Bottom Bar - Ngang hàng và khớp chuẩn với khối bảng trên */}
-      <div className="sticky bottom-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 p-2.5 shadow-xl">
-        <div className="max-w-2xl mx-auto px-3 flex items-center justify-between gap-2">
+      {/* Sticky Bottom Bar - Chỉ hiển thị trên Mobile / Tablet (< 1024px) và giãn full chiều rộng */}
+      <div className="lg:hidden sticky bottom-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 p-2.5 shadow-xl">
+        <div className="w-full px-4 sm:px-6 flex items-center justify-between gap-2">
           {/* Price Preview */}
           <div className="min-w-0">
             <div className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">
               {unpaidAmount > 0 ? 'Ghi nợ công nợ' : 'Đã thanh toán đủ'}
             </div>
             <div className="text-base font-black text-blue-600 dark:text-blue-400 leading-tight truncate">
-              {formatCurrency(calculatedTotal)}
+              {formatCurrency(finalTotal)}
             </div>
             {paidAmount > 0 && (
               <div className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 truncate">
@@ -2002,7 +2346,7 @@ export const CreateOrder: React.FC = () => {
               type="button"
               onClick={handleSaveDraft}
               disabled={isSavingDraft || isSubmitting || items.length === 0}
-              className="flex items-center gap-1.5 px-3 py-2.5 text-xs font-semibold rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 hover:bg-slate-200 disabled:opacity-50 active:scale-95 transition-all"
+              className="flex items-center gap-1.5 px-3 py-2.5 text-xs font-semibold rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 hover:bg-slate-200 disabled:opacity-50 active:scale-95 transition-all shadow-2xs"
             >
               <Bookmark className="w-3.5 h-3.5 text-amber-500" />
               <span>{isSavingDraft ? 'Đang lưu...' : 'Lưu nháp'}</span>
@@ -2066,79 +2410,17 @@ export const CreateOrder: React.FC = () => {
         </div>
       </div>
 
-      {/* Slide-over Drawer: Danh sách Đơn Nháp */}
-      {isDraftsDrawerOpen && (
-        <div className="fixed inset-0 z-50 overflow-hidden bg-slate-900/60 backdrop-blur-xs flex justify-end">
-          <div className="w-full max-w-sm bg-white dark:bg-slate-900 h-full shadow-2xl flex flex-col">
-            {/* Drawer Header */}
-            <div className="p-3.5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Bookmark className="w-4 h-4 text-amber-500" />
-                <h3 className="font-bold text-sm text-slate-900 dark:text-white">
-                  Đơn Hàng Đang Soạn Dở ({draftOrders.length})
-                </h3>
-              </div>
-              <button
-                onClick={() => setIsDraftsDrawerOpen(false)}
-                className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Drawer Body */}
-            <div className="flex-1 overflow-y-auto p-3 space-y-2.5">
-              {isLoadingDrafts ? (
-                <div className="p-8 text-center text-xs text-slate-500">
-                  <RefreshCw className="w-5 h-5 mx-auto animate-spin mb-2" />
-                  Đang tải đơn nháp...
-                </div>
-              ) : draftOrders.length === 0 ? (
-                <div className="p-8 text-center text-slate-400 text-xs space-y-1">
-                  <FileText className="w-8 h-8 mx-auto text-slate-300 dark:text-slate-600" />
-                  <p className="font-medium">Không có đơn nháp nào</p>
-                  <p className="text-[11px] text-slate-400">
-                    Nhấn "Lưu nháp" khi đang tạo đơn để tiếp tục gõ sau.
-                  </p>
-                </div>
-              ) : (
-                draftOrders.map((draft) => (
-                  <div
-                    key={draft.id}
-                    className="p-3 bg-slate-50 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700 rounded-xl space-y-1.5 hover:border-amber-400 transition-all"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-xs text-slate-900 dark:text-white">
-                        {draft.code}
-                      </span>
-                      <span className="text-[10px] font-mono text-slate-500">
-                        {draft.updatedAt || draft.createdAt}
-                      </span>
-                    </div>
-
-                    <div className="text-xs text-slate-700 dark:text-slate-300 truncate">
-                      Đại lý: <strong>{draft.customerName}</strong>
-                    </div>
-
-                    <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-200/60 dark:border-slate-700/60">
-                      <span className="text-slate-500 text-[11px]">
-                        {draft.items.length} món &bull; {formatCurrency(draft.total)}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => handleResumeDraft(draft)}
-                        className="px-2.5 py-1 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 active:scale-95 transition-all"
-                      >
-                        Tiếp tục gõ
-                      </button>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Slide-over Drawer: Danh sách Đơn Nháp có chọn nhiều và xóa */}
+      <DraftOrdersDrawer
+        isOpen={isDraftsDrawerOpen}
+        onClose={() => setIsDraftsDrawerOpen(false)}
+        drafts={draftOrders}
+        onSelectDraft={handleResumeDraft}
+        onDraftsChange={(updated) => setDraftOrders(updated)}
+        currentDraftId={currentDraftId}
+        onCurrentDraftDeleted={handleResetForm}
+      />
     </div>
   );
 };
+

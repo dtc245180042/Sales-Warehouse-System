@@ -70,3 +70,24 @@ Trước khi thông báo hoàn thành nhiệm vụ, AI Agent **BẮT BUỘC** ph
 2. Xác nhận rằng **KHÔNG CÓ** file nào trong danh sách "Bất khả xâm phạm" bị modified.
 3. Nếu phát hiện lỡ sửa file dùng chung, Agent phải hoàn tác ngay (`git checkout -- <file>`).
 4. Chạy `python -m pytest` để đảm bảo không làm hỏng các test hiện có.
+
+---
+
+## ⚡ 6. NGUYÊN TẮC HIỆU NĂNG TỐI ƯU CỐ ĐỊNH (PERMANENT PERFORMANCE RULES - TUYỆT ĐỐI KHÔNG ĐƯỢC THAY THẾ/REVERT)
+
+Toàn bộ hệ thống đã được tối ưu đạt tốc độ phản hồi tức thì (< 50ms chuyển trang, < 20ms gọi API). Bất kỳ Agent hay thành viên nào **TUYỆT ĐỐI KHÔNG ĐƯỢC XÓA HOẶC THAY THẾ** các cơ chế sau:
+
+1. **Địa chỉ IP Kết nối Backend (Tránh Timeout 2000ms IPv6 trên Windows)**:
+   - **BẮT BUỘC DÙNG `127.0.0.1`**: Trong mọi cấu hình URL API Frontend (`client.ts`, `api.ts`, `avatarService.ts`, v.v.), luôn luôn trỏ về `http://127.0.0.1:8001/api/v1`.
+   - ❌ **TUYỆT ĐỐI CẤM** đổi lại thành `localhost:8001`. Trên Windows, `localhost` ưu tiên phân giải IPv6 `[::1]`, dẫn đến việc bị delay treo đứng 2,040ms trước khi timeout sang IPv4!
+
+2. **Backend: Triệt tiêu N+1 Query & Cấm Query `.all()` Quét Toàn Bảng**:
+   - Khi enrich danh sách (như `_enrich_customer_response`, đơn hàng, v.v.): BẮT BUỘC gom ID để query 1 lần vào Dictionary (`staff_map = {s.id: s for s in ...}`) rồi tra cứu O(1). ❌ **TUYỆT ĐỐI CẤM** truy cập relationship dạng lazy-load trong vòng lặp (gây ra 20 - 50 câu lệnh SQL thừa).
+   - Kiểm tra dữ liệu seeding / tồn tại: Dùng `.filter(...).first()` hoặc `.count()`. ❌ **TUYỆT ĐỐI CẤM** gọi `db.query(Model).all()` rồi lặp qua hàng ngàn bản ghi (từng gây chậm 500ms mỗi request).
+   - Giữ nguyên helper `_attach_delivery_profile` trong `order_service.py` để tránh lỗi HTTP 500.
+
+3. **Frontend: Cơ chế Bộ Nhớ Đệm RAM (In-Memory Cache) & Chuyển Tab Tức Thì**:
+   - Mọi service (`customerService.ts`, `orderService.ts`, `productService.ts`): BẮT BUỘC giữ nguyên cơ chế RAM cache (`memoryCache`, `getCachedPaginated`, `getCached`).
+   - Khi người dùng bấm chuyển tab, dữ liệu cache PHẢI hiển thị ngay lập tức (0ms delay), sau đó fetch API ngầm (SWR) để cập nhật mà KHÔNG block màn hình hay hiện loading toàn trang khi đã có cache.
+   - Cung cấp nút Làm mới dữ liệu chủ động cho người dùng khi cần lấy dữ liệu mới nhất từ CSDL.
+

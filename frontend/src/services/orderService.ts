@@ -45,7 +45,7 @@ function mapApiOrder(o: any): Order {
     paymentStatus: o.paymentStatus || o.payment_status || 'paid',
     status: o.status || 'pending',
     staffId: String(o.staffId || o.staff_id || ''),
-    staffName: o.staffName || o.staff_name || '',
+    staffName: o.staffName || o.staff_name || o.customerName || o.customer_name || '',
     note: o.note || undefined,
     requiresApproval: Boolean(o.requiresApproval ?? o.requires_approval ?? false),
     approvalReason: o.approvalReason || o.approval_reason || undefined,
@@ -82,19 +82,55 @@ function toLocalDateTimeString(val?: string): string {
   }
 }
 
+let memoryCacheOrders: Order[] | null = null;
+let lastOrdersFetchTime = 0;
+const ORDERS_CACHE_TTL = 30000; // 30 giây
+let activeOrdersFetchPromise: Promise<Order[]> | null = null;
+
 export const orderService = {
-  getAll: async (): Promise<Order[]> => {
-    try {
-      const res = await apiClient.get('/orders');
-      if (Array.isArray(res.data) && res.data.length > 0) {
-        const list = res.data.map(mapApiOrder);
-        setStorageItem(STORAGE_KEY, list);
-        return list;
-      }
-    } catch (err) {
-      console.warn('[orderService] Backend error, fallback to storage:', err);
+  /** Lấy dữ liệu tức thì từ bộ nhớ cache RAM (0ms) khi chuyển trang qua lại */
+  getCached: (): Order[] => {
+    if (memoryCacheOrders && memoryCacheOrders.length > 0) {
+      return memoryCacheOrders;
     }
-    return getStorageItem<Order[]>(STORAGE_KEY, initialOrders);
+    const cached = getStorageItem<Order[]>(STORAGE_KEY, []);
+    if (cached && cached.length > 0) {
+      memoryCacheOrders = cached;
+      return cached;
+    }
+    return initialOrders;
+  },
+
+  getAll: async (forceRefresh: boolean = false): Promise<Order[]> => {
+    if (!forceRefresh && memoryCacheOrders && memoryCacheOrders.length > 0 && Date.now() - lastOrdersFetchTime < ORDERS_CACHE_TTL) {
+      return memoryCacheOrders;
+    }
+
+    if (activeOrdersFetchPromise && !forceRefresh) {
+      return activeOrdersFetchPromise;
+    }
+
+    activeOrdersFetchPromise = (async () => {
+      try {
+        const res = await apiClient.get('/orders');
+        if (Array.isArray(res.data) && res.data.length > 0) {
+          const list = res.data.map(mapApiOrder);
+          memoryCacheOrders = list;
+          lastOrdersFetchTime = Date.now();
+          setStorageItem(STORAGE_KEY, list);
+          return list;
+        }
+      } catch (err) {
+        console.warn('[orderService] Backend error, fallback to storage:', err);
+      } finally {
+        activeOrdersFetchPromise = null;
+      }
+      const fallback = orderService.getCached();
+      lastOrdersFetchTime = Date.now();
+      return fallback;
+    })();
+
+    return activeOrdersFetchPromise;
   },
 
   getById: async (id: string): Promise<Order | undefined> => {
@@ -149,7 +185,8 @@ export const orderService = {
       const res = await apiClient.post('/orders', payload);
       const created = mapApiOrder(res.data);
       const orders = getStorageItem<Order[]>(STORAGE_KEY, initialOrders);
-      setStorageItem(STORAGE_KEY, [created, ...orders]);
+      memoryCacheOrders = [created, ...(memoryCacheOrders || orders)];
+      setStorageItem(STORAGE_KEY, memoryCacheOrders);
       return created;
     } catch (err: any) {
       console.warn('[orderService] Backend error, creating locally:', err);
@@ -337,6 +374,42 @@ export const orderService = {
       throw err;
     }
   },
+
+  deleteDraft: async (orderId: string): Promise<void> => {
+    try {
+      await apiClient.delete(`/orders/${encodeURIComponent(orderId)}/draft`);
+      if (memoryCacheOrders) {
+        memoryCacheOrders = memoryCacheOrders.filter(
+          (o) => o.id !== orderId && o.code !== orderId
+        );
+      }
+      const orders = getStorageItem<Order[]>(STORAGE_KEY, initialOrders);
+      const filtered = orders.filter((o) => o.id !== orderId && o.code !== orderId);
+      setStorageItem(STORAGE_KEY, filtered);
+    } catch (err: any) {
+      if (err.response?.data?.detail) {
+        throw new Error(err.response.data.detail);
+      }
+      throw err;
+    }
+  },
+
+  deleteDrafts: async (orderIds: string[]): Promise<{ succeeded: string[]; failed: string[] }> => {
+    const results = await Promise.allSettled(
+      orderIds.map((id) => orderService.deleteDraft(id))
+    );
+    const succeeded: string[] = [];
+    const failed: string[] = [];
+    results.forEach((res, index) => {
+      if (res.status === 'fulfilled') {
+        succeeded.push(orderIds[index]);
+      } else {
+        failed.push(orderIds[index]);
+      }
+    });
+    return { succeeded, failed };
+  },
+
 
   updateStatus: async (id: string, status: OrderStatus): Promise<Order> => {
     try {

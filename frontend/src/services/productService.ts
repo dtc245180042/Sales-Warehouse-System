@@ -42,39 +42,84 @@ function mapApiProduct(p: any): Product {
   };
 }
 
+let memoryCacheProducts: Product[] | null = null;
+let lastProductsFetchTime = 0;
+const PRODUCTS_CACHE_TTL = 45000; // 45 giây
+let activeFetchPromise: Promise<Product[]> | null = null;
+
 export const productService = {
-  getAll: async (forceRefresh: boolean = false): Promise<Product[]> => {
-    try {
-      // Hỗ trợ lấy toàn bộ danh mục sản phẩm từ CSDL MySQL (lên tới 10.000 sản phẩm)
-      const res = await apiClient.get('/products', {
-        params: { all_products: true, page_size: 10000 },
-      });
-      const rawList = Array.isArray(res.data)
-        ? res.data
-        : (Array.isArray(res.data?.items) ? res.data.items : null);
-      if (rawList && rawList.length > 0) {
-        const list = rawList.map(mapApiProduct);
-        // Tránh lỗi QuotaExceededError khi danh mục có 5000+ sản phẩm
-        if (list.length <= 500) {
-          try {
-            setStorageItem(STORAGE_KEY, list);
-          } catch {
-            // Quota limit
-          }
-        }
-        return list;
-      }
-    } catch (err) {
-      console.warn('[productService] Backend API offline hoặc lỗi, sử dụng bộ nhớ cục bộ:', err);
+  /** Lấy danh sách sản phẩm tức thì từ RAM cache (0ms) khi chuyển trang */
+  getCached: (): Product[] => {
+    if (memoryCacheProducts && memoryCacheProducts.length > 0) {
+      return memoryCacheProducts;
     }
     const stored = getStorageItem<Product[]>(STORAGE_KEY, initialProducts);
     const cleaned = stored.filter(
-      (p) => !p.id.startsWith('PROD-TRF-') && !p.sku.startsWith('SKU-TRF-') && !p.sku.startsWith('PROD-TRF-')
+      (p) => !String(p?.id || '').startsWith('PROD-TRF-') && !String(p?.sku || '').startsWith('SKU-TRF-') && !String(p?.sku || '').startsWith('PROD-TRF-')
     );
-    return cleaned.map((p) => ({
+    const mapped = cleaned.map((p) => ({
       ...p,
       image: (p.image && !p.image.includes('/images/products/') && !p.image.includes('placeholder')) ? p.image : '',
     }));
+    if (mapped.length > 0) {
+      memoryCacheProducts = mapped;
+      return mapped;
+    }
+    return initialProducts;
+  },
+
+  getAll: async (forceRefresh: boolean = false): Promise<Product[]> => {
+    // Trả về ngay lập tức nếu dữ liệu trong RAM còn tươi (TTL 45s) và không yêu cầu cưỡng chế tải lại
+    if (!forceRefresh && memoryCacheProducts && memoryCacheProducts.length > 0 && Date.now() - lastProductsFetchTime < PRODUCTS_CACHE_TTL) {
+      return memoryCacheProducts;
+    }
+
+    if (activeFetchPromise && !forceRefresh) {
+      return activeFetchPromise;
+    }
+
+    activeFetchPromise = (async () => {
+      try {
+        // Hỗ trợ lấy toàn bộ danh mục sản phẩm từ CSDL MySQL (lên tới 10.000 sản phẩm)
+        const res = await apiClient.get('/products', {
+          params: { all_products: true, page_size: 10000 },
+        });
+        const rawList = Array.isArray(res.data)
+          ? res.data
+          : (Array.isArray(res.data?.items) ? res.data.items : null);
+        if (rawList && rawList.length > 0) {
+          const list = rawList.map(mapApiProduct);
+          memoryCacheProducts = list;
+          lastProductsFetchTime = Date.now();
+          // Tránh lỗi QuotaExceededError khi danh mục có 5000+ sản phẩm
+          if (list.length <= 500) {
+            try {
+              setStorageItem(STORAGE_KEY, list);
+            } catch {
+              // Quota limit
+            }
+          }
+          return list;
+        }
+      } catch (err) {
+        console.warn('[productService] Backend API offline hoặc lỗi, sử dụng bộ nhớ cục bộ:', err);
+      } finally {
+        activeFetchPromise = null;
+      }
+      const stored = getStorageItem<Product[]>(STORAGE_KEY, initialProducts);
+      const cleaned = stored.filter(
+        (p) => !String(p?.id || '').startsWith('PROD-TRF-') && !String(p?.sku || '').startsWith('SKU-TRF-') && !String(p?.sku || '').startsWith('PROD-TRF-')
+      );
+      const result = cleaned.map((p) => ({
+        ...p,
+        image: (p.image && !p.image.includes('/images/products/') && !p.image.includes('placeholder')) ? p.image : '',
+      }));
+      memoryCacheProducts = result;
+      lastProductsFetchTime = Date.now();
+      return result;
+    })();
+
+    return activeFetchPromise;
   },
 
   getById: async (id: string): Promise<Product | undefined> => {

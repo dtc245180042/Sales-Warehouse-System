@@ -1,7 +1,9 @@
+# backend/app/api/inventory_report.py
 from fastapi import APIRouter, Query
 from fastapi.responses import StreamingResponse
 from typing import List, Optional
 import io
+from datetime import datetime
 import pandas as pd
 
 from app.schemas.reports import InventoryReportItem, SlowMovingThresholdConfig, InventoryReportFilter
@@ -83,12 +85,22 @@ def get_inventory_report(
 @router.get("/export-excel")
 def export_inventory_report_excel(
     warehouse_id: Optional[str] = None,
+    category_id: Optional[str] = None,
+    sku: Optional[str] = None,
+    is_slow_moving: Optional[bool] = None,
     threshold_days: int = 30
 ):
-    filters = InventoryReportFilter(warehouse_id=warehouse_id)
+    # SCRUM-830: Áp dụng đúng các điều kiện lọc hiện tại
+    filters = InventoryReportFilter(
+        warehouse_id=warehouse_id,
+        category_id=category_id,
+        sku=sku,
+        is_slow_moving=is_slow_moving
+    )
     config = SlowMovingThresholdConfig(min_days=threshold_days)
     data = calculate_inventory_metrics(filters, config)
     
+    # SCRUM-834: Định dạng mẫu Excel kế toán giữ các cột tồn kho tiêu chuẩn
     export_data = []
     for item in data:
         export_data.append({
@@ -109,7 +121,12 @@ def export_inventory_report_excel(
         df.to_excel(writer, index=False, sheet_name='Báo cáo tồn kho')
     output.seek(0)
     
-    headers = {'Content-Disposition': 'attachment; filename="Bao_Cao_Ton_Kho_Vong_Quay.xlsx"'}
+    # SCRUM-831: Quy ước tên tệp chứa mã kho và ngày thực hiện xuất
+    wh_code = warehouse_id if warehouse_id else "ALL"
+    date_str = datetime.now().strftime("%Y%m%d")
+    filename = f"Bao_Cao_Ton_Kho_{wh_code}_{date_str}.xlsx"
+    
+    headers = {'Content-Disposition': f'attachment; filename="{filename}"'}
     return StreamingResponse(
         output, 
         headers=headers, 

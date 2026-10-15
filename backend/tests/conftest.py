@@ -56,6 +56,7 @@ def cleanup_test_artifacts():
             new_prods = []
         for p in new_prods:
             pid = str(p.id)
+            cleanup_db.execute(text("DELETE FROM product_lots WHERE product_id = :pid"), {"pid": pid})
             cleanup_db.execute(text("DELETE FROM order_items WHERE product_id = :pid"), {"pid": pid})
             cleanup_db.execute(text("DELETE FROM warehouse_stocks WHERE product_id = :pid"), {"pid": pid})
             cleanup_db.execute(text("DELETE FROM product_stock_profiles WHERE product_id = :pid"), {"pid": pid})

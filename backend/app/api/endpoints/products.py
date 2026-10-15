@@ -246,3 +246,27 @@ async def tai_len_anh_san_pham_doc_lap(
         "image_url": f"/static/products/{unique_filename}",
     }
 
+
+from app.schemas.lot import LotTrackingToggleRequest
+from app.services.lot_service import LotService
+
+
+@router.put(
+    "/{product_id}/lot-tracking",
+    status_code=status.HTTP_200_OK,
+    summary="Bật / tắt tính năng quản lý theo lô cho sản phẩm (S6-01)",
+)
+def bat_tat_quan_ly_lo_san_pham(
+    product_id: str,
+    data: LotTrackingToggleRequest,
+    current_user: User = Depends(lay_nguoi_dung_hien_tai),
+    db: Session = Depends(lay_phien_db),
+):
+    """
+    Bật hoặc tắt tính năng quản lý theo lô (manage_by_lot).
+    - Khi bật: Nếu có tồn kho vật lý tại bất kỳ kho nào, bắt buộc phải có thông tin lô đầu kỳ initial_lots cho kho đó.
+    - Khi tắt: Chặn tắt nếu còn tồn kho trong các lô hàng.
+    """
+    return LotService.toggle_lot_tracking(db=db, product_id=product_id, request=data)
+
+

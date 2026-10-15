@@ -49,6 +49,8 @@ class Product(Base):
     status = Column(String(50), nullable=False, default=ProductStatus.ACTIVE, index=True)  # Trạng thái kinh doanh
     is_active = Column(Boolean, nullable=False, default=True)         # Trạng thái hoạt động
     has_transactions = Column(Boolean, nullable=False, default=False) # Đã phát sinh giao dịch trong hệ thống
+    manage_by_lot = Column(Boolean, nullable=False, default=False)    # Quản lý theo lô & HSD (S6-01)
+    near_expiry_threshold_days = Column(Integer, nullable=False, default=30) # Ngưỡng cảnh báo cận date (ngày)
 
     created_at = Column(DateTime, default=func.now(), nullable=False)
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), nullable=False)
@@ -70,6 +72,10 @@ try:
                 _conn.execute(text("ALTER TABLE products ADD COLUMN stock INTEGER DEFAULT 100"))
             if "min_stock" not in _cols:
                 _conn.execute(text("ALTER TABLE products ADD COLUMN min_stock INTEGER DEFAULT 10"))
+            if "manage_by_lot" not in _cols:
+                _conn.execute(text("ALTER TABLE products ADD COLUMN manage_by_lot BOOLEAN DEFAULT 0"))
+            if "near_expiry_threshold_days" not in _cols:
+                _conn.execute(text("ALTER TABLE products ADD COLUMN near_expiry_threshold_days INTEGER DEFAULT 30"))
             _conn.commit()
 except Exception:
     pass

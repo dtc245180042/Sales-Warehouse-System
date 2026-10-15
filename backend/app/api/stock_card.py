@@ -1,3 +1,4 @@
+# backend/app/api/stock_card.py
 from fastapi import APIRouter, Query
 from typing import List, Optional
 from datetime import datetime
@@ -15,9 +16,9 @@ mock_stock_ledger = [
 @router.get("", response_model=List[StockCardItem])
 def get_stock_card(
     product_id: str = Query(..., description="Mã sản phẩm"),
-    warehouse_id: Optional[str] = Query(None, description="Lọc theo mã kho"),
-    from_date: Optional[str] = Query(None, description="Lọc từ ngày YYYY-MM-DD"),
-    to_date: Optional[str] = Query(None, description="Lọc đến ngày YYYY-MM-DD")
+    warehouse_id: Optional[str] = None,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None
 ):
     results = []
     sorted_entries = sorted(mock_stock_ledger, key=lambda x: x["time"])
@@ -25,11 +26,11 @@ def get_stock_card(
     for entry in sorted_entries:
         if entry["product_id"] != product_id:
             continue
-        if warehouse_id and entry["warehouse_id"] != warehouse_id:
+        if warehouse_id and isinstance(warehouse_id, str) and entry["warehouse_id"] != warehouse_id:
             continue
-        if from_date and entry["time"] < from_date:
+        if from_date and isinstance(from_date, str) and entry["time"] < from_date:
             continue
-        if to_date and entry["time"] > to_date:
+        if to_date and isinstance(to_date, str) and entry["time"] > to_date:
             continue
             
         results.append(StockCardItem(

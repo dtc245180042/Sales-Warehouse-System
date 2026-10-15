@@ -30,6 +30,8 @@ import {
   ArrowUpRight,
   History,
   Clock,
+  RotateCcw,
+  FileCheck2,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { UserRole } from '../../types/User';
@@ -143,6 +145,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
           path: '/sales/pos',
           icon: <Store className="w-5 h-5" />,
           allowedRoles: ALL_ROLES.filter((r) => r !== 'User'),
+        },
+        {
+          title: 'Phiếu trả hàng',
+          path: '/returns',
+          icon: <RotateCcw className="w-5 h-5" />,
+          allowedRoles: ALL_ROLES,
+        },
+        {
+          title: 'Chứng từ giảm nợ',
+          path: '/credit-notes',
+          icon: <FileCheck2 className="w-5 h-5" />,
+          allowedRoles: ALL_ROLES,
         },
       ],
     },

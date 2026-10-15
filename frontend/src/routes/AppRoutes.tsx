@@ -75,6 +75,10 @@ import { StockTransferList } from '../pages/inventory/StockTransferList';
 import { StockTransferCreate } from '../pages/inventory/StockTransferCreate';
 import { StockTransferDetail } from '../pages/inventory/StockTransferDetail';
 
+// Sprint 8 Pages: Trả hàng & Giảm nợ (S8-01, S8-02)
+import { ReturnListPage } from '../pages/returns/ReturnListPage';
+import { CreditNoteListPage } from '../pages/credit-notes/CreditNoteListPage';
+
 // All 7 business roles allowed in Sprint 1 & 2 backoffice
 const ALL_BACKOFFICE_ROLES: UserRole[] = [
   'Admin',
@@ -624,6 +628,26 @@ export const AppRoutes: React.FC = () => {
           element={
             <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
               <OrderDetail />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* ============================================================ */}
+        {/* SPRINT 8: TRẢ HÀNG & CHỨNG TỪ GIẢM NỢ (S8-01 & S8-02)        */}
+        {/* ============================================================ */}
+        <Route
+          path="/returns"
+          element={
+            <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
+              <ReturnListPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/credit-notes"
+          element={
+            <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
+              <CreditNoteListPage />
             </ProtectedRoute>
           }
         />

@@ -1,4 +1,3 @@
-# backend/app/api/inventory_report.py
 from fastapi import APIRouter, Query
 from fastapi.responses import StreamingResponse
 from typing import List, Optional

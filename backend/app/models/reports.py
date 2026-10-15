@@ -1,7 +1,8 @@
-# app/models/reports.py
 from sqlalchemy import Column, String, Integer, Float, Boolean, DateTime
+from sqlalchemy.orm import declarative_base
 from sqlalchemy.sql import func
-from app.db.base_class import Base
+
+Base = declarative_base()
 
 class InventoryReportConfig(Base):
     __tablename__ = "inventory_report_configs"

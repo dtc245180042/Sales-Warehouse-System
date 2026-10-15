@@ -1,5 +1,5 @@
 # backend/app/api/inventory_turnover.py
-from fastapi import APIRouter, Query, HTTPException
+from fastapi import APIRouter, Query
 from typing import List, Optional
 from app.schemas.inventory_turnover import InventoryTurnoverResponse
 
@@ -34,22 +34,26 @@ mock_data = [
 
 @router.get("", response_model=List[InventoryTurnoverResponse])
 def get_inventory_turnover_report(
-    warehouse_id: Optional[str] = Query(None, description="Lọc theo mã kho"),
-    product_id: Optional[str] = Query(None, description="Lọc theo mã sản phẩm"),
-    from_date: Optional[str] = Query(None, description="Lọc từ ngày YYYY-MM-DD"),
-    to_date: Optional[str] = Query(None, description="Lọc đến ngày YYYY-MM-DD")
+    warehouse_id: Optional[str] = None,
+    product_id: Optional[str] = None,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None
 ):
     results = []
+    
+    # Ép kiểu an toàn nếu nhận Query object từ FastAPI
+    p_id = str(product_id) if product_id and isinstance(product_id, str) else None
+    w_id = str(warehouse_id) if warehouse_id and isinstance(warehouse_id, str) else None
+
     for item in mock_data:
-        if warehouse_id and item["warehouse_id"] != warehouse_id:
+        if w_id and item["warehouse_id"] != w_id:
             continue
-        if product_id and item["product_id"] != product_id:
+        if p_id and item["product_id"] != p_id:
             continue
             
         avg_qty = (item["beginning_qty"] + item["ending_qty"]) / 2.0
         avg_val = avg_qty * item["unit_cost"]
         
-        # Xử lý an toàn tránh lỗi chia cho 0
         ratio = round(item["cogs_amount"] / avg_val, 2) if avg_val > 0 else 0.0
         days = round(365.0 / ratio, 1) if ratio > 0 else 0.0
         

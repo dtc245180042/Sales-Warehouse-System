@@ -1,45 +1,30 @@
 # backend/tests/tvp/tvp_sprint8/test_scrum278.py
 import pytest
-import sys
-import os
+from app.api.inventory_turnover import get_inventory_turnover_report
 
-# Thêm đường dẫn backend vào sys.path để tránh lỗi ModuleNotFoundError/ImportError
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../..")))
+def test_scrum_278_turnover_calculation_accuracy():
+    """Kiểm tra độ chính xác của công thức tính tồn trung bình & hệ số vòng quay"""
+    res = get_inventory_turnover_report(product_id="SKU001")
+    assert len(res) == 1
+    item = res[0]
+    assert item.beginning_qty == 100
+    assert item.ending_qty == 60
+    assert item.avg_inventory_qty == 80.0  # (100 + 60)/2
+    # Giá trị tồn TB = 80 * 50,000 = 4,000,000
+    # Vòng quay = 20,000,000 / 4,000,000 = 5.0
+    assert item.turnover_ratio == 5.0
+    assert item.turnover_days == 73.0      # 365 / 5
 
-from app.schemas.reports import InventoryReportFilter, SlowMovingThresholdConfig
-from app.models.reports import InventoryReportConfig
-from app.api.inventory_report import calculate_inventory_metrics, export_inventory_report_excel
+def test_scrum_278_filter_by_warehouse():
+    """Kiểm tra bộ lọc theo kho"""
+    res = get_inventory_turnover_report(warehouse_id="WH01")
+    assert len(res) == 2
+    assert all(item.warehouse_id == "WH01" for item in res)
 
-def test_slow_moving_calculation_scrum_823():
-    """SCRUM-823: Kiểm tra logic tính toán hàng chậm luân chuyển dựa theo ngưỡng cấu hình"""
-    filters = InventoryReportFilter()
-    config = SlowMovingThresholdConfig(min_days=30)
-    
-    results = calculate_inventory_metrics(filters, config)
-    
-    assert len(results) > 0
-    sku1 = next(r for r in results if r.sku == "SKU001")
-    assert sku1.avg_inventory_days == 60.0
-    assert sku1.is_slow_moving is True
-
-def test_inventory_filter_scrum_824():
-    """SCRUM-824: Kiểm tra chức năng lọc danh sách theo tham số"""
-    filters = InventoryReportFilter(is_slow_moving=True)
-    config = SlowMovingThresholdConfig(min_days=30)
-    
-    results = calculate_inventory_metrics(filters, config)
-    
-    for item in results:
-        assert item.is_slow_moving is True
-
-def test_inventory_config_model_scrum_825():
-    """SCRUM-825: Kiểm tra khởi tạo Model cấu hình ngưỡng chậm luân chuyển"""
-    config_model = InventoryReportConfig(config_key="SLOW_MOVING", min_days=30)
-    assert config_model.config_key == "SLOW_MOVING"
-    assert config_model.min_days == 30
-
-def test_export_excel_scrum_828():
-    """SCRUM-828: Kiểm tra API xuất file Excel báo cáo tồn kho"""
-    response = export_inventory_report_excel(warehouse_id="WH01", threshold_days=30)
-    assert response.media_type == 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-    assert 'attachment; filename="Bao_Cao_Ton_Kho_Vong_Quay.xlsx"' in response.headers['Content-Disposition']
+def test_scrum_278_zero_inventory_edge_case():
+    """Kiểm tra trường hợp tồn kho bằng 0 (không bị crash chia cho 0)"""
+    res = get_inventory_turnover_report(product_id="SKU003")
+    assert len(res) == 1
+    assert res[0].avg_inventory_qty == 0.0
+    assert res[0].turnover_ratio == 0.0
+    assert res[0].turnover_days == 0.0

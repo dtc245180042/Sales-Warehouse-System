@@ -5,7 +5,24 @@ import {
   ProductStockCardResponse,
 } from '../types/StockLedger';
 
+import { getStorageItem, setStorageItem } from './storage';
+
+const STORAGE_KEY_BALANCES = 'kv_stock_balances';
+let memoryCacheBalances: StockBalanceListResponse | null = null;
+
 export const stockLedgerService = {
+  getCachedBalances: (): StockBalanceListResponse | null => {
+    if (memoryCacheBalances && memoryCacheBalances.items && memoryCacheBalances.items.length > 0) {
+      return memoryCacheBalances;
+    }
+    const stored = getStorageItem<StockBalanceListResponse | null>(STORAGE_KEY_BALANCES, null);
+    if (stored && stored.items && stored.items.length > 0) {
+      memoryCacheBalances = stored;
+      return stored;
+    }
+    return null;
+  },
+
   getBalances: async (params?: {
     page?: number;
     size?: number;
@@ -14,10 +31,21 @@ export const stockLedgerService = {
     stock_status?: string;
     search?: string;
   }): Promise<StockBalanceListResponse> => {
-    const res = await apiClient.get<StockBalanceListResponse>('/stock-ledger/balances', {
-      params,
-    });
-    return res.data;
+    try {
+      const res = await apiClient.get<StockBalanceListResponse>('/stock-ledger/balances', {
+        params,
+      });
+      if (res.data) {
+        memoryCacheBalances = res.data;
+        setStorageItem(STORAGE_KEY_BALANCES, res.data);
+        return res.data;
+      }
+    } catch (err) {
+      console.warn('[stockLedgerService] Lỗi kết nối backend balances:', err);
+    }
+    const fallback = stockLedgerService.getCachedBalances();
+    if (fallback) return fallback;
+    return { items: [], total: 0, page: 1, size: 20, total_pages: 1 };
   },
 
   getEntries: async (params?: {

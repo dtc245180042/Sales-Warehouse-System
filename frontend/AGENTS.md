@@ -50,3 +50,18 @@ Mỗi khi AI Agent thực hiện bất kỳ thay đổi nào:
 ## 4. BẢO MẬT & DỮ LIỆU
 - Không hardcode mật khẩu người dùng hoặc token nhạy cảm trong commit.
 - Đối với dữ liệu Mock: Tập trung vào thư mục `src/utils/` hoặc `src/mock/`, tránh khai báo rải rác trong các file UI.
+
+---
+
+## 5. BẢO TỒN HIỆU NĂNG & CACHE (PERMANENT PERFORMANCE RULES - TUYỆT ĐỐI KHÔNG ĐƯỢC THAY THẾ/REVERT)
+Hệ thống frontend đã được tối ưu đạt tốc độ chuyển trang tức thời (< 50ms):
+1. **Địa chỉ Endpoint API**:
+   - Mọi cấu hình URL (trong `src/api/client.ts`, `src/services/api.ts`, `src/services/avatarService.ts`, v.v.) BẮT BUỘC dùng `http://127.0.0.1:8001/api/v1`.
+   - ❌ **TUYỆT ĐỐI CẤM** đổi thành `localhost:8001` (trên Windows gây lỗi timeout IPv6 `[::1]` 2,040ms mỗi request).
+2. **Bộ nhớ đệm RAM (In-Memory Cache) & Instant Navigation**:
+   - Các service như `customerService.ts`, `orderService.ts`, `productService.ts` đã có cơ chế lưu cache trong bộ nhớ.
+   - Khi chuyển trang/tab: BẮT BUỘC đọc dữ liệu cache để hiển thị ngay lập tức (0ms chờ), rồi gọi API ngầm cập nhật dữ liệu (SWR).
+   - ❌ **TUYỆT ĐỐI CẤM** xóa bỏ tầng cache này hoặc ép màn hình hiện spinner/loading toàn trang che khuất giao diện khi đã có dữ liệu cache.
+3. **Nút Làm Mới Thủ Công (Refresh Button)**:
+   - Các trang danh sách (như Đơn hàng, Khách hàng) luôn duy trì nút "Làm mới" (`forceRefresh = true` / xóa cache tương ứng) để người dùng chủ động kéo dữ liệu mới nhất từ backend khi cần.
+

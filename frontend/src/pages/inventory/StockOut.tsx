@@ -66,13 +66,17 @@ export const StockOut: React.FC = () => {
   const { user } = useAuth();
   const { showToast } = useToast();
 
-  const [products, setProducts] = useState<Product[]>([]);
+  const [products, setProducts] = useState<Product[]>(() => productService.getCached());
   const [reason, setReason] = useState<StockOutReason>('sale');
   const [warehouse, setWarehouse] = useState('Kho Tổng TP. HCM');
   const [destinationWarehouse, setDestinationWarehouse] = useState('Kho Showroom Quận 1');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [note, setNote] = useState('');
-  const [items, setItems] = useState<StockOutItemState[]>([]);
+  const [items, setItems] = useState<StockOutItemState[]>(() => {
+    const cached = productService.getCached();
+    const inStock = cached.filter((p) => p.stock > 0);
+    return inStock.length > 0 ? [buildItemState(inStock[0])] : [];
+  });
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -80,9 +84,7 @@ export const StockOut: React.FC = () => {
     productService.getAll().then((data) => {
       setProducts(data);
       const inStock = data.filter((p) => p.stock > 0);
-      if (inStock.length > 0) {
-        setItems([buildItemState(inStock[0])]);
-      }
+      setItems((prev) => (prev.length === 0 && inStock.length > 0 ? [buildItemState(inStock[0])] : prev));
     });
   }, []);
 

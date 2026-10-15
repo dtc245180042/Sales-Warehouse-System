@@ -288,26 +288,35 @@ export function DataTable<T extends Record<string, any>>({
             {/* Các nút bấm trực tiếp số trang */}
             <div className="flex items-center gap-1">
               {totalPages <= 7 ? (
-                Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
-                  <button
-                    key={p}
-                    onClick={() => handlePageChange(p)}
-                    className={`w-7 h-7 rounded-lg text-xs font-semibold transition-colors ${
-                      p === validPage
-                        ? 'bg-indigo-600 text-white shadow-sm'
-                        : 'border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
-                    }`}
-                  >
-                    {p}
-                  </button>
-                ))
+                Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => {
+                  const isActive = p === validPage;
+                  return (
+                    <button
+                      key={p}
+                      onClick={() => handlePageChange(p)}
+                      data-page={p}
+                      data-active={isActive ? 'true' : 'false'}
+                      aria-current={isActive ? 'page' : undefined}
+                      className={`w-7 h-7 rounded-lg text-xs font-semibold transition-colors ${
+                        isActive
+                          ? 'bg-indigo-600 text-white shadow-sm ring-2 ring-indigo-300 dark:ring-indigo-700'
+                          : 'border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  );
+                })
               ) : (
                 <>
                   <button
                     onClick={() => handlePageChange(1)}
+                    data-page={1}
+                    data-active={1 === validPage ? 'true' : 'false'}
+                    aria-current={1 === validPage ? 'page' : undefined}
                     className={`w-7 h-7 rounded-lg text-xs font-semibold transition-colors ${
                       1 === validPage
-                        ? 'bg-indigo-600 text-white shadow-sm'
+                        ? 'bg-indigo-600 text-white shadow-sm ring-2 ring-indigo-300 dark:ring-indigo-700'
                         : 'border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
                     }`}
                   >
@@ -316,25 +325,34 @@ export function DataTable<T extends Record<string, any>>({
                   {validPage > 3 && <span className="text-slate-400 px-0.5">...</span>}
                   {Array.from({ length: totalPages }, (_, i) => i + 1)
                     .filter((p) => p !== 1 && p !== totalPages && Math.abs(p - validPage) <= 1)
-                    .map((p) => (
-                      <button
-                        key={p}
-                        onClick={() => handlePageChange(p)}
-                        className={`w-7 h-7 rounded-lg text-xs font-semibold transition-colors ${
-                          p === validPage
-                            ? 'bg-indigo-600 text-white shadow-sm'
-                            : 'border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
-                        }`}
-                      >
-                        {p}
-                      </button>
-                    ))}
+                    .map((p) => {
+                      const isActive = p === validPage;
+                      return (
+                        <button
+                          key={p}
+                          onClick={() => handlePageChange(p)}
+                          data-page={p}
+                          data-active={isActive ? 'true' : 'false'}
+                          aria-current={isActive ? 'page' : undefined}
+                          className={`w-7 h-7 rounded-lg text-xs font-semibold transition-colors ${
+                            isActive
+                              ? 'bg-indigo-600 text-white shadow-sm ring-2 ring-indigo-300 dark:ring-indigo-700'
+                              : 'border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                          }`}
+                        >
+                          {p}
+                        </button>
+                      );
+                    })}
                   {validPage < totalPages - 2 && <span className="text-slate-400 px-0.5">...</span>}
                   <button
                     onClick={() => handlePageChange(totalPages)}
+                    data-page={totalPages}
+                    data-active={totalPages === validPage ? 'true' : 'false'}
+                    aria-current={totalPages === validPage ? 'page' : undefined}
                     className={`w-7 h-7 rounded-lg text-xs font-semibold transition-colors ${
                       totalPages === validPage
-                        ? 'bg-indigo-600 text-white shadow-sm'
+                        ? 'bg-indigo-600 text-white shadow-sm ring-2 ring-indigo-300 dark:ring-indigo-700'
                         : 'border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
                     }`}
                   >

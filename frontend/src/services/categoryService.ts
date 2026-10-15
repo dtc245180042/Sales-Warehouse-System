@@ -53,25 +53,69 @@ function buildMockTree(categories: Category[]): CategoryTree[] {
   return roots;
 }
 
+let memoryCacheCategoryTree: CategoryTree[] | null = null;
+let memoryCacheCategories: Category[] | null = null;
+let lastTreeFetchTime = 0;
+let lastListFetchTime = 0;
+const CATEGORIES_CACHE_TTL = 60000; // 60 giây
+
 export const categoryService = {
+  /** Lấy cây danh mục tức thì từ RAM cache (0ms) */
+  getCachedTree: (): CategoryTree[] => {
+    if (memoryCacheCategoryTree && memoryCacheCategoryTree.length > 0) {
+      return memoryCacheCategoryTree;
+    }
+    const mock = buildMockTree(DEFAULT_CATEGORIES);
+    memoryCacheCategoryTree = mock;
+    return mock;
+  },
+
+  /** Lấy danh sách phẳng danh mục tức thì từ RAM cache (0ms) */
+  getCachedList: (): Category[] => {
+    if (memoryCacheCategories && memoryCacheCategories.length > 0) {
+      return memoryCacheCategories;
+    }
+    memoryCacheCategories = DEFAULT_CATEGORIES;
+    return DEFAULT_CATEGORIES;
+  },
+
   // Lấy danh mục nhóm hàng dạng cây nhiều cấp (tối thiểu 3 cấp)
-  getTree: async (): Promise<CategoryTree[]> => {
+  getTree: async (forceRefresh: boolean = false): Promise<CategoryTree[]> => {
+    if (!forceRefresh && memoryCacheCategoryTree && memoryCacheCategoryTree.length > 0 && Date.now() - lastTreeFetchTime < CATEGORIES_CACHE_TTL) {
+      return memoryCacheCategoryTree;
+    }
     try {
       const response = await apiClient.get('/categories/tree');
       if (Array.isArray(response.data) && response.data.length > 0) {
+        memoryCacheCategoryTree = response.data;
+        lastTreeFetchTime = Date.now();
         return response.data;
       }
     } catch (err) {
       console.warn('[categoryService] Backend API offline hoặc lỗi, sử dụng cây danh mục mẫu:', err);
     }
-    return buildMockTree(DEFAULT_CATEGORIES);
+    const fallback = buildMockTree(DEFAULT_CATEGORIES);
+    memoryCacheCategoryTree = fallback;
+    lastTreeFetchTime = Date.now();
+    return fallback;
   },
 
   // Lấy danh sách phẳng (có lọc theo parent_id, level, keyword)
-  getList: async (params?: { parent_id?: number; level?: number; keyword?: string }): Promise<Category[]> => {
+  getList: async (
+    params?: { parent_id?: number; level?: number; keyword?: string },
+    forceRefresh: boolean = false
+  ): Promise<Category[]> => {
+    const isDefault = !params || Object.keys(params).length === 0;
+    if (isDefault && !forceRefresh && memoryCacheCategories && memoryCacheCategories.length > 0 && Date.now() - lastListFetchTime < CATEGORIES_CACHE_TTL) {
+      return memoryCacheCategories;
+    }
     try {
       const response = await apiClient.get('/categories', { params });
       if (Array.isArray(response.data) && response.data.length > 0) {
+        if (isDefault) {
+          memoryCacheCategories = response.data;
+          lastListFetchTime = Date.now();
+        }
         return response.data;
       }
     } catch (err) {
@@ -87,6 +131,10 @@ export const categoryService = {
     if (params?.keyword) {
       const kw = params.keyword.toLowerCase();
       list = list.filter((c) => c.name.toLowerCase().includes(kw) || c.code.toLowerCase().includes(kw));
+    }
+    if (isDefault) {
+      memoryCacheCategories = list;
+      lastListFetchTime = Date.now();
     }
     return list;
   },

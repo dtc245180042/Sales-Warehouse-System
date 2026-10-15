@@ -78,19 +78,51 @@ function mapApiHistory(h: any): InventoryHistoryRecord {
   };
 }
 
+let memoryCacheStockIn: StockInReceipt[] | null = null;
+let memoryCacheStockOut: StockOutReceipt[] | null = null;
+
 export const inventoryService = {
+  /** Lấy danh sách phiếu nhập kho tức thì từ RAM cache (0ms) */
+  getCachedStockIn: (): StockInReceipt[] => {
+    if (memoryCacheStockIn && memoryCacheStockIn.length > 0) {
+      return memoryCacheStockIn;
+    }
+    const cached = getStorageItem<StockInReceipt[]>(KEYS.STOCK_IN, []);
+    if (cached && cached.length > 0) {
+      memoryCacheStockIn = cached;
+      return cached;
+    }
+    return initialStockInReceipts;
+  },
+
+  /** Lấy danh sách phiếu xuất kho tức thì từ RAM cache (0ms) */
+  getCachedStockOut: (): StockOutReceipt[] => {
+    if (memoryCacheStockOut && memoryCacheStockOut.length > 0) {
+      return memoryCacheStockOut;
+    }
+    const cached = getStorageItem<StockOutReceipt[]>(KEYS.STOCK_OUT, []);
+    if (cached && cached.length > 0) {
+      memoryCacheStockOut = cached;
+      return cached;
+    }
+    return initialStockOutReceipts;
+  },
+
   getStockInReceipts: async (): Promise<StockInReceipt[]> => {
     try {
       const res = await apiClient.get('/inventory/stock-in');
       if (Array.isArray(res.data) && res.data.length > 0) {
         const list = res.data.map(mapApiStockIn);
+        memoryCacheStockIn = list;
         setStorageItem(KEYS.STOCK_IN, list);
         return list;
       }
     } catch (err) {
       console.warn('[inventoryService] Backend error, fallback to storage:', err);
     }
-    return getStorageItem<StockInReceipt[]>(KEYS.STOCK_IN, initialStockInReceipts);
+    const fallback = getStorageItem<StockInReceipt[]>(KEYS.STOCK_IN, initialStockInReceipts);
+    memoryCacheStockIn = fallback;
+    return fallback;
   },
 
   createStockInReceipt: async (
@@ -164,13 +196,16 @@ export const inventoryService = {
       const res = await apiClient.get('/inventory/stock-out');
       if (Array.isArray(res.data) && res.data.length > 0) {
         const list = res.data.map(mapApiStockOut);
+        memoryCacheStockOut = list;
         setStorageItem(KEYS.STOCK_OUT, list);
         return list;
       }
     } catch (err) {
       console.warn('[inventoryService] Backend error, fallback to storage:', err);
     }
-    return getStorageItem<StockOutReceipt[]>(KEYS.STOCK_OUT, initialStockOutReceipts);
+    const fallback = getStorageItem<StockOutReceipt[]>(KEYS.STOCK_OUT, initialStockOutReceipts);
+    memoryCacheStockOut = fallback;
+    return fallback;
   },
 
   createStockOutReceipt: async (

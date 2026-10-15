@@ -562,8 +562,9 @@ const ProductRow: React.FC<ProductRowProps> = ({ product, hasConfig, isSelected,
 export const ProductUnitPage: React.FC = () => {
   const { showToast } = useToast();
 
-  const [products, setProducts] = useState<Product[]>([]);
-  const [loadingProducts, setLoadingProducts] = useState(true);
+  // Nạp danh sách sản phẩm tức thì từ cache RAM (0ms)
+  const [products, setProducts] = useState<Product[]>(() => productService.getCached());
+  const [loadingProducts, setLoadingProducts] = useState<boolean>(() => productService.getCached().length === 0);
   const [search, setSearch] = useState('');
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [unitConfig, setUnitConfig] = useState<ProductUnitConfig | null>(null);

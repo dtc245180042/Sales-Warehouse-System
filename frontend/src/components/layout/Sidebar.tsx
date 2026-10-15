@@ -111,7 +111,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     'User',
   ];
 
-  const menuSections: { heading?: string; items: MenuItem[] }[] = [
+  const menuSections = useMemo<{ heading?: string; items: MenuItem[] }[]>(() => [
     {
       heading: 'BẢNG ĐIỀU KHIỂN',
       items: [
@@ -133,7 +133,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           allowedRoles: ALL_ROLES,
         },
         {
-          title: 'Tạo đơn hiện trường',
+          title: 'Tạo đơn hàng',
           path: '/orders/create',
           icon: <ShoppingCart className="w-5 h-5" />,
           allowedRoles: ALL_ROLES,
@@ -367,7 +367,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         },
       ],
     },
-  ];
+  ], []);
 
   const allTopLevelPaths = useMemo(() => {
     return menuSections
@@ -477,7 +477,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all outline-none focus:outline-none ${isItemActive
                       ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/25'
                       : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60'
-                    }`}
+                      }`}
                     title={isCollapsed ? item.title : undefined}
                     aria-current={isItemActive ? 'page' : undefined}
                   >

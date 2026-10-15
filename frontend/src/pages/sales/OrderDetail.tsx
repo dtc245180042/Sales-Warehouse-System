@@ -165,7 +165,7 @@ export const OrderDetail: React.FC = () => {
   return (
     <PageContainer
       title={`Chi Tiết Đơn Hàng: ${order.code}`}
-      subtitle={`Ngày tạo: ${formatDate(order.createdAt)} | Phụ trách: ${order.staffName}`}
+      subtitle={`Ngày tạo: ${formatDate(order.createdAt)} | Người tạo: ${order.staffName || order.customerName || 'Khách vãng lai'}${(!order.staffName || order.staffName === order.customerName) ? ' (Khách tự đặt)' : ''}`}
       actions={
         <div className="flex items-center gap-2">
           <Link to="/orders">
@@ -465,30 +465,44 @@ export const OrderDetail: React.FC = () => {
               <User className="w-4 h-4 text-indigo-500" />
               Người Lập Đơn Hàng
             </h3>
-            <div className="flex items-center gap-3.5 pt-1">
-              <img
-                src={
-                  user && (user.name === order.staffName || String(user.id) === String(order.staffId)) && user.avatar
-                    ? user.avatar
-                    : `https://ui-avatars.com/api/?name=${encodeURIComponent(order.staffName)}&background=6366f1&color=fff&size=128`
-                }
-                alt={order.staffName}
-                className="w-12 h-12 rounded-full object-cover ring-2 ring-indigo-500/30 shadow-md shrink-0"
-              />
-              <div>
-                <p className="text-sm font-bold text-slate-900 dark:text-white">
-                  {order.staffName}
-                </p>
-                <div className="flex items-center gap-2 mt-0.5">
-                  <span className="text-xs text-indigo-600 dark:text-indigo-400 font-medium">
-                    Nhân viên bán hàng
-                  </span>
-                  <span className="text-[11px] text-slate-400 font-mono">
-                    ({order.staffId})
-                  </span>
+            {(() => {
+              const hasStaff = Boolean(order.staffName && order.staffName.trim() && order.staffName !== order.customerName);
+              const creatorName = (order.staffName && order.staffName.trim()) || (order.customerName && order.customerName.trim()) || 'Khách vãng lai';
+              const isCustomer = !hasStaff;
+              const isCurrentUser = user && (user.name === creatorName || String(user.id) === String(order.staffId));
+              const avatarBg = isCustomer ? '0284c7' : '6366f1';
+              const avatarSrc = isCurrentUser && user?.avatar
+                ? user.avatar
+                : `https://ui-avatars.com/api/?name=${encodeURIComponent(creatorName)}&background=${avatarBg}&color=fff&size=128`;
+
+              return (
+                <div className="flex items-center gap-3.5 pt-1">
+                  <img
+                    src={avatarSrc}
+                    alt={creatorName}
+                    className={`w-12 h-12 rounded-full object-cover ring-2 ${isCustomer ? 'ring-sky-500/30' : 'ring-indigo-500/30'} shadow-md shrink-0`}
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${encodeURIComponent(creatorName)}&background=${avatarBg}&color=fff&size=128`;
+                    }}
+                  />
+                  <div>
+                    <p className="text-sm font-bold text-slate-900 dark:text-white">
+                      {creatorName}
+                    </p>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className={`text-xs ${isCustomer ? 'text-sky-600 dark:text-sky-400' : 'text-indigo-600 dark:text-indigo-400'} font-medium`}>
+                        {isCustomer ? 'Khách hàng (Tự đặt trực tuyến)' : 'Nhân viên bán hàng'}
+                      </span>
+                      {hasStaff && order.staffId && (
+                        <span className="text-[11px] text-slate-400 font-mono">
+                          ({order.staffId})
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
+              );
+            })()}
           </div>
 
           {/* Customer info */}

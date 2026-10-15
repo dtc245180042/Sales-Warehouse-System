@@ -634,9 +634,10 @@ def test_order_dispatch_api_integration_succeeds_when_within_limit():
     cust = db.query(Customer).first()
     cust_id = cust.id
 
-    # Đặt hạn mức 20 triệu
+    # Đặt hạn mức lớn hơn dư nợ thực tế hiện tại ít nhất 20 triệu để đảm bảo đủ hạn mức xuất đơn
+    actual_debt = calculate_actual_customer_debt(db, cust_id)
     prof = get_or_create_credit_profile(db, cust_id)
-    prof.credit_limit = 20000000
+    prof.credit_limit = actual_debt + 20000000
     prof.max_debt_days = 30
     db.commit()
 

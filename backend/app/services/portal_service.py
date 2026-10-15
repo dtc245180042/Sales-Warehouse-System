@@ -463,6 +463,14 @@ def create_portal_order(
     staff_id = str(assignment.assigned_staff_id) if (assignment and assignment.assigned_staff_id) else None
     is_unassigned = bool(staff_id is None)
 
+    staff_name = None
+    if assignment and assignment.staff:
+        staff_name = assignment.staff.full_name or assignment.staff.username
+    elif getattr(locked_customer, "assigned_sales_rep", None):
+        staff_name = locked_customer.assigned_sales_rep
+    else:
+        staff_name = locked_customer.name
+
     # 7. Tạo Order
     order_id = f"ORD-{uuid.uuid4().hex[:8].upper()}"
     date_prefix = datetime.now().strftime("%Y%m%d")
@@ -479,7 +487,7 @@ def create_portal_order(
         status="pending",
         is_unassigned=is_unassigned,
         staff_id=staff_id,
-        staff_name=None,
+        staff_name=staff_name,
         subtotal=calc["subtotal"],
         discount=calc["total_discount"],
         tax=0.0,

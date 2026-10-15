@@ -4,6 +4,7 @@ import { getStorageItem, setStorageItem } from './storage';
 import { apiClient } from '../api/client';
 
 const STORAGE_KEY = 'kv_agents';
+let memoryCacheAgents: Agent[] | null = null;
 
 function mapCustomerToAgent(c: any): Agent {
   const defaultLimit =
@@ -53,12 +54,26 @@ function mapCustomerToAgent(c: any): Agent {
 }
 
 export const agentService = {
+  /** Lấy danh sách đại lý tức thì từ RAM cache (0ms) */
+  getCached: (): Agent[] => {
+    if (memoryCacheAgents && memoryCacheAgents.length > 0) {
+      return memoryCacheAgents;
+    }
+    const cached = getStorageItem<Agent[]>(STORAGE_KEY, []);
+    if (cached && cached.length > 0) {
+      memoryCacheAgents = cached;
+      return cached;
+    }
+    return initialAgents;
+  },
+
   getAll: async (): Promise<Agent[]> => {
     try {
       const res = await apiClient.get('/customers', { params: { page_size: 500 } });
       const rawList = res.data?.items || (Array.isArray(res.data) ? res.data : []);
       if (rawList.length > 0) {
         const mapped = rawList.map(mapCustomerToAgent);
+        memoryCacheAgents = mapped;
         setStorageItem(STORAGE_KEY, mapped);
         return mapped;
       }
@@ -67,7 +82,7 @@ export const agentService = {
     }
 
     const list = getStorageItem<Agent[]>(STORAGE_KEY, initialAgents);
-    return list.map((a) => {
+    const mappedFallback = list.map((a) => {
       const defaultLimit =
         a.customerGroup === 'platinum'
           ? 200000000
@@ -85,6 +100,8 @@ export const agentService = {
         availableCredit: a.availableCredit ?? Math.max(0, creditLimit - outstandingDebt),
       };
     });
+    memoryCacheAgents = mappedFallback;
+    return mappedFallback;
   },
 
   getById: async (id: string): Promise<Agent | undefined> => {

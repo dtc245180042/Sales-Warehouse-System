@@ -15,7 +15,7 @@ import { validateVNPhoneNumber } from '../utils/phoneUtils';
 
 // Create base Axios instance (ready for real backend URL)
 export const apiClient = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8001/api/v1',
+  baseURL: import.meta.env.VITE_API_URL || 'http://127.0.0.1:8001/api/v1',
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json',
@@ -278,8 +278,8 @@ export const api = {
             paymentMethod: o.paymentMethod || o.payment_method || 'transfer',
             paymentStatus: o.paymentStatus || o.payment_status || 'paid',
             status: o.status || 'pending',
-            staffId: o.staffId || o.staff_id || 'USR-004',
-            staffName: o.staffName || o.staff_name || '',
+            staffId: o.staffId || o.staff_id || '',
+            staffName: o.staffName || o.staff_name || o.customerName || o.customer_name || '',
             note: o.note || '',
             createdAt: toLocalDateTimeString(o.createdAt || o.created_at),
             updatedAt: toLocalDateTimeString(o.updatedAt || o.updated_at),

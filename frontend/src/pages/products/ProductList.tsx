@@ -115,12 +115,35 @@ export const ProductList: React.FC = () => {
   const urlCategory = searchParams.get('category') || 'all';
   const urlStatus = searchParams.get('status') || 'all';
 
-  const [products, setProducts] = useState<Product[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
+  // Nạp tức thì từ RAM cache (0ms) khi chuyển trang
+  const [products, setProducts] = useState<Product[]>(() => productService.getCached());
+  const [loading, setLoading] = useState<boolean>(() => productService.getCached().length === 0);
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [search, setSearch] = useState<string>(urlSearch);
+  const cachedTree = useMemo(() => categoryService.getCachedTree(), []);
+  const initialCategoryOpts = useMemo(() => {
+    const opts: { id: string; name: string; label: string }[] = [];
+    const traverse = (nodes: CategoryTree[], depth: number = 0) => {
+      nodes.forEach((n) => {
+        const prefix = '  '.repeat(depth);
+        const tag = n.level === 1 ? '📁 [Ngành]' : n.level === 2 ? '📁 [Nhóm]' : '📄 [Tiểu nhóm]';
+        opts.push({
+          id: String(n.id),
+          name: n.name,
+          label: `${prefix}${tag} ${n.name}`,
+        });
+        if (n.children && n.children.length > 0) {
+          traverse(n.children, depth + 1);
+        }
+      });
+    };
+    traverse(cachedTree);
+    return opts;
+  }, [cachedTree]);
+
+  const [categoryTree, setCategoryTree] = useState<CategoryTree[]>(cachedTree);
+  const [categoryFilterOptions, setCategoryFilterOptions] = useState<{ id: string; name: string; label: string }[]>(initialCategoryOpts);
   const [selectedCategory, setSelectedCategory] = useState<string>(urlCategory);
-  const [categoryTree, setCategoryTree] = useState<CategoryTree[]>([]);
-  const [categoryFilterOptions, setCategoryFilterOptions] = useState<{ id: string; name: string; label: string }[]>([]);
   const [selectedStatus, setSelectedStatus] = useState<string>(urlStatus);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
@@ -165,18 +188,21 @@ export const ProductList: React.FC = () => {
   const [blockedProduct, setBlockedProduct] = useState<Product | null>(null);
   const [bulkBlockedProducts, setBulkBlockedProducts] = useState<Product[]>([]);
 
-  const loadProducts = async () => {
-    setLoading(true);
+  const loadProducts = async (showSpinner: boolean = false) => {
+    if (showSpinner) setLoading(true);
+    setIsSyncing(true);
     try {
       const data = await productService.getAll();
       setProducts(data);
     } finally {
       setLoading(false);
+      setIsSyncing(false);
     }
   };
 
   useEffect(() => {
-    loadProducts();
+    const hasCache = products.length > 0;
+    loadProducts(!hasCache);
 
     // Tải danh mục ngành hàng / nhóm hàng dạng cây 3 cấp (SCRUM-214)
     categoryService.getTree().then((tree) => {
@@ -572,6 +598,7 @@ export const ProductList: React.FC = () => {
       <DataTable
         data={filteredProducts}
         columns={columns}
+        defaultPageSize={20}
         keyExtractor={(p) => p.id}
         selectable
         selectedIds={selectedIds}

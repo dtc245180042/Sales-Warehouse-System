@@ -52,7 +52,10 @@ export const SupplierList: React.FC = () => {
   const urlSearch = searchParams.get('q') || '';
   const urlStatus = (searchParams.get('status') as 'all' | 'active' | 'inactive') || 'all';
 
-  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  // Nạp tức thì từ RAM cache (0ms) khi chuyển trang
+  const [suppliers, setSuppliers] = useState<Supplier[]>(() => supplierService.getCached());
+  const [isInitialLoading, setIsInitialLoading] = useState<boolean>(() => supplierService.getCached().length === 0);
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [search, setSearch] = useState(urlSearch);
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>(urlStatus);
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -102,22 +105,32 @@ export const SupplierList: React.FC = () => {
     status: 'active' as 'active' | 'inactive',
   });
 
-  const loadSuppliers = async () => {
-    const data = await supplierService.getAll();
-    setSuppliers(data);
+  const loadSuppliers = async (showSpinner: boolean = false) => {
+    if (showSpinner) setIsInitialLoading(true);
+    setIsSyncing(true);
+    try {
+      const data = await supplierService.getAll();
+      setSuppliers(data);
 
-    // Batch-check which suppliers have import receipts
-    const map: Record<string, boolean> = {};
-    await Promise.all(
-      data.map(async (s) => {
-        map[s.id] = await supplierService.hasImportReceipts(s.id);
-      })
-    );
-    setHasReceiptsMap(map);
+      // Batch-check which suppliers have import receipts
+      const map: Record<string, boolean> = {};
+      await Promise.all(
+        data.map(async (s) => {
+          map[s.id] = await supplierService.hasImportReceipts(s.id);
+        })
+      );
+      setHasReceiptsMap(map);
+    } catch (err) {
+      console.warn('[SupplierList] Lỗi tải dữ liệu ngầm:', err);
+    } finally {
+      setIsInitialLoading(false);
+      setIsSyncing(false);
+    }
   };
 
   useEffect(() => {
-    loadSuppliers();
+    const hasCache = suppliers.length > 0;
+    loadSuppliers(!hasCache);
   }, []);
 
   const filteredSuppliers = useMemo(() => {

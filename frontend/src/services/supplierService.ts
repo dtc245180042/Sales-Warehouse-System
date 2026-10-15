@@ -4,6 +4,7 @@ import { getStorageItem, setStorageItem } from './storage';
 import { apiClient } from '../api/client';
 
 const STORAGE_KEY = 'kv_suppliers';
+let memoryCacheSuppliers: Supplier[] | null = null;
 
 function mapApiSupplier(s: any): Supplier {
   return {
@@ -25,18 +26,34 @@ function mapApiSupplier(s: any): Supplier {
 }
 
 export const supplierService = {
+  /** Lấy danh sách nhà cung cấp tức thì từ RAM cache (0ms) */
+  getCached: (): Supplier[] => {
+    if (memoryCacheSuppliers && memoryCacheSuppliers.length > 0) {
+      return memoryCacheSuppliers;
+    }
+    const cached = getStorageItem<Supplier[]>(STORAGE_KEY, []);
+    if (cached && cached.length > 0) {
+      memoryCacheSuppliers = cached;
+      return cached;
+    }
+    return initialSuppliers;
+  },
+
   getAll: async (): Promise<Supplier[]> => {
     try {
       const res = await apiClient.get('/suppliers');
       if (Array.isArray(res.data) && res.data.length > 0) {
         const list = res.data.map(mapApiSupplier);
+        memoryCacheSuppliers = list;
         setStorageItem(STORAGE_KEY, list);
         return list;
       }
     } catch (err) {
       console.warn('[supplierService] Backend error, fallback to storage:', err);
     }
-    return getStorageItem<Supplier[]>(STORAGE_KEY, initialSuppliers);
+    const fallback = getStorageItem<Supplier[]>(STORAGE_KEY, initialSuppliers);
+    memoryCacheSuppliers = fallback;
+    return fallback;
   },
 
   getById: async (id: string): Promise<Supplier | undefined> => {

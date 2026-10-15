@@ -482,7 +482,7 @@ def test_05_reject_action_requires_comment_and_does_not_reserve_stock():
     sp = db.query(ProductStockProfile).filter_by(product_id=prod_id).first()
     assert sp.stock == 10
 
-    hist = db.query(OrderApprovalHistory).filter_by(order_id=order_id).first()
+    hist = db.query(OrderApprovalHistory).filter_by(order_id=order_id).order_by(OrderApprovalHistory.id.desc()).first()
     assert hist is not None
     assert hist.action == "REJECT"
     assert "nợ tồn đọng" in hist.comment
@@ -557,7 +557,7 @@ def test_06_return_action_requires_comment_and_does_not_reserve_stock():
     sp = db.query(ProductStockProfile).filter_by(product_id=prod_id).first()
     assert sp.stock == 15
 
-    hist = db.query(OrderApprovalHistory).filter_by(order_id=order_id).first()
+    hist = db.query(OrderApprovalHistory).filter_by(order_id=order_id).order_by(OrderApprovalHistory.id.desc()).first()
     assert hist is not None
     assert hist.action == "RETURN"
     assert "thu trước tối thiểu 50%" in hist.comment

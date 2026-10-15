@@ -214,6 +214,17 @@ def pricing_fixtures():
     db.add_all([tier1, tier2])
     db.commit()
 
+    # Tạm thời vô hiệu hóa các chính sách ALL_PRODUCTS khác để đảm bảo tính cô lập cho test
+    other_policies = db.query(VolumeDiscountPolicy).filter(
+        VolumeDiscountPolicy.is_active == True,
+        VolumeDiscountPolicy.applied_scope == VolumeDiscountScope.ALL_PRODUCTS
+    ).all()
+    other_policy_ids = [p.id for p in other_policies]
+    for p in other_policies:
+        p.is_active = False
+    if other_policies:
+        db.commit()
+
     data = {
         "prod1": prod1,
         "prod2": prod2,
@@ -231,6 +242,9 @@ def pricing_fixtures():
         db.close()
         cleanup_db = SessionLocal()
         try:
+            for opid in other_policy_ids:
+                cleanup_db.execute(text("UPDATE volume_discount_policies SET is_active = 1 WHERE id = :opid"), {"opid": opid})
+
             p_ids = [str(prod1.id), str(prod2.id), str(prod_no_pl.id)]
             c_ids = [str(cus_t1.id), str(cus_t2.id), str(cus_no_pl.id)]
             pl_ids = [str(pl_t1.id), str(pl_t2.id)]

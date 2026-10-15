@@ -39,9 +39,12 @@ export const InventoryOverview: React.FC = () => {
   const [page, setPage] = useState(1);
   const [pageSize] = useState(20);
 
-  const [balances, setBalances] = useState<StockBalanceItem[]>([]);
-  const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(false);
+  // Nạp tức thì từ RAM cache (0ms) khi chuyển trang
+  const cachedBalances = stockLedgerService.getCachedBalances();
+  const [balances, setBalances] = useState<StockBalanceItem[]>(() => cachedBalances?.items || []);
+  const [total, setTotal] = useState(() => cachedBalances?.total || 0);
+  const [loading, setLoading] = useState<boolean>(() => !cachedBalances || cachedBalances.items.length === 0);
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
 
   // Modal Thẻ kho
   const [selectedStockCardProductId, setSelectedStockCardProductId] = useState<string | null>(null);
@@ -53,8 +56,9 @@ export const InventoryOverview: React.FC = () => {
     setStatusFilter(urlStatus);
   }, [urlSearch, urlWarehouse, urlStatus]);
 
-  const loadData = useCallback(async () => {
-    setLoading(true);
+  const loadData = useCallback(async (showSpinner: boolean = false) => {
+    if (showSpinner) setLoading(true);
+    setIsSyncing(true);
     try {
       let whId: number | undefined = undefined;
       if (warehouseFilter === '1' || warehouseFilter === 'Kho Tổng Hà Nội') whId = 1;
@@ -77,11 +81,13 @@ export const InventoryOverview: React.FC = () => {
       showToast('Không thể tải dữ liệu sổ tồn kho từ máy chủ', 'error');
     } finally {
       setLoading(false);
+      setIsSyncing(false);
     }
   }, [page, pageSize, warehouseFilter, statusFilter, search, showToast]);
 
   useEffect(() => {
-    loadData();
+    const hasCache = balances.length > 0;
+    loadData(!hasCache);
   }, [loadData]);
 
   const handleSearchChange = (newSearch: string) => {
@@ -371,6 +377,7 @@ export const InventoryOverview: React.FC = () => {
         <DataTable
           data={balances}
           columns={columns}
+          loading={loading}
           keyExtractor={(item) => `${item.product_id}-${item.warehouse_id}`}
           filterComponent={
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 w-full">

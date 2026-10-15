@@ -15,6 +15,7 @@ import {
   LogOut,
   RefreshCw,
   X,
+  ChevronLeft,
   ChevronRight,
   MapPin,
   Phone,
@@ -490,6 +491,59 @@ export const PortalOrdersPage: React.FC = () => {
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {/* Thanh phân trang chuẩn 20 dòng/trang */}
+        {!loading && orders.length > 0 && (
+          <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-3 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs text-xs">
+            <div className="text-slate-500">
+              Hiển thị <span className="font-bold text-slate-800 dark:text-slate-200">{(page - 1) * limit + 1}</span> -{' '}
+              <span className="font-bold text-slate-800 dark:text-slate-200">{Math.min(page * limit, total)}</span> trong tổng số{' '}
+              <span className="font-bold text-indigo-600 dark:text-indigo-400">{total}</span> đơn hàng (20 đơn/trang)
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+                disabled={page <= 1}
+                className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                title="Trang trước"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+
+              <div className="flex items-center gap-1">
+                {Array.from({ length: Math.max(1, Math.ceil(total / limit)) }, (_, i) => i + 1).map((p) => {
+                  const isActive = p === page;
+                  return (
+                    <button
+                      key={p}
+                      onClick={() => setPage(p)}
+                      data-page={p}
+                      data-active={isActive ? 'true' : 'false'}
+                      aria-current={isActive ? 'page' : undefined}
+                      className={`w-7 h-7 rounded-lg text-xs font-semibold transition ${
+                        isActive
+                          ? 'bg-indigo-600 text-white shadow-sm ring-2 ring-indigo-300 dark:ring-indigo-700'
+                          : 'border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <button
+                onClick={() => setPage((prev) => Math.min(Math.ceil(total / limit), prev + 1))}
+                disabled={page >= Math.ceil(total / limit)}
+                className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                title="Trang sau"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
           </div>
         )}
       </main>

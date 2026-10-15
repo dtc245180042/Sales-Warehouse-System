@@ -22,3 +22,9 @@ Mục tiêu: Đảm bảo nhiều AI Agent làm việc song song trên các task
 4. **Thông báo lỗi HTTPException, comment, docstring**: Viết bằng TIẾNG VIỆT rõ nghĩa.
 5. **Kiến trúc 3 tầng**: Router chỉ kiểm tra quyền và schema -> gọi Service xử lý logic và DB -> Model định nghĩa bảng.
 6. Trước khi kết thúc nhiệm vụ, kiểm tra `git status` và chạy `python -m pytest` để đảm bảo 100% test pass.
+
+## HIỆU NĂNG & TỐI ƯU HÓA CỐ ĐỊNH (PERMANENT PERFORMANCE RULES)
+1. **Triệt tiêu N+1 Query**: Khi trả về danh sách, phải gom ID để query quan hệ trong 1 lần (dùng Dictionary O(1)), TUYỆT ĐỐI KHÔNG truy cập relationship lặp từng dòng.
+2. **Cấm Query Toàn Bảng Không Giới Hạn**: Không dùng `db.query(...).all()` trên các bảng lớn (Customer, Order) để kiểm tra dữ liệu hay seeding; phải dùng `.filter(...).first()`.
+3. **Endpoint URL**: Luôn thống nhất dùng `127.0.0.1` thay vì `localhost` để triệt tiêu độ trễ 2000ms phân giải IPv6 trên Windows.
+

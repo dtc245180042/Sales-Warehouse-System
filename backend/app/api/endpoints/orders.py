@@ -211,3 +211,19 @@ def copy_order_to_draft(
         order_id=order_id,
         current_user=current_user,
     )
+
+
+@router.delete("/{order_id}/draft")
+@router.delete("/{order_id}")
+def delete_draft_order(
+    order_id: str,
+    db: Session = Depends(lay_phien_db),
+    current_user: Optional[User] = Depends(lay_nguoi_dung_tuy_chon),
+):
+    """Xóa vĩnh viễn đơn hàng nháp đang soạn dở (chỉ cho phép khi status == 'draft')."""
+    return order_service.delete_draft_order(
+        db=db,
+        order_id=order_id,
+        current_user=current_user,
+    )
+

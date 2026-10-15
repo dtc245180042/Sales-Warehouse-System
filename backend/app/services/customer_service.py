@@ -106,8 +106,15 @@ SEED_CUSTOMERS = [
 ]
 
 
+_seed_customers_checked = False
+
+
 def ensure_seed_customers(db: Session):
     """Đảm bảo dữ liệu mẫu và tự động bổ sung region, assigned_sales_rep nếu chưa có."""
+    global _seed_customers_checked
+    if _seed_customers_checked:
+        return
+    _seed_customers_checked = True
     if db.query(Customer).count() == 0:
         for c in SEED_CUSTOMERS:
             cust = Customer(**c)
@@ -121,30 +128,27 @@ def ensure_seed_customers(db: Session):
                 db.add(CustomerAssignment(customer_id=cust.id))
         db.commit()
     else:
-        # Bổ sung dữ liệu khu vực và người phụ trách cho các bản ghi cũ chưa có
-        customers = db.query(Customer).all()
-        updated = False
-        sample_regions = ["Miền Bắc", "Miền Trung", "Miền Nam", "Tây Nguyên"]
-        sample_reps = [
-            "Lê Thị Nhân Viên Kinh Doanh",
-            "Nguyễn Văn Giám Đốc Kinh Doanh",
-            "Trần Quản Trị Hệ Thống"
-        ]
-        for idx, cus in enumerate(customers):
-            if not cus.region:
-                # Gán theo địa chỉ hoặc xoay vòng
-                addr = (cus.address or "").lower()
-                if "hà nội" in addr or "bắc" in addr:
-                    cus.region = "Miền Bắc"
-                elif "đà nẵng" in addr or "huế" in addr or "trung" in addr:
-                    cus.region = "Miền Trung"
-                else:
-                    cus.region = sample_regions[idx % len(sample_regions)]
-                updated = True
-            if not cus.assigned_sales_rep:
-                cus.assigned_sales_rep = sample_reps[idx % len(sample_reps)]
-                updated = True
-        if updated:
+        # Chỉ truy vấn các bản ghi thực sự thiếu dữ liệu để tối ưu tốc độ (< 5ms)
+        missing = db.query(Customer).filter(or_(Customer.region.is_(None), Customer.assigned_sales_rep.is_(None))).first()
+        if missing:
+            customers = db.query(Customer).filter(or_(Customer.region.is_(None), Customer.assigned_sales_rep.is_(None))).all()
+            sample_regions = ["Miền Bắc", "Miền Trung", "Miền Nam", "Tây Nguyên"]
+            sample_reps = [
+                "Lê Thị Nhân Viên Kinh Doanh",
+                "Nguyễn Văn Giám Đốc Kinh Doanh",
+                "Trần Quản Trị Hệ Thống"
+            ]
+            for idx, cus in enumerate(customers):
+                if not cus.region:
+                    addr = (cus.address or "").lower()
+                    if "hà nội" in addr or "bắc" in addr:
+                        cus.region = "Miền Bắc"
+                    elif "đà nẵng" in addr or "huế" in addr or "trung" in addr:
+                        cus.region = "Miền Trung"
+                    else:
+                        cus.region = sample_regions[idx % len(sample_regions)]
+                if not cus.assigned_sales_rep:
+                    cus.assigned_sales_rep = sample_reps[idx % len(sample_reps)]
             try:
                 db.commit()
             except Exception:
@@ -198,26 +202,42 @@ def _get_dynamic_customer_stats(db: Session, customer_id: str) -> Tuple[int, flo
     return int(orders_count), float(total_spent), last_order_date
 
 
-def _enrich_customer_response(db: Session, customer: Customer) -> CustomerResponse:
+def _enrich_customer_response(
+    db: Session,
+    customer: Customer,
+    stats_tuple: Optional[Tuple[int, float, Optional[str]]] = None,
+    assignment: Optional[CustomerAssignment] = None,
+    credit_profile: Optional[CustomerCreditProfile] = None,
+    staff: Optional[User] = None,
+) -> CustomerResponse:
     """Bổ sung dữ liệu người phụ trách, hạn mức công nợ và số liệu đơn hàng động."""
-    orders_count, total_spent, last_order_date = _get_dynamic_customer_stats(db, customer.id)
+    if stats_tuple is not None:
+        orders_count, total_spent, last_order_date = stats_tuple
+    else:
+        orders_count, total_spent, last_order_date = _get_dynamic_customer_stats(db, customer.id)
     
     # Đọc người phụ trách từ bảng phụ customer_assignments
     assigned_staff_id = None
     assigned_staff_name = None
     assigned_staff_phone = None
     assigned_at = None
-    assignment = db.query(CustomerAssignment).filter(CustomerAssignment.customer_id == customer.id).first()
+    
+    if assignment is None:
+        assignment = db.query(CustomerAssignment).filter(CustomerAssignment.customer_id == customer.id).first()
+        
     if assignment and assignment.assigned_staff_id:
         assigned_staff_id = str(assignment.assigned_staff_id)
-        if assignment.staff:
+        if staff:
+            assigned_staff_name = staff.full_name or staff.username
+            assigned_staff_phone = staff.phone_number
+        elif getattr(assignment, "staff", None):
             assigned_staff_name = assignment.staff.full_name or assignment.staff.username
             assigned_staff_phone = assignment.staff.phone_number
         else:
-            staff = db.query(User).filter(User.id == assignment.assigned_staff_id).first()
-            if staff:
-                assigned_staff_name = staff.full_name or staff.username
-                assigned_staff_phone = staff.phone_number
+            staff_obj = db.query(User).filter(User.id == assignment.assigned_staff_id).first()
+            if staff_obj:
+                assigned_staff_name = staff_obj.full_name or staff_obj.username
+                assigned_staff_phone = staff_obj.phone_number
         if assignment.assigned_at:
             assigned_at = assignment.assigned_at.strftime("%Y-%m-%d %H:%M:%S")
 
@@ -225,7 +245,8 @@ def _enrich_customer_response(db: Session, customer: Customer) -> CustomerRespon
     credit_limit = None
     max_debt_days = None
     current_debt = None
-    credit_profile = db.query(CustomerCreditProfile).filter(CustomerCreditProfile.customer_id == customer.id).first()
+    if credit_profile is None:
+        credit_profile = db.query(CustomerCreditProfile).filter(CustomerCreditProfile.customer_id == customer.id).first()
     if credit_profile:
         credit_limit = credit_profile.credit_limit
         max_debt_days = credit_profile.max_debt_days
@@ -297,8 +318,18 @@ def check_sales_rep_scope(db: Session, customer_id: str, current_user: Optional[
             )
 
 
+_cached_filter_options: Optional[Dict[str, List[str]]] = None
+_last_filter_options_time: float = 0.0
+
+
 def get_filter_options(db: Session) -> Dict[str, List[str]]:
     """Lấy danh sách các giá trị bộ lọc đại lý đang có trong hệ thống (SCRUM-229)."""
+    global _cached_filter_options, _last_filter_options_time
+    import time
+    now = time.time()
+    if _cached_filter_options and (now - _last_filter_options_time < 300):
+        return _cached_filter_options
+
     ensure_seed_customers(db)
 
     # Lấy danh sách khu vực
@@ -322,12 +353,15 @@ def get_filter_options(db: Session) -> Dict[str, List[str]]:
     # Danh sách trạng thái chuẩn
     statuses = ["active", "inactive", "locked"]
 
-    return {
+    result = {
         "regions": regions,
         "customer_groups": groups,
         "sales_reps": reps,
         "statuses": statuses,
     }
+    _cached_filter_options = result
+    _last_filter_options_time = now
+    return result
 
 
 def get_all_customers(
@@ -429,6 +463,72 @@ def get_all_customers(
     # Sắp xếp mặc định theo mã đại lý tăng dần
     query = query.order_by(Customer.code.asc())
 
+    def _batch_enrich(cust_list: List[Customer]) -> List[CustomerResponse]:
+        if not cust_list:
+            return []
+        c_ids = [c.id for c in cust_list]
+
+        # 1. Gom nhóm số đơn và tổng tiền từ orders
+        stats_map: Dict[str, Tuple[int, float, Optional[str]]] = {}
+        try:
+            stats_rows = (
+                db.query(
+                    Order.customer_id,
+                    func.count(Order.id),
+                    func.coalesce(func.sum(Order.total), 0.0),
+                )
+                .filter(Order.customer_id.in_(c_ids), Order.status != "cancelled")
+                .group_by(Order.customer_id)
+                .all()
+            )
+            for cid, cnt, sm in stats_rows:
+                stats_map[str(cid)] = (int(cnt), float(sm), None)
+        except Exception:
+            pass
+
+        # 2. Gom nhóm hồ sơ phân công (CustomerAssignment)
+        assign_map: Dict[str, CustomerAssignment] = {}
+        staff_ids = set()
+        try:
+            assigns = db.query(CustomerAssignment).filter(CustomerAssignment.customer_id.in_(c_ids)).all()
+            for a in assigns:
+                assign_map[str(a.customer_id)] = a
+                if a.assigned_staff_id:
+                    staff_ids.add(a.assigned_staff_id)
+        except Exception:
+            pass
+
+        # 3. Gom nhóm nhân viên phụ trách (User)
+        staff_map: Dict[int, User] = {}
+        if staff_ids:
+            try:
+                users = db.query(User).filter(User.id.in_(list(staff_ids))).all()
+                for u in users:
+                    staff_map[u.id] = u
+            except Exception:
+                pass
+
+        # 4. Gom nhóm hồ sơ công nợ (CustomerCreditProfile)
+        credit_map: Dict[str, CustomerCreditProfile] = {}
+        try:
+            cps = db.query(CustomerCreditProfile).filter(CustomerCreditProfile.customer_id.in_(c_ids)).all()
+            for cp in cps:
+                credit_map[str(cp.customer_id)] = cp
+        except Exception:
+            pass
+
+        return [
+            _enrich_customer_response(
+                db,
+                c,
+                stats_tuple=stats_map.get(str(c.id), (0, 0.0, None)),
+                assignment=assign_map.get(str(c.id)),
+                credit_profile=credit_map.get(str(c.id)),
+                staff=staff_map.get(assign_map[str(c.id)].assigned_staff_id) if str(c.id) in assign_map and assign_map[str(c.id)].assigned_staff_id else None,
+            )
+            for c in cust_list
+        ]
+
     # 6. Phân trang nếu được yêu cầu
     if page is not None or page_size is not None:
         total = query.count()
@@ -438,7 +538,7 @@ def get_all_customers(
         customers = query.offset(offset).limit(ps).all()
         total_pages = max(1, math.ceil(total / ps))
         return {
-            "items": [_enrich_customer_response(db, c) for c in customers],
+            "items": _batch_enrich(customers),
             "total": total,
             "page": p,
             "page_size": ps,
@@ -446,7 +546,7 @@ def get_all_customers(
         }
 
     customers = query.all()
-    return [_enrich_customer_response(db, c) for c in customers]
+    return _batch_enrich(customers)
 
 
 def get_customer_by_id(

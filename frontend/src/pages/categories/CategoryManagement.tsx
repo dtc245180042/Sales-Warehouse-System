@@ -55,15 +55,31 @@ const formatShortCurrency = (amount: number): string => {
 
 export const CategoryManagement: React.FC = () => {
   const { showToast } = useToast();
-  const [categoriesTree, setCategoriesTree] = useState<CategoryTree[]>([]);
-  const [flatCategories, setFlatCategories] = useState<Category[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  // Nạp tức thì từ RAM cache (0ms) khi chuyển trang
+  const cachedTree = useMemo(() => categoryService.getCachedTree(), []);
+  const cachedFlat = useMemo(() => categoryService.getCachedList(), []);
+  const cachedOrders = useMemo(() => orderService.getCached(), []);
+
+  const [categoriesTree, setCategoriesTree] = useState<CategoryTree[]>(() => cachedTree);
+  const [flatCategories, setFlatCategories] = useState<Category[]>(() => cachedFlat);
+  const [isLoading, setIsLoading] = useState<boolean>(() => cachedTree.length === 0);
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [searchKeyword, setSearchKeyword] = useState<string>('');
-  const [expandedNodeIds, setExpandedNodeIds] = useState<Set<number>>(new Set());
+  const [expandedNodeIds, setExpandedNodeIds] = useState<Set<number>>(() => {
+    const set = new Set<number>();
+    const traverse = (nodes: CategoryTree[]) => {
+      nodes.forEach((n) => {
+        set.add(n.id);
+        if (n.children && n.children.length > 0) traverse(n.children);
+      });
+    };
+    traverse(cachedTree);
+    return set;
+  });
 
   // Tab chuyển đổi chế độ xem: 'products' (quản lý sản phẩm & chuyển nhóm) | 'analytics' (phân tích doanh số ngành hàng)
   const [activeTab, setActiveTab] = useState<'products' | 'analytics'>('products');
-  const [orders, setOrders] = useState<Order[]>([]);
+  const [orders, setOrders] = useState<Order[]>(() => cachedOrders);
 
   // Nhóm hàng đang được chọn để xem danh sách sản phẩm
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
@@ -91,9 +107,10 @@ export const CategoryManagement: React.FC = () => {
   const [categoryToDelete, setCategoryToDelete] = useState<Category | null>(null);
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
 
-  // Load danh mục dạng cây và dạng phẳng kèm dữ liệu đơn hàng
-  const loadData = async (expandAll: boolean = false) => {
-    setIsLoading(true);
+  // Load danh mục dạng cây và dạng phẳng kèm dữ liệu đơn hàng (chạy ngầm nếu đã có cache)
+  const loadData = async (expandAll: boolean = false, showSpinner: boolean = false) => {
+    if (showSpinner) setIsLoading(true);
+    setIsSyncing(true);
     try {
       const [treeData, flatData, ordersData] = await Promise.all([
         categoryService.getTree(),
@@ -131,6 +148,7 @@ export const CategoryManagement: React.FC = () => {
       showToast(err.message || 'Không thể tải danh sách nhóm hàng', 'error', 'Lỗi tải dữ liệu');
     } finally {
       setIsLoading(false);
+      setIsSyncing(false);
     }
   };
 
@@ -147,7 +165,8 @@ export const CategoryManagement: React.FC = () => {
   };
 
   useEffect(() => {
-    loadData();
+    const hasCache = categoriesTree.length > 0;
+    loadData(false, !hasCache);
   }, []);
 
   // 1. Bản đồ doanh số theo từng sản phẩm (tính từ đơn hàng thực tế hoặc mẫu)

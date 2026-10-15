@@ -76,13 +76,16 @@ export const StockIn: React.FC = () => {
   const { user } = useAuth();
   const { showToast } = useToast();
 
-  const [products, setProducts] = useState<Product[]>([]);
+  const [products, setProducts] = useState<Product[]>(() => productService.getCached());
   const [supplierId, setSupplierId] = useState(initialSuppliers[0].id);
   const [warehouseId, setWarehouseId] = useState<number>(1);
   const [receiptCode, setReceiptCode] = useState(`PNK-${Date.now().toString().slice(-6)}`);
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [note, setNote] = useState('');
-  const [items, setItems] = useState<StockInItemState[]>([]);
+  const [items, setItems] = useState<StockInItemState[]>(() => {
+    const cached = productService.getCached();
+    return cached.length > 0 ? [buildItemState(cached[0])] : [];
+  });
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitMode, setSubmitMode] = useState<'draft' | 'confirm'>('confirm');
@@ -90,9 +93,7 @@ export const StockIn: React.FC = () => {
   useEffect(() => {
     productService.getAll().then((data) => {
       setProducts(data);
-      if (data.length > 0) {
-        setItems([buildItemState(data[0])]);
-      }
+      setItems((prev) => (prev.length === 0 && data.length > 0 ? [buildItemState(data[0])] : prev));
     });
   }, []);
 

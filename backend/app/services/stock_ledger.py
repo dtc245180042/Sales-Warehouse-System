@@ -329,6 +329,7 @@ def record_stock_movement(
     performer_id: int,                  # User.id người thực hiện (không lưu tên)
     line_ref: str = "",                 # Tránh trùng khi cùng SKU xuất hiện nhiều dòng
     note: Optional[str] = None,
+    lot_id: Optional[int] = None,       # ID lô hàng nếu quản lý theo lô (S6-01)
     auto_commit: bool = False,
 ) -> StockMovementResult:
     """
@@ -419,6 +420,7 @@ def record_stock_movement(
         previous_physical=prev_physical,
         new_physical=new_physical,
         performer_id=performer_id,
+        lot_id=lot_id,
         note=note.strip() if note else None,
     )
     db.add(ledger_entry)
@@ -818,4 +820,8 @@ def get_product_stock_card(
         "balances": balances,
         "entries": entries_res,
     }
+
+
+# Bí danh tiếng Việt tương thích bàn giao cho Phúc (S8-03)
+ghi_phat_sinh_kho = record_stock_movement
 

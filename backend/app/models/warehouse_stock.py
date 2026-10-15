@@ -62,6 +62,7 @@ class StockLedgerEntry(Base):
     new_physical = Column(Integer, nullable=False)
 
     performer_id = Column(Integer, nullable=False)
+    lot_id = Column(Integer, nullable=True, index=True)
     note = Column(String(500), nullable=True)
 
     created_at = Column(
@@ -69,3 +70,18 @@ class StockLedgerEntry(Base):
         default=lambda: datetime.now(timezone.utc),
         nullable=False,
     )
+
+
+# Đảm bảo các cột mới tự động tồn tại trong CSDL hiện hữu
+try:
+    from app.core.database import engine
+    from sqlalchemy import inspect, text
+    with engine.connect() as _conn:
+        _cols = [c["name"] for c in inspect(_conn).get_columns("stock_ledger_entries")]
+        if _cols:
+            if "lot_id" not in _cols:
+                _conn.execute(text("ALTER TABLE stock_ledger_entries ADD COLUMN lot_id INTEGER NULL"))
+            _conn.commit()
+except Exception:
+    pass
+

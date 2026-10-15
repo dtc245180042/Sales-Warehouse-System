@@ -14,10 +14,60 @@ from app.schemas.lot import (
     LotDispatchCheckRequest,
     LotDispatchCheckResponse,
     LotTrackingToggleRequest,
+    FEFOSuggestionRequest,
+    FEFOSuggestionResponse,
+    FEFOOverrideValidationRequest,
 )
 from app.services.lot_service import LotService
+from app.services.fefo_service import FEFOService
 
-router = APIRouter(prefix="/lots", tags=["Quản lý Lô & Hạn sử dụng (S6-01)"])
+router = APIRouter(prefix="/lots", tags=["Quản lý Lô & Hạn sử dụng (S6-01 / S6-04)"])
+
+
+@router.post(
+    "/fefo-suggest",
+    response_model=FEFOSuggestionResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Gợi ý lô xuất kho theo thuật toán FEFO (S6-04)",
+)
+def goi_y_lo_xuat_fefo(
+    data: FEFOSuggestionRequest,
+    current_user: User = Depends(lay_nguoi_dung_hien_tai),
+    db: Session = Depends(lay_phien_db),
+):
+    """
+    Thuật toán FEFO (First Expired, First Out) tự động gợi ý lô xuất kho tối ưu:
+    - Ưu tiên lô có hạn sử dụng gần nhất (exp_date ASC, mfg_date ASC, id ASC).
+    - Chỉ gợi ý, KHÔNG trừ tồn kho.
+    - Bỏ qua lô đã hết hạn và lô đã hết tồn.
+    - Nếu không đủ hàng, trả về số lượng phân bổ được kèm shortfall.
+    - Nếu SKU không quản lý lô (manage_by_lot=False), thông báo không áp dụng.
+    """
+    return FEFOService.suggest_lots_fefo(
+        db=db,
+        product_id=data.product_id,
+        warehouse_id=data.warehouse_id,
+        requested_quantity=data.requested_quantity,
+    )
+
+
+@router.post(
+    "/validate-override",
+    status_code=status.HTTP_200_OK,
+    summary="Kiểm tra hợp lệ khi chọn lô khác gợi ý FEFO (S6-04)",
+)
+def kiem_tra_ghi_de_lo_fefo(
+    data: FEFOOverrideValidationRequest,
+    current_user: User = Depends(lay_nguoi_dung_hien_tai),
+):
+    """Bắt buộc lý do ghi đè (lot_override_reason) nếu chọn lô khác danh sách gợi ý."""
+    FEFOService.validate_lot_override(
+        suggested_lot_ids=data.suggested_lot_ids,
+        selected_lot_id=data.selected_lot_id,
+        lot_override_reason=data.lot_override_reason,
+    )
+    return {"valid": True, "message": "Ghi đè lô hợp lệ."}
+
 
 
 @router.post(

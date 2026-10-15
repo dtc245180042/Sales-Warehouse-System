@@ -100,3 +100,42 @@ class LotDispatchCheckResponse(BaseModel):
     is_expired: bool
     override_allowed: bool
     message: str
+
+
+# ==============================================================================
+# SCHEMAS CHO STORY S6-04 (FEFO SUGGESTION)
+# ==============================================================================
+
+class FEFOSuggestionRequest(BaseModel):
+    product_id: str = Field(..., description="Mã sản phẩm cần xuất kho")
+    warehouse_id: int = Field(..., description="Mã kho xuất hàng")
+    requested_quantity: int = Field(..., gt=0, description="Số lượng yêu cầu xuất (phải > 0)")
+
+
+class FEFOSuggestionItem(BaseModel):
+    lot_id: int
+    lot_number: str
+    mfg_date: date
+    exp_date: date
+    remaining_quantity: int
+    allocated_quantity: int
+    days_to_expiry: int
+
+
+class FEFOSuggestionResponse(BaseModel):
+    product_id: str
+    warehouse_id: int
+    requested_quantity: int
+    allocated_total: int
+    shortfall: int
+    is_fully_allocated: bool
+    manage_by_lot: bool
+    message: Optional[str] = None
+    suggested_lots: List[FEFOSuggestionItem]
+
+
+class FEFOOverrideValidationRequest(BaseModel):
+    suggested_lot_ids: List[int] = Field(..., description="Danh sách ID các lô được hệ thống gợi ý FEFO")
+    selected_lot_id: int = Field(..., description="ID lô người dùng thực tế chọn")
+    lot_override_reason: Optional[str] = Field(None, description="Lý do ghi đè nếu chọn khác gợi ý")
+

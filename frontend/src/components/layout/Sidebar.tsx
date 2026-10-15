@@ -30,6 +30,12 @@ import {
   ArrowUpRight,
   History,
   Clock,
+  RotateCcw,
+  FileCheck2,
+  FileText,
+  CreditCard,
+  Truck,
+  CalendarClock,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { UserRole } from '../../types/User';
@@ -144,6 +150,30 @@ export const Sidebar: React.FC<SidebarProps> = ({
           icon: <Store className="w-5 h-5" />,
           allowedRoles: ALL_ROLES.filter((r) => r !== 'User'),
         },
+        {
+          title: 'Hóa đơn bán hàng',
+          path: '/invoices',
+          icon: <FileText className="w-5 h-5" />,
+          allowedRoles: ALL_ROLES,
+        },
+        {
+          title: 'Phiếu thu công nợ',
+          path: '/payments',
+          icon: <CreditCard className="w-5 h-5" />,
+          allowedRoles: ALL_ROLES,
+        },
+        {
+          title: 'Phiếu trả hàng',
+          path: '/returns',
+          icon: <RotateCcw className="w-5 h-5" />,
+          allowedRoles: ALL_ROLES,
+        },
+        {
+          title: 'Chứng từ giảm nợ',
+          path: '/credit-notes',
+          icon: <FileCheck2 className="w-5 h-5" />,
+          allowedRoles: ALL_ROLES,
+        },
       ],
     },
     {
@@ -253,6 +283,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
               title: 'Sổ tồn kho 3 cột',
               path: '/inventory',
               icon: <Layers className="w-3.5 h-3.5" />,
+              allowedRoles: ALL_ROLES,
+            },
+            {
+              title: 'Quản lý lô & Hạn dùng (FEFO)',
+              path: '/inventory/lots',
+              icon: <CalendarClock className="w-3.5 h-3.5" />,
+              allowedRoles: ALL_ROLES,
+            },
+            {
+              title: 'Phiếu xuất kho điều phối',
+              path: '/inventory/dispatches',
+              icon: <Truck className="w-3.5 h-3.5" />,
+              allowedRoles: ALL_ROLES,
+            },
+            {
+              title: 'Nợ hàng & Giao bù (Backorder)',
+              path: '/inventory/backorders',
+              icon: <RotateCcw className="w-3.5 h-3.5" />,
               allowedRoles: ALL_ROLES,
             },
             {

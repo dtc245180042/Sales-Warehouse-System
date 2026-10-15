@@ -75,6 +75,19 @@ import { StockTransferList } from '../pages/inventory/StockTransferList';
 import { StockTransferCreate } from '../pages/inventory/StockTransferCreate';
 import { StockTransferDetail } from '../pages/inventory/StockTransferDetail';
 
+// Quản lý lô hàng & Xuất kho điều phối
+import { LotManagementPage } from '../pages/inventory/LotManagementPage';
+import { StockDispatchListPage } from '../pages/inventory/StockDispatchListPage';
+import { BackorderListPage } from '../pages/inventory/BackorderListPage';
+
+// Hóa đơn VAT & Phiếu thu công nợ
+import { InvoiceListPage } from '../pages/invoices/InvoiceListPage';
+import { PaymentListPage } from '../pages/payments/PaymentListPage';
+
+// Trả hàng & Giảm nợ
+import { ReturnListPage } from '../pages/returns/ReturnListPage';
+import { CreditNoteListPage } from '../pages/credit-notes/CreditNoteListPage';
+
 // All 7 business roles allowed in Sprint 1 & 2 backoffice
 const ALL_BACKOFFICE_ROLES: UserRole[] = [
   'Admin',
@@ -624,6 +637,74 @@ export const AppRoutes: React.FC = () => {
           element={
             <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
               <OrderDetail />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* ============================================================ */}
+        {/* QUẢN LÝ LÔ HÀNG & ĐIỀU PHỐI XUẤT KHO                         */}
+        {/* ============================================================ */}
+        <Route
+          path="/inventory/lots"
+          element={
+            <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
+              <LotManagementPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/inventory/dispatches"
+          element={
+            <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
+              <StockDispatchListPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/inventory/backorders"
+          element={
+            <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
+              <BackorderListPage />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* ============================================================ */}
+        {/* HÓA ĐƠN BÁN HÀNG & PHIẾU THU CÔNG NỢ                         */}
+        {/* ============================================================ */}
+        <Route
+          path="/invoices"
+          element={
+            <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
+              <InvoiceListPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/payments"
+          element={
+            <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
+              <PaymentListPage />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* ============================================================ */}
+        {/* TRẢ HÀNG & CHỨNG TỪ GIẢM NỢ                                  */}
+        {/* ============================================================ */}
+        <Route
+          path="/returns"
+          element={
+            <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
+              <ReturnListPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/credit-notes"
+          element={
+            <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
+              <CreditNoteListPage />
             </ProtectedRoute>
           }
         />

@@ -31,9 +31,10 @@ import { CreateOrder } from '../pages/orders/CreateOrder';
 import { SupplierList } from '../pages/suppliers/SupplierList';
 import { SupplierDetail } from '../pages/suppliers/SupplierDetail';
 
-// Customer & Agency Pages (Sprint 3: SC-224, SC-228, SC-229)
+// Customer & Agency Pages (Sprint 3: SC-224, SC-228, SC-229 & Sprint 8: S8-10)
 import { CustomerList } from '../pages/customers/CustomerList';
 import { CustomerDetail } from '../pages/customers/CustomerDetail';
+import { DebtLedgerPage } from '../pages/customers/DebtLedgerPage';
 
 // Sales & Order Pages (SC-228, SC-230)
 import { POS } from '../pages/sales/POS';
@@ -264,6 +265,31 @@ export const AppRoutes: React.FC = () => {
           element={
             <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
               <CustomerDetail />
+            </ProtectedRoute>
+          }
+        />
+        {/* Sổ chi tiết công nợ đại lý (S8-10, SCRUM-843 -> SCRUM-849) */}
+        <Route
+          path="/customers/debt-ledger"
+          element={
+            <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
+              <DebtLedgerPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/customers/:id/debt-ledger"
+          element={
+            <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
+              <DebtLedgerPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/debt-ledger"
+          element={
+            <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
+              <DebtLedgerPage />
             </ProtectedRoute>
           }
         />

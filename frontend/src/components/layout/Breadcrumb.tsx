@@ -34,6 +34,7 @@ const routeNames: Record<string, string> = {
   import: 'Nhập Excel',
   new: 'Thêm Mới',
   agents: 'Đại Lý',
+  'debt-ledger': 'Sổ Chi Tiết Công Nợ',
 };
 
 export const Breadcrumb: React.FC = () => {

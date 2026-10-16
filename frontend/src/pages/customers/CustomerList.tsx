@@ -26,6 +26,7 @@ import {
   Store,
   CreditCard,
   Building2,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { PageContainer } from '../../components/layout/PageContainer';
 import { DataTable, Column } from '../../components/common/DataTable';
@@ -678,6 +679,13 @@ export const CustomerList: React.FC = () => {
             title="Xem hồ sơ chi tiết"
           >
             <Eye className="w-4 h-4" />
+          </Link>
+          <Link
+            to={`/customers/debt-ledger?customerId=${c.id}`}
+            className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40"
+            title="Xem sổ chi tiết công nợ"
+          >
+            <FileSpreadsheet className="w-4 h-4" />
           </Link>
           {canManageCredit && (
             <button

@@ -7,7 +7,6 @@ import {
   KeyRound,
   CheckCircle2,
   Users2,
-  TrendingUp,
 } from 'lucide-react';
 import { PageContainer } from '../../components/layout/PageContainer';
 import { Badge } from '../../components/common/Badge';
@@ -28,24 +27,14 @@ export const Dashboard: React.FC = () => {
       subtitle={`Chào mừng ${user?.name || 'bạn'} quay trở lại hệ thống OMS Pro`}
       actions={
         <div className="flex items-center gap-2.5">
-          {['Admin', 'SalesManager', 'Director', 'Manager'].includes(role) && (
-            <Button
-              variant="primary"
-              size="sm"
-              leftIcon={<TrendingUp className="w-4 h-4" />}
-              onClick={() => navigate('/executive-dashboard')}
-            >
-              Dashboard Điều hành
-            </Button>
-          )}
           {role === 'Admin' && (
             <Button
-              variant="outline"
+              variant="primary"
               size="sm"
               leftIcon={<Users2 className="w-4 h-4" />}
               onClick={() => navigate('/users')}
             >
-              Quản lý người dùng
+              Quản lý người dùng & phân quyền
             </Button>
           )}
           <Button

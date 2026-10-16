@@ -16,7 +16,6 @@ import { ErrorBoundary } from '../components/common/ErrorBoundary';
 
 // Core Dashboard & Management Pages (Sprint 1: SCRUM-198, SCRUM-201, SCRUM-202, SCRUM-205, SCRUM-206, SCRUM-207)
 import { Dashboard } from '../pages/dashboard/Dashboard';
-import { ExecutiveDashboardPage } from '../pages/dashboard/ExecutiveDashboardPage';
 import { UserManagement } from '../pages/users/UserManagement';
 import { UserImportPage } from '../pages/users/UserImportPage';
 import { Settings } from '../pages/settings/Settings';
@@ -167,24 +166,6 @@ export const AppRoutes: React.FC = () => {
           element={
             <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
               <Dashboard />
-            </ProtectedRoute>
-          }
-        />
-
-        {/* Dashboard Điều Hành Bán Hàng & Kho (SC-276 / S8-05) */}
-        <Route
-          path="/executive-dashboard"
-          element={
-            <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
-              <ExecutiveDashboardPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/dashboard/executive"
-          element={
-            <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
-              <ExecutiveDashboardPage />
             </ProtectedRoute>
           }
         />

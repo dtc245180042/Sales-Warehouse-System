@@ -35,7 +35,9 @@ FALLBACK_WAREHOUSE_MAP: Dict[int, Dict[str, str]] = {
     1: {"code": "WH-HANOI", "name": "Kho Tổng Hà Nội"},
     2: {"code": "WH-DANANG", "name": "Kho Đà Nẵng"},
     3: {"code": "WH-HCM", "name": "Kho Tổng TP.HCM"},
+    99: {"code": "WH-DAMAGED", "name": "Kho Hàng Lỗi"},
 }
+DAMAGED_WAREHOUSE_ID = 99
 
 
 def resolve_warehouse(db: Session, warehouse_id: int) -> Tuple[str, str]:
@@ -114,12 +116,16 @@ class StockMovementType(str, Enum):
     # Xuất bán / Hoàn tất đơn hàng (Cầu nối S5 & Luồng đơn hàng)
     OUT_SALE = "OUT_SALE"                          # (-) Xuất kho giao hàng
 
+    # Nhập trả hàng từ đại lý (Story S8-01)
+    IN_RETURN = "IN_RETURN"                        # (+) Nhập trả hàng vào kho
+
 
 _INCREASE = {
     StockMovementType.IN_PURCHASE,
     StockMovementType.TRANSFER_IN,
     StockMovementType.AUDIT_SURPLUS,
     StockMovementType.ADJUSTMENT_IN,
+    StockMovementType.IN_RETURN,
 }
 _DECREASE = {
     StockMovementType.IN_PURCHASE_REVERSAL,
@@ -270,7 +276,10 @@ def _sync_legacy_stock(
 
     total_physical = int(
         db.query(func.coalesce(func.sum(WarehouseStock.physical_stock), 0))
-        .filter(WarehouseStock.product_id == product_id)
+        .filter(
+            WarehouseStock.product_id == product_id,
+            WarehouseStock.warehouse_id != DAMAGED_WAREHOUSE_ID,
+        )
         .scalar()
         or 0
     )
@@ -329,6 +338,7 @@ def record_stock_movement(
     performer_id: int,                  # User.id người thực hiện (không lưu tên)
     line_ref: str = "",                 # Tránh trùng khi cùng SKU xuất hiện nhiều dòng
     note: Optional[str] = None,
+    lot_id: Optional[int] = None,       # ID lô hàng nếu quản lý theo lô (S6-01)
     auto_commit: bool = False,
 ) -> StockMovementResult:
     """
@@ -419,6 +429,7 @@ def record_stock_movement(
         previous_physical=prev_physical,
         new_physical=new_physical,
         performer_id=performer_id,
+        lot_id=lot_id,
         note=note.strip() if note else None,
     )
     db.add(ledger_entry)
@@ -446,7 +457,11 @@ def record_stock_movement(
     active_reserved_wh = _get_active_reserved_for_sku_warehouse(
         db, product_id, product.sku, wh_name
     )
-    available_stock_wh = max(0, new_physical - active_reserved_wh)
+    if warehouse_id == DAMAGED_WAREHOUSE_ID:
+        available_stock_wh = 0
+    else:
+        available_stock_wh = max(0, new_physical - active_reserved_wh)
+    stock_row.stock = available_stock_wh
 
     if auto_commit:
         db.commit()
@@ -818,4 +833,8 @@ def get_product_stock_card(
         "balances": balances,
         "entries": entries_res,
     }
+
+
+# Bí danh tiếng Việt tương thích bàn giao cho Phúc (S8-03)
+ghi_phat_sinh_kho = record_stock_movement
 

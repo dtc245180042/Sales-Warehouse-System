@@ -22,6 +22,7 @@ backend/audit_report.json
 backend/scan_results.json
 backend/check_details.py
 backend/scan_non_tech.py
+KE_HOACH_NHOM_TRUONG.md
 
 # Logs, Backups & Dumps
 *.log

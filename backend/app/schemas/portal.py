@@ -1,4 +1,5 @@
 from typing import List, Optional
+from datetime import datetime
 from pydantic import BaseModel, Field, ConfigDict
 
 
@@ -235,3 +236,86 @@ class PortalReorderResponse(BaseModel):
     removed_discontinued_items: List[PortalReorderDiscontinuedItem] = []
     price_change_warnings: List[str] = []
     created_at: str
+
+
+# ==============================================================================
+# SCHEMAS FOR PORTAL DEBT & INVOICES (S7-07, SCRUM-753, SCRUM-754, SCRUM-756)
+# ==============================================================================
+class PortalDebtInvoiceItem(BaseModel):
+    id: str
+    subtotal_amount: int
+    discount_amount: int
+    vat_amount: int
+    total_amount: int
+    paid_amount: int
+    remaining_amount: int
+    status: str
+    issued_at: datetime
+    due_date: datetime
+    is_overdue: bool
+    days_overdue: int
+    items_count: int
+    notes: Optional[str] = None
+
+
+class PortalDebtOverviewResponse(BaseModel):
+    customer_id: str
+    customer_name: str
+    credit_limit: int
+    total_debt: int
+    available_credit: int
+    max_debt_days: int
+    overdue_debt: int
+    has_overdue: bool
+    total_invoices_count: int
+    unpaid_invoices_count: int
+    overdue_invoices_count: int
+    invoices: List[PortalDebtInvoiceItem]
+    total: int
+    page: int
+    limit: int
+    total_pages: int
+
+
+class PortalInvoiceListResponse(BaseModel):
+    items: List[PortalDebtInvoiceItem]
+    total: int
+    page: int
+    limit: int
+    total_pages: int
+
+
+class PortalInvoiceItemDetail(BaseModel):
+    id: int
+    dispatch_id: str
+    order_id: str
+    product_id: str
+    sku: str
+    product_name: Optional[str] = None
+    unit: str
+    quantity: int
+    unit_price: int
+    discount_amount: int
+    vat_amount: int
+    subtotal: int
+
+
+class PortalInvoiceDetailResponse(BaseModel):
+    id: str
+    customer_id: str
+    customer_name: Optional[str] = None
+    customer_address: Optional[str] = None
+    customer_tax_code: Optional[str] = None
+    subtotal_amount: int
+    discount_amount: int
+    vat_amount: int
+    total_amount: int
+    paid_amount: int
+    remaining_amount: int
+    status: str
+    issued_at: datetime
+    due_date: datetime
+    is_overdue: bool
+    days_overdue: int
+    notes: Optional[str] = None
+    items: List[PortalInvoiceItemDetail] = []

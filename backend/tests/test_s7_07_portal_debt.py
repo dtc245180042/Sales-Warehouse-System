@@ -11,6 +11,7 @@ from app.core.security import bam_mat_khau, tao_token_truy_cap
 from app.models.auth import User, UserRole
 from app.models.customer import Customer
 from app.models.customer_credit_profile import CustomerCreditProfile
+from app.models.customer_debt_profile import CustomerDebtProfile
 from app.models.invoice import Invoice, InvoiceItem, InvoiceStatus
 from app.services.portal_service import doc_so_tien_tieng_viet
 from main import app
@@ -639,3 +640,206 @@ def test_11_invoice_not_found_returns_404(client):
 
     resp_down = client.get("/api/v1/portal/invoices/HD-404/download", headers=headers)
     assert resp_down.status_code == 404
+
+    resp_print = client.get("/api/v1/portal/invoices/HD-404/print", headers=headers)
+    assert resp_print.status_code == 404
+
+
+def test_12_empty_data_agency_new_customer(client):
+    """
+    Test 12: Trường hợp đại lý mới hoàn toàn KHÔNG CÓ DỮ LIỆU:
+    - Chưa được cấp hạn mức (credit_limit = 0).
+    - Chưa có đơn hàng hay hoá đơn nào.
+    - Kết quả mong đợi: Trả về 200 OK với tất cả chỉ số 0 hoặc mảng rỗng, không crash.
+    """
+    db = TestingSessionLocal()
+    # Tạo đại lý mới CUS-EMPTY
+    db.add(Customer(
+        id="CUS-EMPTY",
+        code="CUS-EMPTY",
+        name="Đại Lý Mới Toanh",
+        email="empty@test.local",
+        phone="0999999999",
+        status="active",
+    ))
+    db.add(User(
+        id=99,
+        username="cust_empty",
+        email="empty@test.local",
+        role=UserRole.CUSTOMER.value,
+        customer_id="CUS-EMPTY",
+        hashed_password=bam_mat_khau("Pass@1234"),
+        is_active=True,
+        token_version=1,
+    ))
+    db.commit()
+    db.close()
+
+    headers = make_auth_header(99, UserRole.CUSTOMER.value, customer_id="CUS-EMPTY")
+    resp = client.get("/api/v1/portal/debt", headers=headers)
+    assert resp.status_code == 200
+    data = resp.json()
+
+    assert data["customer_id"] == "CUS-EMPTY"
+    assert data["customer_name"] == "Đại Lý Mới Toanh"
+    assert data["credit_limit"] == 0
+    assert data["total_debt"] == 0
+    assert data["available_credit"] == 0
+    assert data["max_debt_days"] == 0
+    assert data["overdue_debt"] == 0
+    assert data["has_overdue"] is False
+    assert data["total_invoices_count"] == 0
+    assert data["unpaid_invoices_count"] == 0
+    assert data["overdue_invoices_count"] == 0
+    assert data["invoices"] == []
+    assert data["total"] == 0
+    assert data["page"] == 1
+    assert data["total_pages"] == 1
+
+    # Endpoint danh sách hoá đơn cũng trả về mảng rỗng 200 OK
+    resp_inv = client.get("/api/v1/portal/invoices", headers=headers)
+    assert resp_inv.status_code == 200
+    assert resp_inv.json()["items"] == []
+    assert resp_inv.json()["total"] == 0
+
+
+def test_13_credit_limit_with_no_invoices(client):
+    """
+    Test 13: Trường hợp đại lý được cấp hạn mức (ví dụ 100.000.000) nhưng chưa có hoá đơn nào:
+    - total_debt = 0
+    - available_credit = 100.000.000 (được lấy toàn bộ hạn mức)
+    - has_overdue = False
+    """
+    db = TestingSessionLocal()
+    db.add(CustomerCreditProfile(
+        customer_id="CUS-001",
+        credit_limit=100000000,
+        max_debt_days=45,
+        current_debt=0,
+    ))
+    db.commit()
+    db.close()
+
+    headers = make_auth_header(3, UserRole.CUSTOMER.value, customer_id="CUS-001")
+    resp = client.get("/api/v1/portal/debt", headers=headers)
+    assert resp.status_code == 200
+    data = resp.json()
+
+    assert data["credit_limit"] == 100000000
+    assert data["total_debt"] == 0
+    assert data["available_credit"] == 100000000
+    assert data["max_debt_days"] == 45
+    assert data["has_overdue"] is False
+    assert data["invoices"] == []
+
+
+def test_14_paid_invoice_past_due_not_overdue(client):
+    """
+    Test 14: Hoá đơn đã thanh toán xong (PAID, remaining_amount = 0) dù hạn thanh toán đã qua
+    thì TUYỆT ĐỐI KHÔNG được tính là nợ quá hạn.
+    """
+    db = TestingSessionLocal()
+    now_utc = datetime.now(timezone.utc)
+    # Hạn thanh toán cách đây 30 ngày nhưng đã trả đủ 100%
+    db.add(Invoice(
+        id="HD-PAID-EXPIRED",
+        customer_id="CUS-001",
+        customer_name="Đại Lý Tuấn Phương",
+        total_amount=50000000,
+        paid_amount=50000000,
+        remaining_amount=0,
+        status=InvoiceStatus.PAID.value,
+        issued_at=now_utc - timedelta(days=60),
+        due_date=now_utc - timedelta(days=30),
+        issued_by=2,
+    ))
+    db.commit()
+    db.close()
+
+    headers = make_auth_header(3, UserRole.CUSTOMER.value, customer_id="CUS-001")
+    resp = client.get("/api/v1/portal/debt", headers=headers)
+    assert resp.status_code == 200
+    data = resp.json()
+
+    assert data["total_debt"] == 0
+    assert data["overdue_debt"] == 0
+    assert data["has_overdue"] is False
+    assert data["overdue_invoices_count"] == 0
+    assert data["invoices"][0]["is_overdue"] is False
+    assert data["invoices"][0]["days_overdue"] == 0
+
+
+def test_15_filter_by_from_date_and_to_date(client):
+    """
+    Test 15: Lọc hoá đơn theo khoảng thời gian phát hành (from_date, to_date).
+    """
+    db = TestingSessionLocal()
+    now_utc = datetime.now(timezone.utc)
+    db.add(Invoice(
+        id="HD-DATE-OLD",
+        customer_id="CUS-001",
+        total_amount=1000000,
+        remaining_amount=1000000,
+        status=InvoiceStatus.UNPAID.value,
+        issued_at=now_utc - timedelta(days=40),
+        due_date=now_utc,
+        issued_by=2,
+    ))
+    db.add(Invoice(
+        id="HD-DATE-MID",
+        customer_id="CUS-001",
+        total_amount=2000000,
+        remaining_amount=2000000,
+        status=InvoiceStatus.UNPAID.value,
+        issued_at=now_utc - timedelta(days=15),
+        due_date=now_utc,
+        issued_by=2,
+    ))
+    db.add(Invoice(
+        id="HD-DATE-NEW",
+        customer_id="CUS-001",
+        total_amount=3000000,
+        remaining_amount=3000000,
+        status=InvoiceStatus.UNPAID.value,
+        issued_at=now_utc,
+        due_date=now_utc + timedelta(days=15),
+        issued_by=2,
+    ))
+    db.commit()
+    db.close()
+
+    headers = make_auth_header(3, UserRole.CUSTOMER.value, customer_id="CUS-001")
+
+    # Lọc trong khoảng [now - 20 days, now - 5 days] -> Chỉ khớp HD-DATE-MID
+    f_date = (now_utc - timedelta(days=20)).isoformat()
+    t_date = (now_utc - timedelta(days=5)).isoformat()
+
+    resp = client.get("/api/v1/portal/debt", params={"from_date": f_date, "to_date": t_date}, headers=headers)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["total"] == 1
+    assert data["invoices"][0]["id"] == "HD-DATE-MID"
+
+
+def test_16_fallback_to_customer_debt_profile(client):
+    """
+    Test 16: Đại lý chưa có CustomerCreditProfile nhưng có CustomerDebtProfile cũ:
+    Hệ thống tự động fallback đọc hạn mức từ CustomerDebtProfile.
+    """
+    db = TestingSessionLocal()
+    # Tạo profile nợ kiểu cũ
+    db.add(CustomerDebtProfile(
+        customer_id="CUS-001",
+        credit_limit=75000000.0,
+        current_debt=0.0,
+    ))
+    db.commit()
+    db.close()
+
+    headers = make_auth_header(3, UserRole.CUSTOMER.value, customer_id="CUS-001")
+    resp = client.get("/api/v1/portal/debt", headers=headers)
+    assert resp.status_code == 200
+    data = resp.json()
+
+    assert data["credit_limit"] == 75000000
+    assert data["available_credit"] == 75000000

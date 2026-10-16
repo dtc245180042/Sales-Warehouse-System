@@ -1286,8 +1286,16 @@ def get_portal_debt_overview(
     profile = db.query(CustomerCreditProfile).filter(
         CustomerCreditProfile.customer_id == customer.id
     ).first()
-    credit_limit = profile.credit_limit if profile else 0
-    max_debt_days = profile.max_debt_days if profile else 0
+    if profile:
+        credit_limit = profile.credit_limit
+        max_debt_days = profile.max_debt_days
+    else:
+        from app.models.customer_debt_profile import CustomerDebtProfile
+        debt_prof = db.query(CustomerDebtProfile).filter(
+            CustomerDebtProfile.customer_id == customer.id
+        ).first()
+        credit_limit = int(debt_prof.credit_limit) if debt_prof else 0
+        max_debt_days = 0
 
     now_utc = datetime.now(timezone.utc)
 

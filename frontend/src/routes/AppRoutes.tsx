@@ -58,6 +58,7 @@ import { RevenueReport } from '../pages/reports/RevenueReport';
 import { InventoryReport } from '../pages/reports/InventoryReport';
 import { SalesMultiDimReport } from '../pages/reports/SalesMultiDimReport';
 import { InventoryTurnoverReport } from '../pages/reports/InventoryTurnoverReport';
+import { DebtAgingReportPage } from '../pages/reports/DebtAgingReportPage';
 
 // Inventory & Stock Ledger & Stock Take Pages
 import { InventoryOverview } from '../pages/inventory/InventoryOverview';
@@ -508,6 +509,14 @@ export const AppRoutes: React.FC = () => {
           element={
             <ProtectedRoute allowedRoles={['Admin', 'WarehouseManager', 'WarehouseStaff', 'Director', 'Manager', 'Accountant']}>
               <InventoryTurnoverReport />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/reports/debt-aging"
+          element={
+            <ProtectedRoute allowedRoles={['Admin', 'Director', 'Manager', 'Accountant', 'SalesManager', 'SalesStaff']}>
+              <DebtAgingReportPage />
             </ProtectedRoute>
           }
         />

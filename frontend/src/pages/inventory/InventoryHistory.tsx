@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { PageContainer } from '../../components/layout/PageContainer';
 import { DataTable, Column } from '../../components/common/DataTable';
 import { Badge } from '../../components/common/Badge';
@@ -6,7 +7,8 @@ import { formatDate } from '../../utils/formatters';
 import { inventoryService } from '../../services/inventoryService';
 import { stockLedgerService } from '../../services/stockLedgerService';
 import { InventoryHistoryRecord } from '../../types/Inventory';
-import { Search, History, ArrowDownLeft, ArrowUpRight, RefreshCw, Repeat, Database } from 'lucide-react';
+import { mapMovementTypeToRoute, getMovementTypeTooltip } from '../../utils/ledgerRouteMapper';
+import { Search, History, ArrowDownLeft, ArrowUpRight, RefreshCw, Repeat, Database, ExternalLink } from 'lucide-react';
 
 export const InventoryHistory: React.FC = () => {
   const [records, setRecords] = useState<InventoryHistoryRecord[]>([]);
@@ -40,6 +42,7 @@ export const InventoryHistory: React.FC = () => {
             id: String(item.id),
             code: item.reference_code,
             type: recType,
+            movementType: item.movement_type,
             productId: item.product_id,
             productName: item.product_name || item.product_id,
             sku: item.sku || item.product_id,
@@ -98,6 +101,30 @@ export const InventoryHistory: React.FC = () => {
       header: 'Mã Chứng Từ',
       sortable: true,
       className: 'font-semibold text-indigo-600 dark:text-indigo-400 whitespace-nowrap',
+      render: (r) => {
+        const route = mapMovementTypeToRoute(r.movementType || r.type, r.code);
+        const tooltip = getMovementTypeTooltip(r.movementType || r.type, r.code);
+        if (!route) {
+          return (
+            <span
+              className="font-mono font-semibold text-slate-700 dark:text-slate-300"
+              title={tooltip}
+            >
+              {r.code}
+            </span>
+          );
+        }
+        return (
+          <Link
+            to={route}
+            className="group inline-flex items-center gap-1.5 font-mono font-semibold text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 hover:underline underline-offset-2 transition-colors"
+            title={`${tooltip} (${r.code}) - Click để mở chi tiết`}
+          >
+            <span>{r.code}</span>
+            <ExternalLink className="w-3.5 h-3.5 opacity-60 group-hover:opacity-100 transition-opacity text-primary-500" />
+          </Link>
+        );
+      },
     },
     {
       key: 'type',

@@ -56,6 +56,7 @@ export const priceHistoryService = {
       if (params.toDate) queryParams.to_date = params.toDate;
 
       const res = await apiClient.get('/price-histories', { params: queryParams });
+      const raw = res.data || {};
       const result: ProductPriceHistoryListResponse = {
         items: Array.isArray(raw.items) ? raw.items.map(mapApiHistoryItem) : [],
         total: raw.total || 0,

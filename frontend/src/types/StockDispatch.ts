@@ -1,4 +1,4 @@
-export type DispatchStatus = 'DRAFT' | 'CONFIRMED' | 'DELIVERED' | 'DELIVERY_FAILED' | 'CANCELLED';
+export type DispatchStatus = 'DRAFT' | 'CONFIRMED' | 'CANCELLED';
 
 export interface StockDispatchLotItem {
   id?: number;
@@ -18,7 +18,6 @@ export interface StockDispatchItem {
   ordered_quantity: number;
   dispatched_quantity: number;
   shortfall_quantity: number;
-  delivered_quantity?: number;
   lots?: StockDispatchLotItem[];
 }
 

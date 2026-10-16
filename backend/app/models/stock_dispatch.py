@@ -104,3 +104,15 @@ class StockDispatchLot(Base):
     lot_override_reason = Column(Text, nullable=True)
 
     item = relationship("StockDispatchItem", back_populates="lots")
+
+
+try:
+    from app.core.database import engine
+    from sqlalchemy import inspect, text
+    with engine.connect() as _conn:
+        _cols = [c["name"] for c in inspect(_conn).get_columns("stock_dispatch_items")]
+        if _cols and "delivered_quantity" not in _cols:
+            _conn.execute(text("ALTER TABLE stock_dispatch_items ADD COLUMN delivered_quantity INTEGER DEFAULT 0"))
+            _conn.commit()
+except Exception:
+    pass

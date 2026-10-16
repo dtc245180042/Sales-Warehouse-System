@@ -324,7 +324,7 @@ export const DebtAgingReportPage: React.FC = () => {
             Báo cáo Công nợ Quá hạn theo Tuổi nợ
           </h1>
           <p className="text-sm text-slate-500 mt-0.5">
-            Ngày lập báo cáo: <strong>{report.report_date}</strong> &nbsp;·&nbsp; S8-09 / SCRUM-280
+            Ngày lập báo cáo: <strong>{report.report_date}</strong>
           </p>
         </div>
         <div className="flex gap-2">

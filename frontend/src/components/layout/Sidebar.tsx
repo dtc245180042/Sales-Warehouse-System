@@ -438,7 +438,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           ],
         },
         {
-          title: 'Công nợ Quá hạn (S8-09)',
+          title: 'Công nợ Quá hạn',
           path: '/reports/debt-aging',
           icon: <TrendingDown className="w-5 h-5" />,
           allowedRoles: [

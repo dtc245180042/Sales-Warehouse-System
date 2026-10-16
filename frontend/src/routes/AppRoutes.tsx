@@ -81,7 +81,6 @@ import { StockTransferDetail } from '../pages/inventory/StockTransferDetail';
 import { LotManagementPage } from '../pages/inventory/LotManagementPage';
 import { StockDispatchListPage } from '../pages/inventory/StockDispatchListPage';
 import { BackorderListPage } from '../pages/inventory/BackorderListPage';
-import { DeliveryRoutingPage } from '../pages/inventory/DeliveryRoutingPage';
 
 // Hóa đơn VAT & Phiếu thu công nợ
 import { InvoiceListPage } from '../pages/invoices/InvoiceListPage';
@@ -721,14 +720,6 @@ export const AppRoutes: React.FC = () => {
           element={
             <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
               <BackorderListPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/inventory/routing"
-          element={
-            <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
-              <DeliveryRoutingPage />
             </ProtectedRoute>
           }
         />

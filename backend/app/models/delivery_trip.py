@@ -204,7 +204,7 @@ class DeliveryTripPointItem(Base):
     point = relationship("DeliveryTripPoint", back_populates="items")
 
 
-# Tự động tạo bảng nếu chưa có trong DB
+# Tự động tạo bảng nếu chưa có trong DB và bổ sung cột còn thiếu
 try:
     Base.metadata.create_all(
         bind=engine,
@@ -214,5 +214,28 @@ try:
             DeliveryTripPointItem.__table__,
         ]
     )
+    from sqlalchemy import inspect, text
+    with engine.connect() as _conn:
+        # Cập nhật delivery_trips
+        _trip_cols = [c["name"] for c in inspect(_conn).get_columns("delivery_trips")]
+        if _trip_cols:
+            if "area" not in _trip_cols:
+                _conn.execute(text("ALTER TABLE delivery_trips ADD COLUMN area VARCHAR(100)"))
+            if "driver_id" not in _trip_cols:
+                _conn.execute(text("ALTER TABLE delivery_trips ADD COLUMN driver_id INTEGER"))
+            if "vehicle_id" not in _trip_cols:
+                _conn.execute(text("ALTER TABLE delivery_trips ADD COLUMN vehicle_id VARCHAR(50)"))
+            if "vehicle_type" not in _trip_cols:
+                _conn.execute(text("ALTER TABLE delivery_trips ADD COLUMN vehicle_type VARCHAR(100)"))
+            if "delay_level" not in _trip_cols:
+                _conn.execute(text("ALTER TABLE delivery_trips ADD COLUMN delay_level VARCHAR(50)"))
+            _conn.commit()
+
+        # Cập nhật delivery_trip_points
+        _pt_cols = [c["name"] for c in inspect(_conn).get_columns("delivery_trip_points")]
+        if _pt_cols:
+            if "area" not in _pt_cols:
+                _conn.execute(text("ALTER TABLE delivery_trip_points ADD COLUMN area VARCHAR(100)"))
+            _conn.commit()
 except Exception:
     pass

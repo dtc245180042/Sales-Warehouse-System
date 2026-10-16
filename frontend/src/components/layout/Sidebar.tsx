@@ -313,7 +313,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               allowedRoles: ALL_ROLES,
             },
             {
-              title: 'Phân tuyến & Điều xe (S6-06)',
+              title: 'Phân tuyến & Điều xe',
               path: '/inventory/routing',
               icon: <RouteIcon className="w-3.5 h-3.5" />,
               allowedRoles: ALL_ROLES,

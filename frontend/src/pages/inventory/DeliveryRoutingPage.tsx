@@ -406,7 +406,7 @@ export const DeliveryRoutingPage: React.FC = () => {
   return (
     <PageContainer
       title="Phân Tuyến Giao Hàng & Gán Tài Xế"
-      subtitle="Gom nhiều phiếu xuất kho theo khu vực, phân công tài xế & phương tiện, in lệnh điều phối điểm giao hàng (S6-06 / SC-257)"
+      subtitle="Gom nhiều phiếu xuất kho theo khu vực, phân công tài xế & phương tiện, in lệnh điều phối giao hàng"
     >
       {/* 1. Metric Cards Header */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
@@ -839,7 +839,7 @@ export const DeliveryRoutingPage: React.FC = () => {
                     <th className="py-3 px-4 text-center">Số điểm dừng</th>
                     <th className="py-3 px-4 text-center">Số kiện hàng</th>
                     <th className="py-3 px-4">Trạng thái chuyến</th>
-                    <th className="py-3 px-4 text-right">Thao tác S6-06</th>
+                    <th className="py-3 px-4 text-right">Thao tác</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -1031,7 +1031,7 @@ export const DeliveryRoutingPage: React.FC = () => {
           {/* Chọn nhanh tài xế gợi ý */}
           <div>
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center justify-between">
-              <span>Phân công Tài xế & Phương tiện (S6-06)</span>
+              <span>Phân công Tài xế & Phương tiện</span>
               <span className="text-[11px] font-normal text-slate-400">Chọn nhanh tài xế có sẵn:</span>
             </label>
             <div className="flex items-center gap-2 overflow-x-auto pb-1">

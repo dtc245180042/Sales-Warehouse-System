@@ -308,6 +308,7 @@ class DeliveryTripService:
             license_plate=payload.license_plate.strip() if payload.license_plate else None,
             vehicle_type=payload.vehicle_type.strip() if payload.vehicle_type else "Xe tải",
             status=initial_status,
+            started_at=datetime.now(timezone.utc),
             expected_completion_time=exp_time,
             notes=payload.notes,
             created_by=current_user.id if current_user else None,

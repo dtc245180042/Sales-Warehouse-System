@@ -129,6 +129,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
           icon: <LayoutDashboard className="w-5 h-5" />,
           allowedRoles: ALL_ROLES,
         },
+        {
+          title: 'Điều hành Bán hàng & Kho',
+          path: '/executive-dashboard',
+          icon: <TrendingUp className="w-5 h-5" />,
+          allowedRoles: [
+            'Admin',
+            'SalesManager',
+            'Director',
+            'Manager',
+            'Accountant',
+            'WarehouseManager',
+          ],
+        },
       ],
     },
     {

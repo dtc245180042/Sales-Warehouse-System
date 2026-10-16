@@ -399,6 +399,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
           ],
         },
         {
+          title: 'Sổ công nợ theo đại lý',
+          path: '/reports/agency-debts',
+          icon: <Scale className="w-5 h-5" />,
+          allowedRoles: [
+            'Admin',
+            'SalesManager',
+            'Director',
+            'Accountant',
+            'Manager',
+            'SalesStaff',
+          ],
+        },
+        {
           title: 'Doanh số Đa chiều',
           path: '/reports/sales-multidim',
           icon: <Layers className="w-5 h-5" />,

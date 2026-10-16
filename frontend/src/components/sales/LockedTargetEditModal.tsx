@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { AlertTriangle, Lock, X, Check, FileEdit } from 'lucide-react';
 import { SalesTarget } from '../../types/SalesTarget';
 import { Button } from '../common/Button';
+import { CurrencyInput } from '../common/CurrencyInput';
 import { useToast } from '../../contexts/ToastContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { salesTargetService } from '../../services/salesTargetService';
@@ -138,16 +139,13 @@ export const LockedTargetEditModal: React.FC<LockedTargetEditModalProps> = ({
             <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
               Chỉ tiêu doanh số mới (VND) <span className="text-rose-500">*</span>
             </label>
-            <input
-              type="number"
-              step={1000000}
+            <CurrencyInput
               value={newRevenue}
-              onChange={(e) => setNewRevenue(Number(e.target.value) || 0)}
+              onChange={(val) => setNewRevenue(val)}
+              suffix="VNĐ"
+              placeholder="VD: 500.000.000"
               className="w-full px-3 py-2 text-sm font-semibold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
             />
-            <div className="text-[11px] text-slate-400 mt-1">
-              Định dạng: {formatNumber(newRevenue)} đ
-            </div>
           </div>
 
           {/* New Orders Input */}
@@ -157,8 +155,13 @@ export const LockedTargetEditModal: React.FC<LockedTargetEditModalProps> = ({
             </label>
             <input
               type="number"
-              value={newOrders}
-              onChange={(e) => setNewOrders(Number(e.target.value) || 0)}
+              min={0}
+              value={newOrders === 0 ? '' : newOrders}
+              placeholder="VD: 100"
+              onChange={(e) => {
+                const val = e.target.value;
+                setNewOrders(val === '' ? 0 : Math.max(0, parseInt(val, 10) || 0));
+              }}
               className="w-full px-3 py-2 text-sm bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
             />
           </div>

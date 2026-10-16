@@ -34,6 +34,7 @@ import { Badge } from '../../components/common/Badge';
 import { Modal } from '../../components/common/Modal';
 import { ConfirmDialog } from '../../components/common/ConfirmDialog';
 import { EmptyState } from '../../components/common/EmptyState';
+import { CurrencyInput } from '../../components/common/CurrencyInput';
 import { formatCurrency } from '../../utils/formatters';
 import { customerService } from '../../services/customerService';
 import { creditService } from '../../services/creditService';
@@ -1523,14 +1524,12 @@ export const CustomerList: React.FC = () => {
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                 Hạn mức công nợ tối đa (VNĐ) *
               </label>
-              <input
-                type="number"
-                min="0"
-                step="1000000"
+              <CurrencyInput
                 value={creditLimitInput}
-                onChange={(e) => setCreditLimitInput(Number(e.target.value) || 0)}
+                onChange={(val) => setCreditLimitInput(val)}
+                suffix="VNĐ"
+                placeholder="Ví dụ: 50.000.000"
                 className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs sm:text-sm font-bold text-indigo-600 dark:text-indigo-400 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                placeholder="Ví dụ: 50000000"
                 required
               />
               <p className="mt-1 text-[11px] text-slate-400">

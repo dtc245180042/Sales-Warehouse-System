@@ -810,14 +810,26 @@ export const ReturnListPage: React.FC = () => {
                         <input
                           type="number"
                           min={1}
-                          value={item.quantity}
+                          value={item.quantity === 0 ? '' : item.quantity}
+                          placeholder="1"
                           onChange={(e) => {
-                            const q = parseInt(e.target.value) || 1;
+                            const val = e.target.value;
+                            const q = val === '' ? 0 : parseInt(val, 10);
+                            const safeQ = isNaN(q) ? 0 : Math.max(0, q);
                             setCreateItems((prev) =>
                               prev.map((it, i) =>
-                                i === idx ? { ...it, quantity: q, subtotal: q * 99000 } : it
+                                i === idx ? { ...it, quantity: safeQ, subtotal: safeQ * (it.unit_price || 0) } : it
                               )
                             );
+                          }}
+                          onBlur={() => {
+                            if (!item.quantity || item.quantity < 1) {
+                              setCreateItems((prev) =>
+                                prev.map((it, i) =>
+                                  i === idx ? { ...it, quantity: 1, subtotal: 1 * (it.unit_price || 0) } : it
+                                )
+                              );
+                            }
                           }}
                           className="w-16 p-1 text-right rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
                         />

@@ -10,11 +10,11 @@ router = APIRouter(prefix="/reports/inventory-s8", tags=["Inventory Reports S8"]
 
 @router.get("/export-excel")
 def export_inventory_report_excel(
-    warehouse_id: Optional[str] = Query(None, description="Mã kho hàng"),
-    category_id: Optional[str] = Query(None, description="Mã danh mục"),
-    sku: Optional[str] = Query(None, description="Mã SKU sản phẩm"),
-    is_slow_moving: Optional[bool] = Query(None, description="Lọc hàng chậm luôn chuyển"),
-    threshold_days: int = Query(30, description="Ngưỡng ngày tính chậm luân chuyển")
+    warehouse_id: Optional[str] = None,
+    category_id: Optional[str] = None,
+    sku: Optional[str] = None,
+    is_slow_moving: Optional[bool] = None,
+    threshold_days: int = 30
 ):
     mock_data = [
         {
@@ -39,6 +39,12 @@ def export_inventory_report_excel(
         }
     ]
 
+    # Ép kiểu số nguyên an toàn nếu tham số truyền vào là Query object từ FastAPI
+    try:
+        t_days = int(threshold_days)
+    except (ValueError, TypeError):
+        t_days = 30
+
     export_data = []
     w_id = str(warehouse_id) if warehouse_id and isinstance(warehouse_id, str) else None
 
@@ -47,7 +53,7 @@ def export_inventory_report_excel(
             continue
             
         avg_days = item["current_stock"] / item["avg_daily_sales"] if item["avg_daily_sales"] > 0 else 999.0
-        is_slow = avg_days >= threshold_days
+        is_slow = avg_days >= t_days
         
         if is_slow_moving is not None and is_slow != is_slow_moving:
             continue

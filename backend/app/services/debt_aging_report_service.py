@@ -121,8 +121,8 @@ class DebtAgingReportService:
         if customer_id:
             invoice_query = invoice_query.filter(Invoice.customer_id == customer_id)
 
-        # Phân quyền SalesStaff: chỉ xem đại lý mình phụ trách
-        if user_role in ("SalesStaff", "Staff"):
+        # Phân quyền SalesStaff / Sales Rep: chỉ xem đại lý mình phụ trách
+        if user_role.lower() in ("salesstaff", "staff", "sales rep", "salesrep", "sales"):
             staff_name = current_user.full_name or current_user.username
             # Lấy customer_id của đại lý mà staff này phụ trách
             assigned_customers = db.query(Customer.id).filter(

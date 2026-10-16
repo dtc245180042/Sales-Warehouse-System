@@ -35,6 +35,7 @@ import {
   FileText,
   CreditCard,
   Truck,
+  Route as RouteIcon,
   CalendarClock,
   Target,
   AlertOctagon,
@@ -309,6 +310,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
               title: 'Phiếu xuất kho điều phối',
               path: '/inventory/dispatches',
               icon: <Truck className="w-3.5 h-3.5" />,
+              allowedRoles: ALL_ROLES,
+            },
+            {
+              title: 'Phân tuyến & Điều xe (S6-06)',
+              path: '/inventory/routing',
+              icon: <RouteIcon className="w-3.5 h-3.5" />,
               allowedRoles: ALL_ROLES,
             },
             {

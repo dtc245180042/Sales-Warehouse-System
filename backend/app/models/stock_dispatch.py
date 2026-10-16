@@ -79,6 +79,7 @@ class StockDispatchItem(Base):
     ordered_quantity = Column(Integer, nullable=False)
     dispatched_quantity = Column(Integer, nullable=False)
     shortfall_quantity = Column(Integer, default=0, nullable=False)
+    delivered_quantity = Column(Integer, default=0, nullable=True)  # S6-08 / SC-259
     lot_override_reason = Column(Text, nullable=True)
 
     dispatch = relationship("StockDispatch", back_populates="items")

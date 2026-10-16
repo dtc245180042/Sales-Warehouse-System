@@ -53,6 +53,7 @@ class DispatchItemResponse(BaseModel):
     ordered_quantity: int
     dispatched_quantity: int
     shortfall_quantity: int
+    delivered_quantity: Optional[int] = None
     lot_override_reason: Optional[str] = None
     lots: List[DispatchLotResponse] = []
 

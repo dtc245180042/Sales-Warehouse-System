@@ -19,6 +19,7 @@ import { Dashboard } from '../pages/dashboard/Dashboard';
 import { UserManagement } from '../pages/users/UserManagement';
 import { UserImportPage } from '../pages/users/UserImportPage';
 import { Settings } from '../pages/settings/Settings';
+import { DebtRiskConfigPage } from '../pages/settings/DebtRiskConfigPage';
 import { Profile } from '../pages/profile/Profile';
 import { PriceListManagement } from '../pages/sales/PriceListManagement';
 import { VolumeDiscountManagementPage } from '../pages/sales/VolumeDiscountManagementPage';
@@ -318,6 +319,24 @@ export const AppRoutes: React.FC = () => {
           element={
             <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
               <Settings />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Cấu hình Quy tắc Rủi ro & Chặn bán Công nợ */}
+        <Route
+          path="/settings/debt-risk"
+          element={
+            <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
+              <DebtRiskConfigPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/settings/debt-risk-config"
+          element={
+            <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
+              <DebtRiskConfigPage />
             </ProtectedRoute>
           }
         />

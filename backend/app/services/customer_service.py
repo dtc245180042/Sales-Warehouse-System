@@ -209,6 +209,7 @@ def _enrich_customer_response(
     assignment: Optional[CustomerAssignment] = None,
     credit_profile: Optional[CustomerCreditProfile] = None,
     staff: Optional[User] = None,
+    debt_flag: Optional[Any] = None,
 ) -> CustomerResponse:
     """Bổ sung dữ liệu người phụ trách, hạn mức công nợ và số liệu đơn hàng động."""
     if stats_tuple is not None:
@@ -252,6 +253,15 @@ def _enrich_customer_response(
         max_debt_days = credit_profile.max_debt_days
         current_debt = credit_profile.current_debt
 
+    # Đọc cờ rủi ro công nợ (S7-04)
+    risk_level = "SAFE"
+    is_flagged = False
+    is_debt_blocked = False
+    if debt_flag is not None:
+        risk_level = getattr(debt_flag, "risk_level", "SAFE")
+        is_flagged = bool(getattr(debt_flag, "is_flagged", False))
+        is_debt_blocked = bool(getattr(debt_flag, "is_blocked", False))
+
     valid_groups = {"TIER_1", "TIER_2", "WHOLESALE", "VIP", "RETAIL"}
     raw_grp = (customer.customer_group or "RETAIL").upper().strip()
     if raw_grp.startswith("WHOLESALE"):
@@ -283,6 +293,9 @@ def _enrich_customer_response(
         credit_limit=credit_limit,
         max_debt_days=max_debt_days,
         current_debt=current_debt,
+        risk_level=risk_level,
+        is_flagged=is_flagged,
+        is_debt_blocked=is_debt_blocked,
         created_at=customer.created_at,
         updated_at=customer.updated_at
     )
@@ -517,6 +530,16 @@ def get_all_customers(
         except Exception:
             pass
 
+        # 5. Gom nhóm cờ rủi ro công nợ (CustomerDebtFlag - S7-04)
+        flag_map: Dict[str, Any] = {}
+        try:
+            from app.models.debt_risk import CustomerDebtFlag
+            flags = db.query(CustomerDebtFlag).filter(CustomerDebtFlag.customer_id.in_(c_ids)).all()
+            for fl in flags:
+                flag_map[str(fl.customer_id)] = fl
+        except Exception:
+            pass
+
         return [
             _enrich_customer_response(
                 db,
@@ -525,6 +548,7 @@ def get_all_customers(
                 assignment=assign_map.get(str(c.id)),
                 credit_profile=credit_map.get(str(c.id)),
                 staff=staff_map.get(assign_map[str(c.id)].assigned_staff_id) if str(c.id) in assign_map and assign_map[str(c.id)].assigned_staff_id else None,
+                debt_flag=flag_map.get(str(c.id)),
             )
             for c in cust_list
         ]

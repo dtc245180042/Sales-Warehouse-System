@@ -797,10 +797,10 @@ export const CreateOrder: React.FC = () => {
         return;
       }
 
-      // Kiểm tra nợ quá hạn - Chặn tạo/chốt đơn hoàn toàn
+      // Kiểm tra nợ quá hạn / cờ rủi ro công nợ - Chặn tạo/chốt đơn hoàn toàn
       if (creditStatus?.isBlocked) {
         showToast(
-          creditStatus.blockReason || 'Đại lý đang có khoản nợ quá hạn. Hệ thống chặn tạo đơn hoàn toàn theo quy định!',
+          creditStatus.blockReason || 'Đại lý đang bị gắn cờ rủi ro công nợ và bị KHOÁ BÁN theo quy định. Không thể chốt đơn mới!',
           'error'
         );
         return;
@@ -853,7 +853,7 @@ export const CreateOrder: React.FC = () => {
         // 2. Chốt đơn
         const submitted = await orderService.submitDraft(currentDraftId);
         if (submitted.status === 'pending_approval' || submitted.requiresApproval) {
-          showToast(`Đơn hàng vượt hạn mức công nợ [${submitted.code}] đã được gửi Chờ duyệt!`, 'info');
+          showToast(`Đơn hàng [${submitted.code}] đã được gửi và chuyển sang trạng thái "Chờ duyệt" theo chính sách công nợ!`, 'info');
         } else {
           showToast(`Đã chốt đơn hàng thành công! Mã đơn: ${submitted.code}`, 'success');
         }
@@ -863,7 +863,7 @@ export const CreateOrder: React.FC = () => {
         const payload = buildPayload('pending');
         const created = await orderService.create(payload);
         if (created.status === 'pending_approval' || created.requiresApproval) {
-          showToast(`Đơn hàng vượt hạn mức công nợ [${created.code}] đã được tạo ở trạng thái Chờ duyệt!`, 'info');
+          showToast(`Đơn hàng [${created.code}] đã được tạo và chuyển sang trạng thái "Chờ duyệt" theo chính sách công nợ!`, 'info');
         } else {
           showToast(`Đã tạo đơn hàng thành công! Mã đơn: ${created.code}`, 'success');
         }
@@ -2373,7 +2373,7 @@ export const CreateOrder: React.FC = () => {
                   : hasExceedingStock
                   ? `Bị chặn: Có ${exceedingStockItems.length} mặt hàng vượt số lượng tồn khả dụng`
                   : creditStatus?.isBlocked
-                  ? 'Bị chặn do đại lý có nợ quá hạn'
+                  ? (creditStatus.blockReason || 'Bị chặn bán do vi phạm quy tắc rủi ro công nợ')
                   : creditStatus?.requiresApproval
                   ? 'Đơn vượt hạn mức - Sẽ chuyển sang Chờ duyệt'
                   : 'Chốt đơn hàng'
@@ -2392,7 +2392,7 @@ export const CreateOrder: React.FC = () => {
               ) : creditStatus?.isBlocked ? (
                 <>
                   <Ban className="w-3.5 h-3.5" />
-                  <span>Bị chặn quá hạn</span>
+                  <span>Bị chặn bán</span>
                 </>
               ) : creditStatus?.requiresApproval ? (
                 <>

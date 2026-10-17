@@ -95,6 +95,7 @@ export interface CustomerFilterParams {
 
 export interface CustomerPaginatedResponse {
   items: Customer[];
+  data?: Customer[];
   total: number;
   page: number;
   page_size: number;

@@ -147,6 +147,7 @@ export const customerService = {
           const items = res.data.items.map(mapApiCustomer);
           const result: CustomerPaginatedResponse = {
             items,
+            data: items,
             total: res.data.total,
             page: res.data.page,
             page_size: res.data.page_size,
@@ -160,6 +161,7 @@ export const customerService = {
           const items = res.data.map(mapApiCustomer);
           const result: CustomerPaginatedResponse = {
             items,
+            data: items,
             total: items.length,
             page: 1,
             page_size: items.length || 10,
@@ -217,6 +219,17 @@ export const customerService = {
 
     activePaginatedPromises[key] = fetchPromise;
     return fetchPromise;
+  },
+
+  getCustomers: async (
+    params?: CustomerFilterParams,
+    forceRefresh: boolean = false
+  ): Promise<CustomerPaginatedResponse & { data: Customer[] }> => {
+    const res = await customerService.getPaginated(params, forceRefresh);
+    return {
+      ...res,
+      data: res.items,
+    };
   },
 
   getAll: async (

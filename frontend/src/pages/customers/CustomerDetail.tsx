@@ -17,6 +17,7 @@ import {
   CreditCard,
   Edit3,
   Calendar,
+  FileSpreadsheet,
   RefreshCw,
   Sliders,
 } from 'lucide-react';
@@ -303,6 +304,17 @@ export const CustomerDetail: React.FC = () => {
             </>
           )}
 
+          {/* Nút Xem sổ chi tiết công nợ (S8-10) */}
+          <Link to={`/customers/debt-ledger?customerId=${customer.id}`}>
+            <Button
+              variant="outline"
+              size="sm"
+              leftIcon={<FileSpreadsheet className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />}
+            >
+              Sổ công nợ
+            </Button>
+          </Link>
+
           {/* Nút Tạo đơn bán hàng - Bị vô hiệu hoá nếu đại lý đang bị khoá */}
           {isLocked ? (
             <div title="Đại lý đang bị khoá giao dịch. Không thể tạo đơn mới.">
@@ -585,6 +597,14 @@ export const CustomerDetail: React.FC = () => {
                     </div>
                   </div>
                 )}
+
+                <Link
+                  to={`/customers/debt-ledger?customerId=${customer.id}`}
+                  className="w-full mt-2 py-2 px-3 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-xs font-bold text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 border border-indigo-200 dark:border-indigo-800 flex items-center justify-center gap-1.5 transition-colors shadow-sm"
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                  <span>Xem Sổ Chi Tiết Công Nợ</span>
+                </Link>
               </div>
             ) : (
               <p className="text-xs text-slate-400 italic">Đang tải hồ sơ hạn mức...</p>

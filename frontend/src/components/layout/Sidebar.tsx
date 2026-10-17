@@ -39,6 +39,7 @@ import {
   CalendarClock,
   Target,
   AlertOctagon,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { UserRole } from '../../types/User';
@@ -176,6 +177,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
           path: '/credit-notes',
           icon: <FileCheck2 className="w-5 h-5" />,
           allowedRoles: ALL_ROLES,
+        },
+        {
+          title: 'Sổ chi tiết công nợ',
+          path: '/customers/debt-ledger',
+          icon: <FileSpreadsheet className="w-5 h-5" />,
+          allowedRoles: ALL_ROLES.filter((r) => r !== 'User'),
         },
         {
           title: 'Chỉ tiêu doanh số',

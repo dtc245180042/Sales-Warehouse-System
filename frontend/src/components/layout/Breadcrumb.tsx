@@ -48,6 +48,7 @@ const routeNames: Record<string, string> = {
   import: 'Nhập Excel',
   new: 'Thêm Mới',
   agents: 'Đại Lý',
+  'debt-ledger': 'Sổ Chi Tiết Công Nợ',
   'debt-risk': 'Cấu Hình Quy Tắc Chặn Bán',
   'debt-risk-config': 'Cấu Hình Quy Tắc Chặn Bán',
 };

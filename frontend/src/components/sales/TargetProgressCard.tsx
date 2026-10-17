@@ -9,19 +9,27 @@ interface TargetProgressCardProps {
 }
 
 export const TargetProgressCard: React.FC<TargetProgressCardProps> = ({ item }) => {
-  const isComplete = item.revenuePercentage >= 100;
+  const targetRevenue = Number(item.targetRevenue) || 0;
+  const currentRevenue = Number(item.currentRevenue) || 0;
+  const remainingRevenue = Number(item.remainingRevenue) || Math.max(0, targetRevenue - currentRevenue);
+  const revenuePercentage = Number(item.revenuePercentage) || (targetRevenue > 0 ? Math.round((currentRevenue / targetRevenue) * 1000) / 10 : 0);
+  const targetOrders = Number(item.targetOrders) || 0;
+  const currentOrders = Number(item.currentOrders) || 0;
+  const ordersPercentage = Number(item.ordersPercentage) || (targetOrders > 0 ? Math.round((currentOrders / targetOrders) * 100) : 0);
+
+  const isComplete = revenuePercentage >= 100;
 
   const getStatusColorClass = () => {
-    if (item.revenuePercentage >= 100) return 'text-emerald-600 dark:text-emerald-400';
-    if (item.revenuePercentage >= 75) return 'text-blue-600 dark:text-blue-400';
-    if (item.revenuePercentage >= 50) return 'text-amber-600 dark:text-amber-400';
+    if (revenuePercentage >= 100) return 'text-emerald-600 dark:text-emerald-400';
+    if (revenuePercentage >= 75) return 'text-blue-600 dark:text-blue-400';
+    if (revenuePercentage >= 50) return 'text-amber-600 dark:text-amber-400';
     return 'text-rose-600 dark:text-rose-400';
   };
 
   const getProgressBarColor = () => {
-    if (item.revenuePercentage >= 100) return 'bg-emerald-500';
-    if (item.revenuePercentage >= 75) return 'bg-blue-500';
-    if (item.revenuePercentage >= 50) return 'bg-amber-500';
+    if (revenuePercentage >= 100) return 'bg-emerald-500';
+    if (revenuePercentage >= 75) return 'bg-blue-500';
+    if (revenuePercentage >= 50) return 'bg-amber-500';
     return 'bg-rose-500';
   };
 
@@ -51,7 +59,9 @@ export const TargetProgressCard: React.FC<TargetProgressCardProps> = ({ item }) 
             </div>
             <div>
               <h4 className="font-bold text-slate-900 dark:text-slate-100 text-sm sm:text-base leading-tight">
-                {item.scope === 'individual' ? item.userName : item.territory}
+                {item.scope === 'individual'
+                  ? (item.userName || item.userId || 'Chưa đặt tên')
+                  : (item.territory || 'Khu vực kinh doanh')}
               </h4>
               <div className="flex items-center gap-2 mt-0.5 text-xs text-slate-500">
                 {item.scope === 'individual' && item.territory && (
@@ -86,28 +96,28 @@ export const TargetProgressCard: React.FC<TargetProgressCardProps> = ({ item }) 
         {/* Center: Progress Donut & Numbers */}
         <div className="flex items-center justify-between gap-4 py-2 my-2 border-y border-slate-100 dark:border-slate-800/80">
           <div className="shrink-0">
-            <ProgressRing percentage={item.revenuePercentage} size={90} strokeWidth={9} />
+            <ProgressRing percentage={revenuePercentage} size={90} strokeWidth={9} />
           </div>
 
           <div className="flex-1 space-y-1.5 text-xs">
             <div className="flex justify-between items-center">
               <span className="text-slate-500">Mục tiêu:</span>
               <span className="font-semibold text-slate-900 dark:text-slate-100">
-                {formatNumber(item.targetRevenue)} đ
+                {formatNumber(targetRevenue)} đ
               </span>
             </div>
 
             <div className="flex justify-between items-center">
               <span className="text-slate-500">Đã đạt:</span>
               <span className={`font-bold ${getStatusColorClass()}`}>
-                {formatNumber(item.currentRevenue)} đ
+                {formatNumber(currentRevenue)} đ
               </span>
             </div>
 
             <div className="flex justify-between items-center">
               <span className="text-slate-500">Còn lại:</span>
               <span className="font-semibold text-rose-500">
-                {item.remainingRevenue > 0 ? `${formatNumber(item.remainingRevenue)} đ` : '0 đ'}
+                {remainingRevenue > 0 ? `${formatNumber(remainingRevenue)} đ` : '0 đ'}
               </span>
             </div>
           </div>
@@ -117,12 +127,12 @@ export const TargetProgressCard: React.FC<TargetProgressCardProps> = ({ item }) 
         <div className="mt-3">
           <div className="flex justify-between text-[11px] text-slate-500 mb-1">
             <span>Tiến độ doanh số</span>
-            <span className="font-bold">{item.revenuePercentage}%</span>
+            <span className="font-bold">{revenuePercentage}%</span>
           </div>
           <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2 overflow-hidden">
             <div
               className={`h-full rounded-full ${getProgressBarColor()} transition-all duration-700`}
-              style={{ width: `${Math.min(item.revenuePercentage, 100)}%` }}
+              style={{ width: `${Math.min(revenuePercentage, 100)}%` }}
             />
           </div>
         </div>
@@ -135,8 +145,8 @@ export const TargetProgressCard: React.FC<TargetProgressCardProps> = ({ item }) 
           <span>Số đơn hàng:</span>
         </div>
         <div className="font-medium text-slate-800 dark:text-slate-200">
-          <strong className="text-slate-900 dark:text-slate-100">{item.currentOrders}</strong> /{' '}
-          {item.targetOrders} đơn ({item.ordersPercentage}%)
+          <strong className="text-slate-900 dark:text-slate-100">{currentOrders}</strong> /{' '}
+          {targetOrders} đơn ({ordersPercentage}%)
         </div>
       </div>
     </div>

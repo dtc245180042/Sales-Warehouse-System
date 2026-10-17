@@ -7,6 +7,8 @@ import {
   SalesTargetAuditRecord,
 } from '../types/SalesTarget';
 import { getStorageItem, setStorageItem } from './storage';
+import { initialOrders } from '../mock/orders';
+import { parseSafeDate } from '../utils/formatters';
 
 const STORAGE_KEY = 'kv_sales_targets';
 const STORAGE_AUDIT_KEY = 'kv_sales_target_audits';
@@ -200,20 +202,26 @@ export const salesTargetService = {
       const res = await apiClient.get('/sales-targets', { params });
       if (res.data && Array.isArray(res.data.items || res.data)) {
         const items = res.data.items || res.data;
-        setStorageItem(STORAGE_KEY, items);
-        return items;
+        if (items.length > 0 && items[0].targetRevenue !== undefined) {
+          setStorageItem(STORAGE_KEY, items);
+          return items;
+        }
       }
     } catch {
       // Fallback
     }
 
     let list = getStorageItem<SalesTarget[]>(STORAGE_KEY, INITIAL_DEMO_TARGETS);
+    if (!Array.isArray(list) || list.length === 0) {
+      list = INITIAL_DEMO_TARGETS;
+      setStorageItem(STORAGE_KEY, list);
+    }
 
     if (params?.year) {
-      list = list.filter((t) => t.year === Number(params.year));
+      list = list.filter((t) => Number(t.year) === Number(params.year));
     }
     if (params?.month) {
-      list = list.filter((t) => t.month === Number(params.month));
+      list = list.filter((t) => Number(t.month) === Number(params.month));
     }
     if (params?.scope && params.scope !== 'all') {
       list = list.filter((t) => t.scope === params.scope);
@@ -400,27 +408,82 @@ export const salesTargetService = {
   getProgress: async (year: number, month: number): Promise<SalesTargetProgressItem[]> => {
     try {
       const res = await apiClient.get('/sales-targets/progress', { params: { year, month } });
-      if (res.data && Array.isArray(res.data)) return res.data;
+      if (
+        res.data &&
+        Array.isArray(res.data) &&
+        res.data.length > 0 &&
+        res.data[0].targetRevenue !== undefined &&
+        res.data[0].targetId !== undefined
+      ) {
+        return res.data;
+      }
     } catch {
       // Fallback
     }
 
-    const list = getStorageItem<SalesTarget[]>(STORAGE_KEY, INITIAL_DEMO_TARGETS);
-    const targets = list.filter((t) => t.year === year && t.month === month);
+    let list = getStorageItem<SalesTarget[]>(STORAGE_KEY, INITIAL_DEMO_TARGETS);
+    if (!Array.isArray(list) || list.length === 0) {
+      list = INITIAL_DEMO_TARGETS;
+      setStorageItem(STORAGE_KEY, list);
+    }
+
+    const targets = list.filter((t) => Number(t.year) === Number(year) && Number(t.month) === Number(month));
+
+    // Lấy danh sách đơn hàng thực tế để tính toán doanh số và số đơn
+    const orders = getStorageItem<any[]>('kv_orders', initialOrders);
 
     return targets.map((t) => {
-      const mock = MOCK_ACHIEVEMENTS[t.id] || {
-        revenue: Math.round(t.targetRevenue * (0.6 + Math.random() * 0.45)),
-        orders: Math.round((t.targetOrders || 100) * (0.6 + Math.random() * 0.45)),
-      };
+      const targetRev = Number(t.targetRevenue) || 0;
+      const targetOrd = Number(t.targetOrders) || 100;
 
-      const currentRev = mock.revenue;
-      const remainingRev = Math.max(0, t.targetRevenue - currentRev);
-      const revPct = t.targetRevenue > 0 ? (currentRev / t.targetRevenue) * 100 : 0;
+      // Lọc các đơn hàng phát sinh trong kỳ tháng/năm của chỉ tiêu
+      const matchingOrders = (orders || []).filter((o) => {
+        if (!o || o.status === 'cancelled' || o.status === 'draft') return false;
 
-      const targetOrd = t.targetOrders || 100;
-      const currentOrd = mock.orders;
-      const ordPct = targetOrd > 0 ? (currentOrd / targetOrd) * 100 : 0;
+        const orderDate = parseSafeDate(o.createdAt || o.created_at);
+        if (orderDate) {
+          if (orderDate.getFullYear() !== Number(year) || orderDate.getMonth() + 1 !== Number(month)) {
+            return false;
+          }
+        }
+
+        if (t.scope === 'individual') {
+          const matchId = t.userId && (String(o.staffId) === String(t.userId) || String(o.staff_id) === String(t.userId));
+          const matchName = t.userName && (
+            (o.staffName && o.staffName.toLowerCase() === t.userName.toLowerCase()) ||
+            (o.staff_name && o.staff_name.toLowerCase() === t.userName.toLowerCase())
+          );
+          return Boolean(matchId || matchName);
+        } else {
+          const terr = (t.territory || '').toLowerCase();
+          const addr = (o.customerAddress || o.customer_address || '').toLowerCase();
+          if (terr.includes('hà nội') && (addr.includes('hà nội') || addr.includes('hoàn kiếm') || addr.includes('ba đình'))) return true;
+          if ((terr.includes('hồ chí minh') || terr.includes('tp. hcm')) && (addr.includes('hồ chí minh') || addr.includes('quận 1') || addr.includes('tp. hcm'))) return true;
+          if (terr.includes('đà nẵng') && (addr.includes('đà nẵng') || addr.includes('hải châu'))) return true;
+          if (terr.includes('miền bắc') && (addr.includes('hà nội') || addr.includes('hải phòng') || addr.includes('quảng ninh'))) return true;
+          if (terr.includes('miền nam') && (addr.includes('hồ chí minh') || addr.includes('cần thơ') || addr.includes('bình dương'))) return true;
+          return terr ? addr.includes(terr) : false;
+        }
+      });
+
+      const realRevenue = matchingOrders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+      const realOrders = matchingOrders.length;
+
+      const mock = MOCK_ACHIEVEMENTS[t.id];
+      let currentRev = realRevenue;
+      let currentOrd = realOrders;
+
+      if (mock) {
+        currentRev = Math.max(realRevenue, Number(mock.revenue) || 0);
+        currentOrd = Math.max(realOrders, Number(mock.orders) || 0);
+      } else if (realOrders === 0 && !mock) {
+        currentRev = realRevenue;
+        currentOrd = realOrders;
+      }
+
+      const remainingRev = Math.max(0, targetRev - currentRev);
+      const revPct = targetRev > 0 ? Math.round((currentRev / targetRev) * 1000) / 10 : 0;
+      const ordPct = targetOrd > 0 ? Math.round((currentOrd / targetOrd) * 1000) / 10 : 0;
 
       return {
         targetId: t.id,
@@ -429,13 +492,13 @@ export const salesTargetService = {
         userName: t.userName,
         userRole: t.userRole,
         territory: t.territory,
-        targetRevenue: t.targetRevenue,
+        targetRevenue: targetRev,
         currentRevenue: currentRev,
         remainingRevenue: remainingRev,
-        revenuePercentage: Math.round(revPct * 10) / 10,
+        revenuePercentage: revPct,
         targetOrders: targetOrd,
         currentOrders: currentOrd,
-        ordersPercentage: Math.round(ordPct * 10) / 10,
+        ordersPercentage: ordPct,
         status: t.status,
       };
     });

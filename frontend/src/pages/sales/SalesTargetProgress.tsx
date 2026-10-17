@@ -89,11 +89,11 @@ export const SalesTargetProgress: React.FC = () => {
 
   // Team summary
   const summary = useMemo(() => {
-    const totalTarget = progressItems.reduce((sum, i) => sum + i.targetRevenue, 0);
-    const totalAchieved = progressItems.reduce((sum, i) => sum + i.currentRevenue, 0);
+    const totalTarget = progressItems.reduce((sum, i) => sum + (Number(i.targetRevenue) || 0), 0);
+    const totalAchieved = progressItems.reduce((sum, i) => sum + (Number(i.currentRevenue) || 0), 0);
     const overallPct =
       totalTarget > 0 ? Math.round((totalAchieved / totalTarget) * 1000) / 10 : 0;
-    const completedCount = progressItems.filter((i) => i.revenuePercentage >= 100).length;
+    const completedCount = progressItems.filter((i) => (Number(i.revenuePercentage) || 0) >= 100).length;
     const totalCount = progressItems.length;
 
     return { totalTarget, totalAchieved, overallPct, completedCount, totalCount };

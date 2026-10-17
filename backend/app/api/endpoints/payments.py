@@ -1,6 +1,7 @@
 from typing import List, Optional
 from datetime import datetime
 from fastapi import APIRouter, Depends, Query, status, HTTPException
+from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 
 from app.core.database import lay_phien_db
@@ -10,7 +11,9 @@ from app.schemas.payment import (
     PaymentCreateRequest,
     PaymentResponse,
 )
+from app.schemas.payment_receipt import PaymentReceiptPrintData
 from app.services.payment_service import PaymentService
+from app.services.payment_receipt_service import PaymentReceiptService
 
 router = APIRouter(prefix="/payments", tags=["Phiếu thu & Đối trừ công nợ (Payments - Story S7-02)"])
 
@@ -92,6 +95,43 @@ def chi_tiet_phieu_thu(
     Áp dụng kiểm tra bảo mật chống IDOR đối với vai trò Customer.
     """
     return PaymentService.get_payment_by_id(db=db, payment_id=id, current_user=current_user)
+
+
+@router.get(
+    "/{id}/print",
+    response_model=PaymentReceiptPrintData,
+    status_code=status.HTTP_200_OK,
+    summary="Dữ liệu mẫu in ấn phiếu thu tiền chuẩn hóa (SCRUM-270 / S7-09)",
+)
+def du_lieu_in_phieu_thu(
+    id: str,
+    current_user: User = Depends(lay_nguoi_dung_hien_tai),
+    db: Session = Depends(lay_phien_db),
+):
+    """
+    Cung cấp cấu trúc dữ liệu in ấn phiếu thu: mã duy nhất, thông tin đại lý,
+    số tiền (số + chữ), hình thức nộp, người thu và mã vạch Code128 vector (SCRUM-270).
+    """
+    return PaymentReceiptService.get_payment_receipt_data(db=db, payment_id=id, current_user=current_user)
+
+
+@router.get(
+    "/{id}/print-html",
+    response_class=HTMLResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Xuất trang HTML in ấn phiếu thu tiền chuẩn A4 offline-first (SCRUM-270 / S7-09)",
+)
+def xuat_trang_in_phieu_thu(
+    id: str,
+    current_user: User = Depends(lay_nguoi_dung_hien_tai),
+    db: Session = Depends(lay_phien_db),
+):
+    """
+    Trả về trang HTML in ấn Phiếu thu tiền hoàn chỉnh (Standalone Printable HTML).
+    Sẵn sàng mở trong iframe, in trực tiếp hoặc lưu PDF từ trình duyệt.
+    """
+    html_doc = PaymentReceiptService.generate_payment_receipt_html(db=db, payment_id=id, current_user=current_user)
+    return HTMLResponse(content=html_doc, status_code=status.HTTP_200_OK)
 
 
 # ==============================================================================

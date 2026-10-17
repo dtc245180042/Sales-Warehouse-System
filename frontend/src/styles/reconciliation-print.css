@@ -1,0 +1,32 @@
+/* Print styling for Debt Reconciliation document (SCRUM-749) */
+@media print {
+  /* Hide all dashboard UI, sidebar, headers, buttons */
+  body * {
+    visibility: hidden;
+  }
+
+  /* Only display the printable reconciliation document */
+  #reconciliation-print-area,
+  #reconciliation-print-area * {
+    visibility: visible;
+  }
+
+  #reconciliation-print-area {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    margin: 0;
+    padding: 20mm;
+    background: #ffffff !important;
+    color: #000000 !important;
+    box-shadow: none !important;
+    border: none !important;
+    font-size: 11pt;
+    line-height: 1.5;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+}

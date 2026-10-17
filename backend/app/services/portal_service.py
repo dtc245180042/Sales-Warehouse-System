@@ -18,6 +18,7 @@ from app.models.product_stock_profile import ProductStockProfile
 from app.models.price_list import PriceList, PriceListItem
 from app.models.portal_idempotency import PortalIdempotencyRecord
 from app.models.audit_log import AuditLog
+from app.models.invoice import Invoice, InvoiceItem, InvoiceStatus
 from app.schemas.portal import (
     PortalProductResponse,
     PortalProductPaginationResponse,
@@ -37,6 +38,11 @@ from app.schemas.portal import (
     PortalReorderItemIn,
     PortalReorderRequest,
     PortalReorderResponse,
+    PortalDebtInvoiceItem,
+    PortalDebtOverviewResponse,
+    PortalInvoiceListResponse,
+    PortalInvoiceItemDetail,
+    PortalInvoiceDetailResponse,
 )
 from app.services.volume_discount_service import calculate_volume_discount
 
@@ -1162,3 +1168,798 @@ def create_portal_reorder(
 
     db.commit()
     return resp_obj
+
+
+# ==============================================================================
+# HÀM HỖ TRỢ VÀ NGHIỆP VỤ CÔNG NỢ & HOÁ ĐƠN ĐẠI LÝ (S7-07, SCRUM-753, 754, 756)
+# ==============================================================================
+
+def doc_so_tien_tieng_viet(so_tien: int) -> str:
+    """Đọc số tiền VNĐ nguyên dương thành chuỗi chữ tiếng Việt chuẩn kế toán."""
+    if so_tien <= 0:
+        return "Không đồng"
+
+    chu_so = ["không", "một", "hai", "ba", "bốn", "năm", "sáu", "bảy", "tám", "chín"]
+    don_vi = ["", "nghìn", "triệu", "tỷ", "nghìn tỷ", "triệu tỷ"]
+
+    def doc_ba_so(n: int, day_du: bool = False) -> str:
+        tram = n // 100
+        chuc = (n % 100) // 10
+        dv = n % 10
+        res = []
+        if tram > 0 or day_du:
+            res.append(f"{chu_so[tram]} trăm")
+        if chuc > 1:
+            res.append(f"{chu_so[chuc]} mươi")
+            if dv == 1:
+                res.append("mốt")
+            elif dv == 5:
+                res.append("lăm")
+            elif dv > 0:
+                res.append(chu_so[dv])
+        elif chuc == 1:
+            res.append("mười")
+            if dv == 5:
+                res.append("lăm")
+            elif dv > 0:
+                res.append(chu_so[dv])
+        elif chuc == 0 and (tram > 0 or day_du) and dv > 0:
+            res.append(f"lẻ {chu_so[dv]}")
+        elif chuc == 0 and dv > 0:
+            res.append(chu_so[dv])
+        return " ".join(res)
+
+    chunks = []
+    temp = so_tien
+    while temp > 0:
+        chunks.append(temp % 1000)
+        temp //= 1000
+
+    parts = []
+    for i in range(len(chunks) - 1, -1, -1):
+        c = chunks[i]
+        if c > 0:
+            day_du = (i < len(chunks) - 1)
+            t = doc_ba_so(c, day_du)
+            if don_vi[i]:
+                t += f" {don_vi[i]}"
+            parts.append(t)
+
+    chuoi = " ".join(parts).strip()
+    return chuoi.capitalize() + " đồng chẵn"
+
+
+def _build_portal_invoice_query(
+    db: Session,
+    customer_id: str,
+    status_filter: Optional[str] = None,
+    from_date: Optional[datetime] = None,
+    to_date: Optional[datetime] = None,
+    now_utc: Optional[datetime] = None,
+):
+    if now_utc is None:
+        now_utc = datetime.now(timezone.utc)
+
+    query = db.query(Invoice).filter(Invoice.customer_id == customer_id)
+    if status_filter:
+        s_upper = status_filter.strip().upper()
+        if s_upper == "OVERDUE":
+            query = query.filter(
+                Invoice.remaining_amount > 0,
+                Invoice.due_date < now_utc
+            )
+        elif s_upper in [
+            InvoiceStatus.UNPAID.value,
+            InvoiceStatus.PARTIALLY_PAID.value,
+            InvoiceStatus.PAID.value,
+        ]:
+            query = query.filter(Invoice.status == s_upper)
+
+    if from_date:
+        query = query.filter(Invoice.issued_at >= from_date)
+    if to_date:
+        query = query.filter(Invoice.issued_at <= to_date)
+
+    return query
+
+
+def get_portal_debt_overview(
+    db: Session,
+    customer: Customer,
+    status_filter: Optional[str] = None,
+    from_date: Optional[datetime] = None,
+    to_date: Optional[datetime] = None,
+    page: int = 1,
+    limit: int = 20,
+) -> PortalDebtOverviewResponse:
+    """
+    Xem công nợ tổng quan và danh sách hoá đơn của chính đại lý (SCRUM-753, SCRUM-754).
+    Chỉ số gồm:
+    - credit_limit: Hạn mức công nợ được cấp
+    - total_debt: Tổng nợ còn phải trả (tính từ hóa đơn chưa thanh toán hoặc đơn đã xuất)
+    - available_credit: Hạn mức còn lại để được lấy thêm hàng
+    - max_debt_days: Số ngày nợ tối đa
+    - overdue_debt: Tổng nợ đã quá hạn
+    - has_overdue: Đánh dấu có nợ quá hạn
+    - Danh sách hóa đơn kèm phân trang và lọc theo trạng thái
+    """
+    profile = db.query(CustomerCreditProfile).filter(
+        CustomerCreditProfile.customer_id == customer.id
+    ).first()
+    if profile:
+        credit_limit = profile.credit_limit
+        max_debt_days = profile.max_debt_days
+    else:
+        from app.models.customer_debt_profile import CustomerDebtProfile
+        debt_prof = db.query(CustomerDebtProfile).filter(
+            CustomerDebtProfile.customer_id == customer.id
+        ).first()
+        credit_limit = int(debt_prof.credit_limit) if debt_prof else 0
+        max_debt_days = 0
+
+    now_utc = datetime.now(timezone.utc)
+
+    # 1. Tổng hợp toàn bộ hóa đơn của đại lý để tính chỉ tiêu tài chính
+    all_invoices = db.query(Invoice).filter(Invoice.customer_id == customer.id).all()
+    total_invoices_count = len(all_invoices)
+    unpaid_invoices_count = sum(1 for inv in all_invoices if inv.remaining_amount > 0)
+
+    invoice_remaining_sum = 0
+    overdue_debt = 0
+    overdue_invoices_count = 0
+
+    for inv in all_invoices:
+        if inv.remaining_amount > 0:
+            invoice_remaining_sum += inv.remaining_amount
+            d_due = inv.due_date
+            if d_due:
+                if d_due.tzinfo is None:
+                    d_due = d_due.replace(tzinfo=timezone.utc)
+                if d_due < now_utc:
+                    overdue_debt += inv.remaining_amount
+                    overdue_invoices_count += 1
+
+    # Tính thêm nợ thực xuất từ các đơn chưa thanh toán (chống sót đơn chưa kịp xuất hóa đơn)
+    order_debt_raw = db.query(
+        func.coalesce(func.sum(Order.total - Order.paid_amount), 0.0)
+    ).filter(
+        Order.customer_id == customer.id,
+        Order.status.in_(["shipping", "completed"])
+    ).scalar() or 0.0
+    order_debt = int(round(order_debt_raw))
+
+    total_debt = max(invoice_remaining_sum, order_debt)
+    available_credit = max(0, credit_limit - total_debt)
+    has_overdue = (overdue_debt > 0 or overdue_invoices_count > 0)
+
+    # 2. Truy vấn danh sách hoá đơn theo bộ lọc và phân trang
+    query = _build_portal_invoice_query(
+        db=db,
+        customer_id=customer.id,
+        status_filter=status_filter,
+        from_date=from_date,
+        to_date=to_date,
+        now_utc=now_utc,
+    )
+    total_filtered = query.count()
+    page = max(1, page)
+    limit = max(1, min(limit, 100))
+    offset = (page - 1) * limit
+    invoices_page = query.order_by(Invoice.issued_at.desc()).offset(offset).limit(limit).all()
+
+    items = []
+    for inv in invoices_page:
+        d_due = inv.due_date
+        if d_due and d_due.tzinfo is None:
+            d_due = d_due.replace(tzinfo=timezone.utc)
+        is_ov = bool(inv.remaining_amount > 0 and d_due and d_due < now_utc)
+        days_ov = max(0, (now_utc.date() - d_due.date()).days) if (is_ov and d_due) else 0
+
+        items.append(PortalDebtInvoiceItem(
+            id=inv.id,
+            subtotal_amount=inv.subtotal_amount,
+            discount_amount=inv.discount_amount,
+            vat_amount=inv.vat_amount,
+            total_amount=inv.total_amount,
+            paid_amount=inv.paid_amount,
+            remaining_amount=inv.remaining_amount,
+            status=inv.status,
+            issued_at=inv.issued_at,
+            due_date=inv.due_date,
+            is_overdue=is_ov,
+            days_overdue=days_ov,
+            items_count=len(inv.items) if inv.items else 0,
+            notes=inv.notes,
+        ))
+
+    total_pages = (total_filtered + limit - 1) // limit if total_filtered > 0 else 1
+
+    return PortalDebtOverviewResponse(
+        customer_id=customer.id,
+        customer_name=customer.name,
+        credit_limit=credit_limit,
+        total_debt=total_debt,
+        available_credit=available_credit,
+        max_debt_days=max_debt_days,
+        overdue_debt=overdue_debt,
+        has_overdue=has_overdue,
+        total_invoices_count=total_invoices_count,
+        unpaid_invoices_count=unpaid_invoices_count,
+        overdue_invoices_count=overdue_invoices_count,
+        invoices=items,
+        total=total_filtered,
+        page=page,
+        limit=limit,
+        total_pages=total_pages,
+    )
+
+
+def get_portal_invoices(
+    db: Session,
+    customer: Customer,
+    status_filter: Optional[str] = None,
+    from_date: Optional[datetime] = None,
+    to_date: Optional[datetime] = None,
+    page: int = 1,
+    limit: int = 20,
+) -> PortalInvoiceListResponse:
+    """Danh sách hoá đơn bán hàng của đại lý kèm phân trang (SCRUM-753, SCRUM-754)."""
+    now_utc = datetime.now(timezone.utc)
+    query = _build_portal_invoice_query(
+        db=db,
+        customer_id=customer.id,
+        status_filter=status_filter,
+        from_date=from_date,
+        to_date=to_date,
+        now_utc=now_utc,
+    )
+    total_filtered = query.count()
+    page = max(1, page)
+    limit = max(1, min(limit, 100))
+    offset = (page - 1) * limit
+    invoices_page = query.order_by(Invoice.issued_at.desc()).offset(offset).limit(limit).all()
+
+    items = []
+    for inv in invoices_page:
+        d_due = inv.due_date
+        if d_due and d_due.tzinfo is None:
+            d_due = d_due.replace(tzinfo=timezone.utc)
+        is_ov = bool(inv.remaining_amount > 0 and d_due and d_due < now_utc)
+        days_ov = max(0, (now_utc.date() - d_due.date()).days) if (is_ov and d_due) else 0
+
+        items.append(PortalDebtInvoiceItem(
+            id=inv.id,
+            subtotal_amount=inv.subtotal_amount,
+            discount_amount=inv.discount_amount,
+            vat_amount=inv.vat_amount,
+            total_amount=inv.total_amount,
+            paid_amount=inv.paid_amount,
+            remaining_amount=inv.remaining_amount,
+            status=inv.status,
+            issued_at=inv.issued_at,
+            due_date=inv.due_date,
+            is_overdue=is_ov,
+            days_overdue=days_ov,
+            items_count=len(inv.items) if inv.items else 0,
+            notes=inv.notes,
+        ))
+
+    total_pages = (total_filtered + limit - 1) // limit if total_filtered > 0 else 1
+    return PortalInvoiceListResponse(
+        items=items,
+        total=total_filtered,
+        page=page,
+        limit=limit,
+        total_pages=total_pages,
+    )
+
+
+def get_portal_invoice_detail(
+    db: Session,
+    customer: Customer,
+    invoice_id: str,
+) -> PortalInvoiceDetailResponse:
+    """
+    Tra cứu chi tiết hoá đơn đã phát hành kèm kiểm soát truy cập (SCRUM-756, SCRUM-754).
+    Chặn 403 nếu truy cập hóa đơn của đại lý khác (chống IDOR).
+    """
+    invoice = db.query(Invoice).filter(Invoice.id == invoice_id).first()
+    if not invoice:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Không tìm thấy hoá đơn '{invoice_id}'.",
+        )
+    if invoice.customer_id != customer.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Bạn không có quyền truy cập vào hoá đơn của đại lý khác.",
+        )
+
+    now_utc = datetime.now(timezone.utc)
+    d_due = invoice.due_date
+    if d_due and d_due.tzinfo is None:
+        d_due = d_due.replace(tzinfo=timezone.utc)
+    is_ov = bool(invoice.remaining_amount > 0 and d_due and d_due < now_utc)
+    days_ov = max(0, (now_utc.date() - d_due.date()).days) if (is_ov and d_due) else 0
+
+    items_resp = [
+        PortalInvoiceItemDetail(
+            id=it.id,
+            dispatch_id=it.dispatch_id,
+            order_id=it.order_id,
+            product_id=it.product_id,
+            sku=it.sku,
+            product_name=it.product_name,
+            unit=it.unit or "cái",
+            quantity=it.quantity,
+            unit_price=it.unit_price,
+            discount_amount=it.discount_amount,
+            vat_amount=it.vat_amount,
+            subtotal=it.subtotal,
+        )
+        for it in (invoice.items or [])
+    ]
+
+    return PortalInvoiceDetailResponse(
+        id=invoice.id,
+        customer_id=invoice.customer_id,
+        customer_name=invoice.customer_name,
+        customer_address=invoice.customer_address,
+        customer_tax_code=invoice.customer_tax_code,
+        subtotal_amount=invoice.subtotal_amount,
+        discount_amount=invoice.discount_amount,
+        vat_amount=invoice.vat_amount,
+        total_amount=invoice.total_amount,
+        paid_amount=invoice.paid_amount,
+        remaining_amount=invoice.remaining_amount,
+        status=invoice.status,
+        issued_at=invoice.issued_at,
+        due_date=invoice.due_date,
+        is_overdue=is_ov,
+        days_overdue=days_ov,
+        notes=invoice.notes,
+        items=items_resp,
+    )
+
+
+def render_invoice_html(
+    db: Session,
+    customer: Customer,
+    invoice_id: str,
+) -> str:
+    """
+    Sinh tài liệu HTML hoá đơn chuẩn in ấn khổ A4 phục vụ xem trước và tải lại (SCRUM-756, SCRUM-754).
+    Kiểm soát quyền truy cập chặt chẽ: chỉ đại lý sở hữu mới được tải.
+    """
+    invoice = db.query(Invoice).filter(Invoice.id == invoice_id).first()
+    if not invoice:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Không tìm thấy hoá đơn '{invoice_id}'.",
+        )
+    if invoice.customer_id != customer.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Bạn không có quyền tải hoá đơn của đại lý khác.",
+        )
+
+    # Định dạng ngày giờ
+    issued_str = invoice.issued_at.strftime("%d/%m/%Y %H:%M") if invoice.issued_at else ""
+    due_str = invoice.due_date.strftime("%d/%m/%Y") if invoice.due_date else ""
+
+    # Trạng thái và watermark
+    st = (invoice.status or "").upper()
+    if st == "PAID":
+        watermark_text = "ĐÃ THANH TOÁN"
+        watermark_class = "watermark-paid"
+        status_label = "Đã thanh toán đủ"
+        badge_class = "badge-paid"
+    elif st == "PARTIALLY_PAID":
+        watermark_text = "THANH TOÁN MỘT PHẦN"
+        watermark_class = "watermark-partially_paid"
+        status_label = "Thanh toán một phần"
+        badge_class = "badge-partially_paid"
+    else:
+        watermark_text = "CHƯA THANH TOÁN"
+        watermark_class = "watermark-unpaid"
+        status_label = "Chưa thanh toán"
+        badge_class = "badge-unpaid"
+
+    words = doc_so_tien_tieng_viet(invoice.total_amount)
+
+    # Render danh sách dòng hàng
+    rows_html = []
+    for idx, it in enumerate(invoice.items or [], start=1):
+        rows_html.append(f"""
+            <tr>
+                <td class="text-center">{idx}</td>
+                <td><strong>{it.sku}</strong></td>
+                <td>{it.product_name or 'Sản phẩm'}</td>
+                <td class="text-center">{it.unit or 'cái'}</td>
+                <td class="text-center">{it.quantity}</td>
+                <td class="text-right">{it.unit_price:,.0f} đ</td>
+                <td class="text-right">{it.discount_amount:,.0f} đ</td>
+                <td class="text-right">{it.vat_amount:,.0f} đ</td>
+                <td class="text-right"><strong>{it.subtotal:,.0f} đ</strong></td>
+            </tr>
+        """)
+    items_tbody = "".join(rows_html)
+
+    html_content = f"""<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hóa đơn bán hàng - {invoice.id}</title>
+<style>
+    @page {{
+        size: A4 portrait;
+        margin: 15mm;
+    }}
+    * {{
+        box-sizing: border-box;
+    }}
+    body {{
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        color: #1e293b;
+        background-color: #f1f5f9;
+        margin: 0;
+        padding: 24px;
+    }}
+    .invoice-card {{
+        max-width: 820px;
+        margin: 0 auto;
+        position: relative;
+        background: #ffffff;
+        border-radius: 8px;
+        box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -2px rgba(0,0,0,0.1);
+        padding: 32px 36px;
+        overflow: hidden;
+    }}
+    .watermark {{
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%) rotate(-30deg);
+        font-size: 46px;
+        font-weight: 800;
+        letter-spacing: 3px;
+        opacity: 0.12;
+        pointer-events: none;
+        white-space: nowrap;
+        text-transform: uppercase;
+        border: 4px solid currentColor;
+        padding: 12px 28px;
+        border-radius: 8px;
+    }}
+    .watermark-paid {{ color: #16a34a; }}
+    .watermark-unpaid {{ color: #dc2626; }}
+    .watermark-partially_paid {{ color: #d97706; }}
+    .header-table {{
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 20px;
+    }}
+    .header-company {{
+        width: 60%;
+        vertical-align: top;
+    }}
+    .company-name {{
+        font-size: 15px;
+        font-weight: 700;
+        color: #0f172a;
+        margin-bottom: 4px;
+        text-transform: uppercase;
+    }}
+    .company-info {{
+        font-size: 12.5px;
+        color: #475569;
+        line-height: 1.5;
+    }}
+    .header-meta {{
+        width: 40%;
+        text-align: right;
+        vertical-align: top;
+        font-size: 12.5px;
+        color: #475569;
+        line-height: 1.6;
+    }}
+    .invoice-title {{
+        text-align: center;
+        margin: 20px 0 10px 0;
+    }}
+    .invoice-title h1 {{
+        font-size: 22px;
+        font-weight: 800;
+        color: #1e3a8a;
+        margin: 0;
+        letter-spacing: 1px;
+    }}
+    .invoice-subtitle {{
+        font-size: 12.5px;
+        color: #64748b;
+        font-style: italic;
+        margin-top: 4px;
+    }}
+    .info-box {{
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        padding: 14px 18px;
+        margin: 16px 0;
+        font-size: 13px;
+    }}
+    .info-grid {{
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px 24px;
+    }}
+    .info-item {{
+        display: flex;
+    }}
+    .info-label {{
+        width: 130px;
+        color: #64748b;
+        font-weight: 600;
+    }}
+    .info-value {{
+        flex: 1;
+        color: #0f172a;
+        font-weight: 500;
+    }}
+    .badge {{
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-size: 12px;
+        font-weight: 600;
+    }}
+    .badge-paid {{ background: #dcfce7; color: #15803d; }}
+    .badge-unpaid {{ background: #fee2e2; color: #b91c1c; }}
+    .badge-partially_paid {{ background: #fef3c7; color: #b45309; }}
+    .items-table {{
+        width: 100%;
+        border-collapse: collapse;
+        margin: 20px 0 12px 0;
+        font-size: 12.5px;
+    }}
+    .items-table th {{
+        background: #f1f5f9;
+        color: #334155;
+        font-weight: 700;
+        text-align: left;
+        padding: 9px 8px;
+        border: 1px solid #cbd5e1;
+    }}
+    .items-table td {{
+        padding: 8px 8px;
+        border: 1px solid #e2e8f0;
+        vertical-align: middle;
+    }}
+    .items-table tr:nth-child(even) {{
+        background-color: #fafbfc;
+    }}
+    .text-center {{ text-align: center; }}
+    .text-right {{ text-align: right; }}
+    .summary-table {{
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 10px;
+        font-size: 13px;
+    }}
+    .summary-table td {{
+        padding: 6px 8px;
+    }}
+    .summary-label {{
+        width: 70%;
+        text-align: right;
+        color: #475569;
+    }}
+    .summary-val {{
+        width: 30%;
+        text-align: right;
+        font-weight: 600;
+        color: #0f172a;
+    }}
+    .summary-total {{
+        font-size: 15px;
+        font-weight: 800;
+        color: #1e3a8a;
+        border-top: 2px solid #cbd5e1;
+        border-bottom: 2px solid #cbd5e1;
+        padding: 8px 8px;
+    }}
+    .words-box {{
+        font-style: italic;
+        color: #334155;
+        margin-top: 12px;
+        padding: 8px 12px;
+        background: #f8fafc;
+        border: 1px dashed #cbd5e1;
+        border-radius: 4px;
+        font-size: 13px;
+    }}
+    .signatures {{
+        margin-top: 36px;
+        display: flex;
+        justify-content: space-between;
+        text-align: center;
+        page-break-inside: avoid;
+    }}
+    .sign-col {{
+        width: 30%;
+    }}
+    .sign-title {{
+        font-weight: 700;
+        font-size: 13px;
+        color: #0f172a;
+    }}
+    .sign-note {{
+        font-size: 11px;
+        color: #64748b;
+        font-style: italic;
+        margin-top: 2px;
+    }}
+    .sign-space {{
+        height: 65px;
+    }}
+    .sign-name {{
+        font-size: 12.5px;
+        font-weight: 600;
+        color: #0f172a;
+    }}
+    @media print {{
+        body {{
+            padding: 0;
+            background: none;
+        }}
+        .invoice-card {{
+            box-shadow: none;
+            border-radius: 0;
+            padding: 0;
+            max-width: 100%;
+        }}
+    }}
+</style>
+</head>
+<body>
+<div class="invoice-card">
+    <div class="watermark {watermark_class}">{watermark_text}</div>
+
+    <!-- Header thông tin công ty -->
+    <table class="header-table">
+        <tr>
+            <td class="header-company">
+                <div class="company-name">Hệ Thống Phân Phối Bán Hàng & Kho Vận Sales-Warehouse</div>
+                <div class="company-info">
+                    Mã số thuế: <strong>0101234567</strong><br>
+                    Địa chỉ: Tòa nhà Công nghệ ICT, Cầu Giấy, Hà Nội<br>
+                    Hotline: 1900 6868 | Email: billing@saleswarehouse.vn
+                </div>
+            </td>
+            <td class="header-meta">
+                Mẫu số: <strong>01GTKT0/001</strong><br>
+                Ký hiệu: <strong>HD/{invoice.id[:10]}</strong><br>
+                Số hoá đơn: <strong>{invoice.id}</strong><br>
+                Ngày phát hành: {issued_str}
+            </td>
+        </tr>
+    </table>
+
+    <!-- Tiêu đề hóa đơn -->
+    <div class="invoice-title">
+        <h1>HÓA ĐƠN BÁN HÀNG</h1>
+        <div class="invoice-subtitle">Liên 2: Giao cho người mua (Đại lý)</div>
+    </div>
+
+    <!-- Thông tin khách hàng / đại lý -->
+    <div class="info-box">
+        <div class="info-grid">
+            <div class="info-item">
+                <div class="info-label">Đơn vị mua hàng:</div>
+                <div class="info-value"><strong>{invoice.customer_name or customer.name}</strong></div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Mã đại lý:</div>
+                <div class="info-value">{invoice.customer_id}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Mã số thuế:</div>
+                <div class="info-value">{invoice.customer_tax_code or '---'}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Hạn thanh toán:</div>
+                <div class="info-value"><strong>{due_str}</strong></div>
+            </div>
+            <div class="info-item" style="grid-column: span 2;">
+                <div class="info-label">Địa chỉ trụ sở:</div>
+                <div class="info-value">{invoice.customer_address or customer.address or '---'}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Trạng thái:</div>
+                <div class="info-value"><span class="badge {badge_class}">{status_label}</span></div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Ghi chú:</div>
+                <div class="info-value">{invoice.notes or 'Hóa đơn xuất tự động theo phiếu xuất kho'}</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bảng danh sách dòng hàng -->
+    <table class="items-table">
+        <thead>
+            <tr>
+                <th class="text-center" style="width: 40px;">STT</th>
+                <th style="width: 100px;">Mã SKU</th>
+                <th>Tên hàng hóa, dịch vụ</th>
+                <th class="text-center" style="width: 50px;">ĐVT</th>
+                <th class="text-center" style="width: 60px;">SL</th>
+                <th class="text-right" style="width: 95px;">Đơn giá</th>
+                <th class="text-right" style="width: 85px;">Chiết khấu</th>
+                <th class="text-right" style="width: 80px;">VAT</th>
+                <th class="text-right" style="width: 105px;">Thành tiền</th>
+            </tr>
+        </thead>
+        <tbody>
+            {items_tbody}
+        </tbody>
+    </table>
+
+    <!-- Bảng tổng hợp thanh toán -->
+    <table class="summary-table">
+        <tr>
+            <td class="summary-label">Cộng tiền hàng (chưa bao gồm VAT):</td>
+            <td class="summary-val">{invoice.subtotal_amount:,.0f} đ</td>
+        </tr>
+        <tr>
+            <td class="summary-label">Tổng tiền chiết khấu thương mại:</td>
+            <td class="summary-val">-{invoice.discount_amount:,.0f} đ</td>
+        </tr>
+        <tr>
+            <td class="summary-label">Thuế giá trị gia tăng (VAT):</td>
+            <td class="summary-val">+{invoice.vat_amount:,.0f} đ</td>
+        </tr>
+        <tr>
+            <td class="summary-label summary-total">TỔNG CỘNG TIỀN THANH TOÁN:</td>
+            <td class="summary-val summary-total">{invoice.total_amount:,.0f} đ</td>
+        </tr>
+        <tr>
+            <td class="summary-label">Số tiền đã thanh toán:</td>
+            <td class="summary-val" style="color: #15803d;">{invoice.paid_amount:,.0f} đ</td>
+        </tr>
+        <tr>
+            <td class="summary-label">Số tiền còn nợ phải thu:</td>
+            <td class="summary-val" style="color: #b91c1c;">{invoice.remaining_amount:,.0f} đ</td>
+        </tr>
+    </table>
+
+    <div class="words-box">
+        <strong>Số tiền viết bằng chữ:</strong> {words}
+    </div>
+
+    <!-- Khối chữ ký -->
+    <div class="signatures">
+        <div class="sign-col">
+            <div class="sign-title">NGƯỜI MUA HÀNG</div>
+            <div class="sign-note">(Ký, ghi rõ họ tên)</div>
+            <div class="sign-space"></div>
+            <div class="sign-name">{customer.name}</div>
+        </div>
+        <div class="sign-col">
+            <div class="sign-title">NGƯỜI LẬP HÓA ĐƠN</div>
+            <div class="sign-note">(Ký, ghi rõ họ tên)</div>
+            <div class="sign-space"></div>
+            <div class="sign-name">Bộ phận Kế toán</div>
+        </div>
+        <div class="sign-col">
+            <div class="sign-title">THỦ TRƯỞNG ĐƠN VỊ</div>
+            <div class="sign-note">(Ký, đóng dấu, ghi rõ họ tên)</div>
+            <div class="sign-space"></div>
+            <div class="sign-name">Giám Đốc Bán Hàng</div>
+        </div>
+    </div>
+</div>
+</body>
+</html>"""
+    return html_content

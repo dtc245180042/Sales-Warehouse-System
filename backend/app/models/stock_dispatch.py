@@ -37,6 +37,7 @@ class StockDispatch(Base):
     warehouse_name = Column(String(255), nullable=True)
     status = Column(String(50), default=DispatchStatus.CONFIRMED.value, nullable=False, index=True)
     delivery_type = Column(String(50), nullable=True)
+    trip_id = Column(String(50), nullable=True, index=True)  # S6-06 / SC-257 Chuyến giao hàng
     total_items = Column(Integer, default=0, nullable=False)
     total_dispatched_quantity = Column(Integer, default=0, nullable=False)
     is_partial = Column(Boolean, default=False, nullable=False)
@@ -110,8 +111,13 @@ try:
     from app.core.database import engine
     from sqlalchemy import inspect, text
     with engine.connect() as _conn:
-        _cols = [c["name"] for c in inspect(_conn).get_columns("stock_dispatch_items")]
-        if _cols and "delivered_quantity" not in _cols:
+        _d_cols = [c["name"] for c in inspect(_conn).get_columns("stock_dispatches")]
+        if _d_cols and "trip_id" not in _d_cols:
+            _conn.execute(text("ALTER TABLE stock_dispatches ADD COLUMN trip_id VARCHAR(50)"))
+            _conn.commit()
+
+        _i_cols = [c["name"] for c in inspect(_conn).get_columns("stock_dispatch_items")]
+        if _i_cols and "delivered_quantity" not in _i_cols:
             _conn.execute(text("ALTER TABLE stock_dispatch_items ADD COLUMN delivered_quantity INTEGER DEFAULT 0"))
             _conn.commit()
 except Exception:

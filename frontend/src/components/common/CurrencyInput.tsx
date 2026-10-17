@@ -10,12 +10,22 @@ export interface CurrencyInputProps extends Omit<React.InputHTMLAttributes<HTMLI
 export const CurrencyInput = forwardRef<HTMLInputElement, CurrencyInputProps>(
   ({ value, onChange, className = '', placeholder = '0', suffix, disabled, ...rest }, ref) => {
     const [displayValue, setDisplayValue] = useState<string>(() =>
-      value !== undefined && value !== null ? formatCurrencyInput(value) : ''
+      value !== undefined && value !== null && value !== 0 ? formatCurrencyInput(value) : value === 0 ? '0' : ''
     );
 
-    // Đồng bộ khi value từ props thay đổi (ví dụ reset form hoặc load dữ liệu)
+    // Đồng bộ khi value từ props thay đổi (ví dụ reset form hoặc load dữ liệu từ ngoài)
     useEffect(() => {
-      const formatted = value !== undefined && value !== null && !isNaN(value) ? formatCurrencyInput(value) : '';
+      const currentParsed = parseCurrencyInput(displayValue);
+      // Nếu giá trị parse hiện tại đã khớp với value (kể cả khi đang gõ hoặc đang xóa trắng), không ép re-format
+      if (currentParsed === value && (displayValue !== '' || value === 0)) {
+        return;
+      }
+      const formatted =
+        value !== undefined && value !== null && !isNaN(value) && value !== 0
+          ? formatCurrencyInput(value)
+          : value === 0
+          ? (displayValue === '' ? '' : '0')
+          : '';
       setDisplayValue(formatted);
     }, [value]);
 
@@ -27,6 +37,14 @@ export const CurrencyInput = forwardRef<HTMLInputElement, CurrencyInputProps>(
       if (onChange) {
         onChange(parsedNum);
       }
+    };
+
+    const handleFocus = (e: React.FocusEvent<HTMLInputElement>) => {
+      // Khi click vào nếu giá trị là 0, tự động bôi đen để gõ đè tiện lợi
+      if (displayValue === '0') {
+        e.target.select();
+      }
+      rest.onFocus?.(e);
     };
 
     if (suffix) {
@@ -41,6 +59,7 @@ export const CurrencyInput = forwardRef<HTMLInputElement, CurrencyInputProps>(
             placeholder={placeholder}
             value={displayValue}
             onChange={handleChange}
+            onFocus={handleFocus}
             className={`${className} ${suffix ? 'pr-12' : ''}`}
           />
           <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs text-slate-400 font-medium pointer-events-none select-none">
@@ -60,6 +79,7 @@ export const CurrencyInput = forwardRef<HTMLInputElement, CurrencyInputProps>(
         placeholder={placeholder}
         value={displayValue}
         onChange={handleChange}
+        onFocus={handleFocus}
         className={className}
       />
     );

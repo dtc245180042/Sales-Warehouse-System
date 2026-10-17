@@ -414,7 +414,8 @@ export const StockAdjustCreate: React.FC = () => {
                               type="number"
                               min={1}
                               max={item.currentStock}
-                              value={item.adjustQty}
+                              value={item.adjustQty === 0 ? '' : item.adjustQty}
+                              placeholder="1"
                               onChange={(e) =>
                                 handleUpdateQty(idx, parseInt(e.target.value) || 0)
                               }

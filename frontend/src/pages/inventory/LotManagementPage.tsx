@@ -319,8 +319,15 @@ export const LotManagementPage: React.FC = () => {
             <input
               type="number"
               min={1}
-              value={fefoQty}
-              onChange={(e) => setFefoQty(parseInt(e.target.value) || 1)}
+              value={fefoQty === 0 ? '' : fefoQty}
+              placeholder="1"
+              onChange={(e) => {
+                const val = e.target.value;
+                setFefoQty(val === '' ? 0 : Math.max(0, parseInt(val, 10) || 0));
+              }}
+              onBlur={() => {
+                if (!fefoQty || fefoQty < 1) setFefoQty(1);
+              }}
               className="w-24 p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-right font-bold"
             />
             <Button
@@ -434,8 +441,15 @@ export const LotManagementPage: React.FC = () => {
             <input
               type="number"
               min={1}
-              value={newQty}
-              onChange={(e) => setNewQty(parseInt(e.target.value) || 1)}
+              value={newQty === 0 ? '' : newQty}
+              placeholder="1"
+              onChange={(e) => {
+                const val = e.target.value;
+                setNewQty(val === '' ? 0 : Math.max(0, parseInt(val, 10) || 0));
+              }}
+              onBlur={() => {
+                if (!newQty || newQty < 1) setNewQty(1);
+              }}
               className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white"
             />
           </div>

@@ -59,7 +59,7 @@ export const UnitQtySelector: React.FC<UnitQtySelectorProps> = ({
   };
 
   const handleQtyChange = (rawQty: number) => {
-    const qty = Math.max(1, rawQty || 1);
+    const qty = isNaN(rawQty) || rawQty <= 0 ? 0 : rawQty;
     const newBaseQty = qty * (selectedUnit?.ratio ?? 1);
     // Nếu có giới hạn tồn kho, cap lại
     const finalBaseQty = maxBaseQty !== undefined ? Math.min(newBaseQty, maxBaseQty) : newBaseQty;
@@ -98,8 +98,14 @@ export const UnitQtySelector: React.FC<UnitQtySelectorProps> = ({
             type="number"
             min={1}
             max={maxBaseQty !== undefined ? Math.floor(maxBaseQty / (selectedUnit?.ratio ?? 1)) : undefined}
-            value={value.quantity}
-            onChange={(e) => handleQtyChange(Number(e.target.value))}
+            value={value.quantity === 0 ? '' : value.quantity}
+            placeholder="1"
+            onChange={(e) => handleQtyChange(e.target.value === '' ? 0 : Number(e.target.value))}
+            onBlur={() => {
+              if (!value.quantity || value.quantity < 1) {
+                handleQtyChange(1);
+              }
+            }}
             className={`w-full px-3 py-2 rounded-lg border text-xs sm:text-sm font-bold focus:ring-1 focus:ring-indigo-500 outline-none transition
               ${overLimit
                 ? 'border-rose-400 dark:border-rose-500 bg-rose-50 dark:bg-rose-950/20 text-rose-700 dark:text-rose-400'

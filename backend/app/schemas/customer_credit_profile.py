@@ -46,8 +46,25 @@ class CreditProfileResponse(BaseModel):
     overdue_order_code: Optional[str] = None
     is_blocked: bool = False
     block_reason: Optional[str] = None
+    is_flagged: bool = False
+    risk_level: str = "SAFE"
+    flag_reason: Optional[str] = None
+    action_applied: str = "NONE"
+    requires_approval: bool = False
 
     model_config = ConfigDict(from_attributes=True)
+
+    @computed_field
+    def isFlagged(self) -> bool:
+        return self.is_flagged
+
+    @computed_field
+    def riskLevel(self) -> str:
+        return self.risk_level
+
+    @computed_field
+    def flagReason(self) -> Optional[str]:
+        return self.flag_reason
 
     @computed_field
     def customerId(self) -> str:
@@ -84,6 +101,14 @@ class CreditProfileResponse(BaseModel):
     @computed_field
     def isBlocked(self) -> bool:
         return self.is_blocked
+
+    @computed_field
+    def actionApplied(self) -> str:
+        return self.action_applied
+
+    @computed_field
+    def requiresApproval(self) -> bool:
+        return self.requires_approval
 
     @computed_field
     def blockReason(self) -> Optional[str]:

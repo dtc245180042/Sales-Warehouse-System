@@ -12,11 +12,14 @@ import {
   Calendar,
   Layers,
   ArrowRight,
+  Printer,
+  Receipt,
 } from 'lucide-react';
 import { PageContainer } from '../../components/layout/PageContainer';
 import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/common/Badge';
 import { Modal } from '../../components/common/Modal';
+import { PaymentPrintModal } from '../../components/payments/PaymentPrintModal';
 import { paymentService } from '../../services/paymentService';
 import { invoiceService } from '../../services/invoiceService';
 import { Payment, PaymentCreateRequest } from '../../types/Payment';
@@ -37,6 +40,13 @@ export const PaymentListPage: React.FC = () => {
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isPrintOpen, setIsPrintOpen] = useState(false);
+  const [printPaymentId, setPrintPaymentId] = useState<string | null>(null);
+
+  const handleOpenPrint = (pId: string) => {
+    setPrintPaymentId(pId);
+    setIsPrintOpen(true);
+  };
 
   // Form State
   const [selectedCustomerId, setSelectedCustomerId] = useState('CUS-001');
@@ -318,10 +328,21 @@ export const PaymentListPage: React.FC = () => {
                       </span>
                     </td>
                     <td className="px-6 py-4 text-right">
-                      <Button size="sm" variant="outline" onClick={() => handleOpenDetail(p)}>
-                        <Eye className="w-3.5 h-3.5 mr-1" />
-                        Chi tiết
-                      </Button>
+                      <div className="flex items-center justify-end gap-1.5">
+                        <Button size="sm" variant="outline" onClick={() => handleOpenDetail(p)}>
+                          <Eye className="w-3.5 h-3.5 mr-1" />
+                          Chi tiết
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => handleOpenPrint(p.id)}
+                          className="text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border-emerald-200"
+                        >
+                          <Printer className="w-3.5 h-3.5 mr-1" />
+                          In phiếu
+                        </Button>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -396,7 +417,37 @@ export const PaymentListPage: React.FC = () => {
             </div>
           </div>
         )}
+        footer={
+          <div className="flex justify-between items-center w-full">
+            <Button
+              variant="secondary"
+              onClick={() => {
+                if (selectedPayment) {
+                  setIsDetailOpen(false);
+                  handleOpenPrint(selectedPayment.id);
+                }
+              }}
+              className="text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border-emerald-200"
+            >
+              <Printer className="w-4 h-4 mr-1.5" />
+              In Phiếu Thu
+            </Button>
+            <Button variant="outline" onClick={() => setIsDetailOpen(false)}>
+              Đóng
+            </Button>
+          </div>
+        }
       </Modal>
+
+      {/* MODAL IN PHIẾU THU TIỀN A4/PDF (SCRUM-270 / S7-09) */}
+      <PaymentPrintModal
+        isOpen={isPrintOpen}
+        onClose={() => {
+          setIsPrintOpen(false);
+          setPrintPaymentId(null);
+        }}
+        paymentId={printPaymentId}
+      />
 
       {/* 5. MODAL LẬP PHIẾU THU TIỀN MỚI */}
       <Modal

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, Link } from 'react-router-dom';
 import {
   TrendingUp,
   DollarSign,
@@ -9,6 +9,7 @@ import {
   ArrowUpRight,
   PieChart as PieIcon,
   Percent,
+  Scale,
 } from 'lucide-react';
 import {
   BarChart,
@@ -74,6 +75,15 @@ export const RevenueReport: React.FC = () => {
       subtitle="Phân tích chi tiết doanh thu thuần, tỷ suất sinh lời và tăng trưởng tài chính"
       actions={
         <div className="flex items-center gap-2">
+          <Link to="/reports/agency-debts">
+            <Button
+              variant="primary"
+              size="sm"
+              leftIcon={<Scale className="w-4 h-4" />}
+            >
+              Sổ công nợ đại lý
+            </Button>
+          </Link>
           <Button
             variant="outline"
             size="sm"

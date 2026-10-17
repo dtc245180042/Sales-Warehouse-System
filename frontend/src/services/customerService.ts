@@ -63,6 +63,14 @@ function mapApiCustomer(c: any): Customer {
     maxDebtDays: Number(c.max_debt_days ?? c.maxDebtDays ?? 30),
     available_credit: Math.max(0, Number(c.credit_limit ?? c.creditLimit ?? 50000000) - Number(c.current_debt ?? c.currentDebt ?? 0)),
     availableCredit: Math.max(0, Number(c.credit_limit ?? c.creditLimit ?? 50000000) - Number(c.current_debt ?? c.currentDebt ?? 0)),
+    risk_level: c.risk_level || c.riskLevel || 'SAFE',
+    riskLevel: c.risk_level || c.riskLevel || 'SAFE',
+    is_flagged: Boolean(c.is_flagged ?? c.isFlagged),
+    isFlagged: Boolean(c.is_flagged ?? c.isFlagged),
+    is_debt_blocked: Boolean(c.is_debt_blocked ?? c.isDebtBlocked),
+    isDebtBlocked: Boolean(c.is_debt_blocked ?? c.isDebtBlocked),
+    flag_reason: c.flag_reason || c.flagReason || undefined,
+    flagReason: c.flag_reason || c.flagReason || undefined,
   };
 }
 

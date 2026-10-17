@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   User,
   Palette,
   ShieldCheck,
+  ShieldAlert,
   Save,
   Sun,
   Moon,
@@ -152,6 +154,19 @@ export const Settings: React.FC = () => {
               </button>
             );
           })}
+
+          <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
+            <Link
+              to="/settings/debt-risk"
+              className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all text-left text-blue-700 dark:text-blue-300 bg-blue-50/60 dark:bg-blue-950/40 hover:bg-blue-100/80 dark:hover:bg-blue-900/50 border border-blue-200/80 dark:border-blue-900/60"
+            >
+              <ShieldAlert className="w-4 h-4 shrink-0 text-blue-600 dark:text-blue-400" />
+              <div className="flex-1">
+                <span>Quy tắc rủi ro công nợ</span>
+                <span className="block text-[10px] text-blue-500 font-normal">Tự động kiểm soát &amp; khóa bán</span>
+              </div>
+            </Link>
+          </div>
         </div>
 
         {/* Tab Content Panel */}

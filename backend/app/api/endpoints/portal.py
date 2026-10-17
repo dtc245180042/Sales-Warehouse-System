@@ -21,7 +21,9 @@ from app.schemas.portal import (
     PortalReorderResponse,
 )
 from app.schemas.customer_delivery_address import DeliveryAddressResponse
+from app.schemas.delivery_tracking import DeliveryTimelineResponse, DeliveryTrackingListResponse
 from app.services import portal_service
+from app.services.delivery_tracking_service import DeliveryTrackingService
 
 router = APIRouter(prefix="/portal", tags=["Cổng Đại Lý Đặt Hàng (SCRUM-242)"])
 
@@ -244,4 +246,51 @@ def create_portal_reorder(
         client_ip=client_ip,
         user_id=current_user.id,
         username=current_user.username,
+    )
+
+
+@router.get(
+    "/orders/{order_id}/timeline",
+    response_model=DeliveryTimelineResponse,
+    summary="Theo dõi timeline trạng thái giao hàng của đơn (S6-09 / SCRUM-694)",
+)
+def get_portal_order_timeline(
+    order_id: str,
+    db: Session = Depends(lay_phien_db),
+    current_customer: Customer = Depends(lay_dai_ly_hien_tai),
+):
+    """
+    Theo dõi tiến trình giao hàng 5 mốc theo từng đơn dành cho Đại lý:
+    - 1. Đã duyệt (APPROVED) -> 2. Đang soạn (PACKING) -> 3. Đã xuất (EXPORTED) -> 4. Đang giao (DELIVERING) -> 5. Đã giao (DELIVERED)
+    - Chống IDOR: Chỉ xem đơn của chính đại lý đăng nhập.
+    """
+    return DeliveryTrackingService.get_delivery_timeline(
+        db=db,
+        order_id=order_id,
+        current_customer=current_customer,
+    )
+
+
+@router.get(
+    "/delivery-tracking",
+    response_model=DeliveryTrackingListResponse,
+    summary="Danh sách tiến trình giao hàng của đại lý (S6-09 / SCRUM-698)",
+)
+def get_portal_delivery_tracking_list(
+    status: Optional[str] = Query(None, description="Lọc theo trạng thái đơn hàng"),
+    page: int = Query(1, ge=1, description="Số trang hiển thị"),
+    limit: int = Query(20, ge=1, le=100, description="Số lượng mỗi trang"),
+    db: Session = Depends(lay_phien_db),
+    current_customer: Customer = Depends(lay_dai_ly_hien_tai),
+):
+    """
+    Theo dõi danh sách tiến trình giao hàng của riêng đại lý đăng nhập (SCRUM-698).
+    Chống IDOR: Chỉ hiển thị các đơn thuộc về đại lý này.
+    """
+    return DeliveryTrackingService.list_delivery_trackings(
+        db=db,
+        status_filter=status,
+        page=page,
+        limit=limit,
+        current_customer=current_customer,
     )

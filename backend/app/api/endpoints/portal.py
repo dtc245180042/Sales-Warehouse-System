@@ -3,6 +3,8 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, Query, Header, Request, Response, status, HTTPException
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
+from app.schemas.payment_reminder import NotificationResponse, NotificationListResponse
+from app.services import payment_reminder_service
 
 from app.core.database import lay_phien_db
 from app.core.dependencies import lay_dai_ly_hien_tai, lay_nguoi_dung_hien_tai
@@ -451,3 +453,76 @@ def print_portal_invoice(
         invoice_id=invoice_id,
     )
     return HTMLResponse(content=html_content, media_type="text/html; charset=utf-8")
+
+
+# ==============================================================================
+# THÔNG BÁO NHẮC HẠN THANH TOÁN CHO ĐẠI LÝ (S7-08, SCRUM-759)
+# ==============================================================================
+
+@router.get(
+    "/notifications",
+    response_model=NotificationListResponse,
+    summary="Danh sách thông báo trong ứng dụng của đại lý (SCRUM-759)",
+)
+def get_portal_notifications(
+    is_read: Optional[bool] = Query(None, description="Lọc theo trạng thái đã đọc hay chưa"),
+    page: int = Query(1, ge=1, description="Số trang hiển thị"),
+    limit: int = Query(20, ge=1, le=100, description="Số lượng mỗi trang"),
+    db: Session = Depends(lay_phien_db),
+    current_customer: Customer = Depends(lay_dai_ly_hien_tai),
+):
+    """
+    Lấy danh sách thông báo nhắc hạn thanh toán và biến động hệ thống của đại lý.
+    Kiểm soát an toàn: Chỉ trả thông báo thuộc về chính đại lý đang đăng nhập (chống IDOR).
+    """
+    return payment_reminder_service.get_agency_notifications(
+        db=db,
+        customer_id=current_customer.id,
+        is_read=is_read,
+        page=page,
+        limit=limit,
+    )
+
+
+@router.patch(
+    "/notifications/{notification_id}/read",
+    response_model=NotificationResponse,
+    summary="Đánh dấu đã đọc một thông báo (SCRUM-759)",
+)
+def mark_portal_notification_as_read(
+    notification_id: int,
+    db: Session = Depends(lay_phien_db),
+    current_customer: Customer = Depends(lay_dai_ly_hien_tai),
+):
+    """Đánh dấu thông báo là đã đọc. Chỉ cho phép thao tác trên thông báo của chính mình."""
+    notif = payment_reminder_service.mark_notification_as_read(
+        db=db,
+        customer_id=current_customer.id,
+        notification_id=notification_id,
+    )
+    if not notif:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Không tìm thấy thông báo hoặc bạn không có quyền truy cập.",
+        )
+    return NotificationResponse.model_validate(notif)
+
+
+@router.patch(
+    "/notifications/read-all",
+    summary="Đánh dấu tất cả thông báo của đại lý là đã đọc (SCRUM-759)",
+)
+def mark_all_portal_notifications_as_read(
+    db: Session = Depends(lay_phien_db),
+    current_customer: Customer = Depends(lay_dai_ly_hien_tai),
+):
+    """Đánh dấu tất cả thông báo chưa đọc của đại lý thành đã đọc."""
+    updated_count = payment_reminder_service.mark_all_notifications_as_read(
+        db=db,
+        customer_id=current_customer.id,
+    )
+    return {
+        "success": True,
+        "message": f"Đã đánh dấu {updated_count} thông báo là đã đọc.",
+        "updated_count": updated_count,
+    }

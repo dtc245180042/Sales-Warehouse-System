@@ -16,11 +16,13 @@ from app.core.database import Base, engine
 
 class TripStatus(str, Enum):
     """Trạng thái Chuyến giao hàng (S6-06 / S6-07)."""
-    PLANNED = "PLANNED"          # Mới lập kế hoạch / gom phiếu (chưa gán đủ xe hoặc tài xế)
-    READY = "READY"              # Sẵn sàng xuất bến (đã phân công tài xế & xe)
-    IN_TRANSIT = "IN_TRANSIT"    # Đang trên đường giao (xe đã rời kho)
-    COMPLETED = "COMPLETED"      # Đã hoàn thành chuyến giao
-    CANCELLED = "CANCELLED"      # Đã hủy chuyến (trả phiếu xuất về hàng đợi)
+    PLANNED = "PLANNED"                              # Mới lập kế hoạch / gom phiếu (S6-06)
+    READY = "READY"                                  # Sẵn sàng xuất bến (đã phân công tài xế & xe) (S6-06)
+    PREPARING = "PREPARING"                          # Đang chuẩn bị / chờ xuất bến (S6-07)
+    IN_TRANSIT = "IN_TRANSIT"                        # Đang trên đường giao (xe đã rời kho)
+    COMPLETED = "COMPLETED"                          # Đã hoàn thành chuyến giao
+    COMPLETED_WITH_ISSUES = "COMPLETED_WITH_ISSUES"  # Hoàn tất chuyến nhưng còn hàng chưa giao xong (S6-07)
+    CANCELLED = "CANCELLED"                          # Đã hủy chuyến
 
 
 class PointStatus(str, Enum):

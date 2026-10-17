@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from datetime import datetime
 from pydantic import BaseModel, Field, ConfigDict
 
@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field, ConfigDict
 # SCHEMAS FOR CREATION & ASSIGNMENT (REQUEST)
 # ==============================================================================
 class DeliveryTripCreate(BaseModel):
-    """Payload tạo chuyến giao hàng mới gom nhiều phiếu xuất (S6-06)."""
+    """Payload tạo chuyến giao hàng mới gom nhiều phiếu xuất (S6-06 / S6-07)."""
     warehouse_id: int = Field(..., description="ID kho hàng xuất phát")
     area: Optional[str] = Field(None, description="Khu vực tuyến đường gom chuyến (e.g. Cầu Giấy, Đống Đa...)")
     driver_id: Optional[int] = Field(None, description="ID tài xế nếu đã có")
@@ -17,6 +17,7 @@ class DeliveryTripCreate(BaseModel):
     license_plate: Optional[str] = Field(None, description="Biển số xe phân công")
     vehicle_type: Optional[str] = Field(None, description="Loại xe: Xe tải 1.25T, 2.5T, Xe máy...")
     expected_completion_time: Optional[datetime] = Field(None, description="Thời gian dự kiến hoàn thành chuyến")
+    estimated_duration_hours: Optional[float] = Field(None, description="Số giờ dự kiến giao (nếu không truyền thời gian cụ thể)")
     notes: Optional[str] = Field(None, description="Ghi chú điều phối chuyến")
     dispatch_ids: List[str] = Field(..., min_length=1, description="Danh sách các mã phiếu xuất kho (PXK-...) gom vào chuyến")
 
@@ -30,6 +31,24 @@ class TripDriverVehicleAssign(BaseModel):
     license_plate: Optional[str] = Field(None, description="Biển số xe (truyền rỗng hoặc null nếu bỏ gán)")
     vehicle_type: Optional[str] = Field(None, description="Loại xe")
     notes: Optional[str] = Field(None, description="Ghi chú phân công / thay đổi")
+
+
+class PointItemResultUpdate(BaseModel):
+    """Cập nhật kết quả giao của từng mặt hàng tại một điểm (S6-07)."""
+    product_id: str = Field(..., description="Mã sản phẩm")
+    delivered_quantity: int = Field(..., ge=0, description="Số lượng thực tế đã giao cho khách")
+    failure_reason: Optional[str] = Field(None, description="Lý do nếu giao thiếu hoặc hỏng")
+
+
+class PointDeliveryResultRequest(BaseModel):
+    """Ghi nhận kết quả giao hàng tại một điểm (S6-07)."""
+    status: str = Field(..., description="Trạng thái điểm giao: DELIVERED, PARTIAL, hoặc FAILED")
+    completion_notes: Optional[str] = Field(None, description="Ghi chú xác nhận giao hàng")
+    failure_reason: Optional[str] = Field(None, description="Lý do giao thất bại hoặc giao một phần")
+    delivered_items: Optional[List[PointItemResultUpdate]] = Field(
+        None,
+        description="Chi tiết số lượng giao từng sản phẩm (nếu rỗng và DELIVERED, mặc định giao đủ)"
+    )
 
 
 # ==============================================================================
@@ -111,7 +130,7 @@ class DeliveryManifestResponse(BaseModel):
 
 
 # ==============================================================================
-# SCHEMAS FOR TRIP DETAILS & RESPONSES
+# SCHEMAS FOR TRIP DETAILS & RESPONSES (S6-06 & S6-07)
 # ==============================================================================
 class DeliveryTripPointItemResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -121,7 +140,7 @@ class DeliveryTripPointItemResponse(BaseModel):
     product_id: str
     sku: Optional[str] = None
     product_name: Optional[str] = None
-    unit: Optional[str] = None
+    unit: Optional[str] = "cái"
     dispatched_quantity: int
     delivered_quantity: int
     undelivered_quantity: int
@@ -156,10 +175,10 @@ class DeliveryTripPointResponse(BaseModel):
     point_value: float
     delivered_value: float
     remaining_value: float
-    is_delayed: bool
+    is_delayed: bool = False
     completion_notes: Optional[str] = None
     failure_reason: Optional[str] = None
-    hold_on_trip: bool
+    hold_on_trip: bool = True
     items: List[DeliveryTripPointItemResponse] = []
 
 
@@ -189,11 +208,28 @@ class DeliveryTripResponse(BaseModel):
     initial_total_value: float
     delivered_value: float
     in_transit_value: float
-    is_delayed: bool
-    delay_minutes: int
+    is_delayed: bool = False
+    delay_minutes: int = 0
     delay_warning: Optional[str] = None
-    delay_level: Optional[str] = None
+    delay_level: Optional[str] = "ON_TIME"
     notes: Optional[str] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     points: List[DeliveryTripPointResponse] = []
+
+
+class DeliveryTripListResponse(BaseModel):
+    items: List[DeliveryTripResponse]
+    total: int
+    total_in_transit_value: float
+    active_trips_count: int
+    delayed_trips_count: int
+
+
+class InTransitSummaryResponse(BaseModel):
+    total_active_trips: int
+    total_in_transit_value: float
+    total_delayed_trips: int
+    total_remaining_points: int
+    total_delivered_points: int
+    by_warehouse: List[Dict[str, Any]] = []

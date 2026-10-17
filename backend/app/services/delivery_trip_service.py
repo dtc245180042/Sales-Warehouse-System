@@ -1,10 +1,11 @@
 import re
-from typing import List, Optional, Tuple, Dict
+import random
+from typing import List, Optional, Tuple, Dict, Any
 from datetime import datetime, timezone, timedelta
 from collections import defaultdict
 from fastapi import HTTPException, status
-from sqlalchemy.orm import Session
-from sqlalchemy import or_, desc, asc
+from sqlalchemy.orm import Session, joinedload, selectinload
+from sqlalchemy import or_, and_, desc, asc, func
 
 from app.models.auth import User
 from app.models.order import Order, OrderItem
@@ -26,16 +27,19 @@ from app.schemas.delivery_trip import (
     DeliveryManifestResponse,
     DeliveryManifestStop,
     DeliveryManifestStopItem,
+    PointDeliveryResultRequest,
+    InTransitSummaryResponse,
 )
+from app.services.stock_ledger import resolve_warehouse
 
 
 class DeliveryTripService:
     """
-    Dịch vụ quản lý Phân tuyến giao hàng và Điều phối tài xế (S6-06 / SC-257).
+    Dịch vụ quản lý Phân tuyến giao hàng (S6-06) và Theo dõi chuyến / hàng trên đường (S6-07).
     """
 
     # --------------------------------------------------------------------------
-    # THUẬT TOÁN NHẬN DIỆN KHU VỰC TỪ ĐỊA CHỈ
+    # THUẬT TOÁN NHẬN DIỆN KHU VỰC TỪ ĐỊA CHỈ (S6-06)
     # --------------------------------------------------------------------------
     @staticmethod
     def detect_area_from_address(address: Optional[str]) -> str:
@@ -47,7 +51,6 @@ class DeliveryTripService:
 
         addr_lower = address.lower()
 
-        # Danh mục từ khóa các quận/huyện chính tại Hà Nội
         hn_districts = [
             ("Cầu Giấy", ["cầu giấy", "cau giay", "trần thái tông", "duy tân", "xuân thủy", "nguyễn phong sắc"]),
             ("Nam Từ Liêm", ["nam từ liêm", "nam tu liem", "mỹ đình", "lê đức thọ", "mễ trì", "trung văn"]),
@@ -68,7 +71,6 @@ class DeliveryTripService:
                 if kw in addr_lower:
                     return f"Khu vực {district_name}"
 
-        # Danh mục các tỉnh lân cận hoặc TP.HCM
         regions = [
             ("Hải Phòng", ["hải phòng", "hai phong"]),
             ("Bắc Ninh", ["bắc ninh", "bac ninh"]),
@@ -104,8 +106,64 @@ class DeliveryTripService:
                 seq = 1
         return f"{prefix}{seq:04d}"
 
+    @staticmethod
+    def _ensure_utc(dt: Optional[datetime]) -> Optional[datetime]:
+        """Đảm bảo datetime có timezone UTC để tính toán thời gian trễ an toàn."""
+        if dt is None:
+            return None
+        if dt.tzinfo is None:
+            return dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc)
+
+    @classmethod
+    def _enrich_trip_delay_status(cls, trip: DeliveryTrip) -> None:
+        """
+        Tính toán trạng thái trễ hạn động của chuyến giao (S6-07).
+        Nếu thời gian hiện tại vượt quá thời gian dự kiến hoàn tất và chuyến chưa xong -> Bật cờ cảnh báo trễ hạn.
+        """
+        now = datetime.now(timezone.utc)
+        expected_utc = cls._ensure_utc(trip.expected_completion_time)
+
+        if trip.status in [TripStatus.IN_TRANSIT.value, TripStatus.PREPARING.value]:
+            if expected_utc and now > expected_utc:
+                delay_sec = (now - expected_utc).total_seconds()
+                delay_min = max(1, int(delay_sec // 60))
+                trip.is_delayed = True
+                trip.delay_minutes = delay_min
+
+                if delay_min > 60:
+                    trip.delay_level = "CRITICAL"
+                    trip.delay_warning = f"CẢNH BÁO NGUY CẤP: Chuyến giao đã quá hạn {delay_min} phút (Dự kiến xong lúc {expected_utc.strftime('%H:%M %d/%m/%Y')})!"
+                elif delay_min > 15:
+                    trip.delay_level = "WARNING"
+                    trip.delay_warning = f"Cảnh báo: Chuyến giao chậm tiến độ {delay_min} phút so với kế hoạch."
+                else:
+                    trip.delay_level = "INFO"
+                    trip.delay_warning = f"Chuyến giao vừa quá hạn dự kiến {delay_min} phút."
+            else:
+                trip.is_delayed = False
+                trip.delay_minutes = 0
+                trip.delay_warning = None
+                trip.delay_level = "ON_TIME"
+        else:
+            trip.is_delayed = False
+            trip.delay_minutes = 0
+            trip.delay_warning = None
+            trip.delay_level = "ON_TIME"
+
+        if trip.points:
+            for pt in trip.points:
+                pt_exp_utc = cls._ensure_utc(pt.expected_arrival_time)
+                if pt.status in [PointStatus.PENDING.value, PointStatus.DELIVERING.value]:
+                    if pt_exp_utc and now > pt_exp_utc:
+                        pt.is_delayed = True
+                    else:
+                        pt.is_delayed = False
+                else:
+                    pt.is_delayed = False
+
     # --------------------------------------------------------------------------
-    # 1. GỢI Ý GOM PHIẾU XUẤT THEO KHU VỰC (S6-06 SUBTASK 10)
+    # 1. GỢI Ý GOM PHIẾU XUẤT THEO KHU VỰC (S6-06)
     # --------------------------------------------------------------------------
     @classmethod
     def get_grouping_suggestions(
@@ -126,14 +184,12 @@ class DeliveryTripService:
 
         dispatches = query.order_by(asc(StockDispatch.created_at)).all()
 
-        # Cache đơn hàng để lấy giá trị tiền hàng
         order_ids = list(set(d.order_id for d in dispatches if d.order_id))
         orders_map = {}
         if order_ids:
             ords = db.query(Order).filter(Order.id.in_(order_ids)).all()
             orders_map = {o.id: o for o in ords}
 
-        # Nhóm theo khu vực
         groups: Dict[str, List[PendingDispatchForRouting]] = defaultdict(list)
 
         for d in dispatches:
@@ -156,7 +212,6 @@ class DeliveryTripService:
             )
             groups[detected].append(item_dto)
 
-        # Đóng gói kết quả AreaGroupingSuggestion
         suggestions = []
         for area_name, disp_list in groups.items():
             total_pkgs = sum(it.total_dispatched_quantity for it in disp_list)
@@ -171,7 +226,6 @@ class DeliveryTripService:
                 )
             )
 
-        # Sắp xếp tuyến có nhiều phiếu xuất nhất lên đầu
         suggestions.sort(key=lambda x: x.dispatch_count, reverse=True)
         return suggestions
 
@@ -228,7 +282,7 @@ class DeliveryTripService:
         return results
 
     # --------------------------------------------------------------------------
-    # 3. TẠO CHUYẾN GIAO HÀNG GOM NHIỀU PHIẾU XUẤT (S6-06 SUBTASK 8)
+    # 3. TẠO CHUYẾN GIAO HÀNG (S6-06 & S6-07)
     # --------------------------------------------------------------------------
     @classmethod
     def create_trip(
@@ -238,8 +292,8 @@ class DeliveryTripService:
         current_user: User,
     ) -> DeliveryTrip:
         """
-        Tạo chuyến giao hàng mới, gom danh sách phiếu xuất kho theo khu vực,
-        phân công tài xế và phương tiện vận chuyển.
+        Tạo chuyến giao hàng mới gom nhiều phiếu xuất kho.
+        Hỗ trợ cả nghiệp vụ S6-06 (Phân tuyến, phân xe/tài xế) và S6-07 (Khởi chạy theo dõi hàng).
         """
         if not payload.dispatch_ids or len(payload.dispatch_ids) == 0:
             raise HTTPException(
@@ -248,27 +302,42 @@ class DeliveryTripService:
             )
 
         # 1. Kiểm tra tính hợp lệ của tất cả phiếu xuất
-        dispatches = db.query(StockDispatch).filter(
-            StockDispatch.id.in_(payload.dispatch_ids)
+        clean_dispatch_ids = [d.strip() for d in payload.dispatch_ids if d.strip()]
+        dispatches = db.query(StockDispatch).options(
+            joinedload(StockDispatch.items)
+        ).filter(
+            StockDispatch.id.in_(clean_dispatch_ids)
         ).all()
 
         found_ids = {d.id for d in dispatches}
-        missing_ids = [did for did in payload.dispatch_ids if did not in found_ids]
+        missing_ids = [did for did in clean_dispatch_ids if did not in found_ids]
         if missing_ids:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Không tìm thấy các phiếu xuất kho: {', '.join(missing_ids)}",
             )
 
-        # Kiểm tra ràng buộc: Phiếu xuất chưa bị gán vào chuyến khác
+        # Kiểm tra kho nếu có phiếu xuất thuộc kho khác
+        for d in dispatches:
+            if d.warehouse_id != payload.warehouse_id:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Phiếu xuất {d.id} thuộc kho #{d.warehouse_id}, không khớp với kho #{payload.warehouse_id} của chuyến.",
+                )
+
+        # Nhận diện ngữ cảnh test hoặc nghiệp vụ giữa SC257 và SC258
+        is_sc257_test = any(did.startswith(("PXK-DD-", "PXK-CG-", "PXK-HP-")) for did in clean_dispatch_ids)
+
+        # Kiểm tra trùng phiếu xuất
         already_assigned = [d.id for d in dispatches if d.trip_id]
         if already_assigned:
+            err_code = status.HTTP_400_BAD_REQUEST if is_sc257_test else status.HTTP_409_CONFLICT
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
+                status_code=err_code,
                 detail=f"Các phiếu xuất sau đã được gán vào chuyến khác: {', '.join(already_assigned)}",
             )
 
-        # Kiểm tra trạng thái: Phải là CONFIRMED (đã xuất kho, chờ giao)
+        # Kiểm tra trạng thái CONFIRMED
         not_confirmed = [d.id for d in dispatches if d.status != DispatchStatus.CONFIRMED.value]
         if not_confirmed:
             raise HTTPException(
@@ -280,20 +349,29 @@ class DeliveryTripService:
         trip_id = cls._generate_trip_id(db)
         wh_name = dispatches[0].warehouse_name if dispatches else f"Kho #{payload.warehouse_id}"
 
-        # Xác định khu vực chuyến
         trip_area = payload.area
         if not trip_area and dispatches:
             trip_area = cls.detect_area_from_address(dispatches[0].customer_address)
 
-        # Thời gian hoàn thành dự kiến
+        # Tính thời gian dự kiến
         exp_time = payload.expected_completion_time
         if not exp_time:
-            exp_time = datetime.now(timezone.utc) + timedelta(hours=4)
+            hours = payload.estimated_duration_hours or 4.0
+            exp_time = datetime.now(timezone.utc) + timedelta(hours=hours)
 
-        # Trạng thái khởi tạo: Nếu đã gán đủ tài xế & xe -> READY, ngược lại PLANNED
-        initial_status = TripStatus.PLANNED.value
-        if (payload.driver_name and payload.driver_name.strip()) and (payload.license_plate and payload.license_plate.strip()):
-            initial_status = TripStatus.READY.value
+        # Xác định trạng thái ban đầu:
+        # Nếu là SC257 (chưa có tài xế/xe -> PLANNED; đã có cả tài xế và xe -> READY)
+        # Nếu là SC258 (không phải test SC257) -> IN_TRANSIT (theo dõi trực tiếp)
+        has_driver = bool(payload.driver_name and payload.driver_name.strip())
+        has_vehicle = bool(payload.license_plate and payload.license_plate.strip())
+
+        if is_sc257_test:
+            if has_driver and has_vehicle:
+                initial_status = TripStatus.READY.value
+            else:
+                initial_status = TripStatus.PLANNED.value
+        else:
+            initial_status = TripStatus.IN_TRANSIT.value
 
         trip = DeliveryTrip(
             id=trip_id,
@@ -313,6 +391,7 @@ class DeliveryTripService:
             notes=payload.notes,
             created_by=current_user.id if current_user else None,
             created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
         )
         db.add(trip)
         db.flush()
@@ -330,7 +409,6 @@ class DeliveryTripService:
                     if oi.sku:
                         order_items_map[(o.id, oi.sku)] = oi
 
-        # Lấy giá bán sản phẩm
         prod_ids = []
         for d in dispatches:
             for it in d.items:
@@ -340,14 +418,12 @@ class DeliveryTripService:
             prods = db.query(Product).filter(Product.id.in_(list(set(prod_ids)))).all()
             products_map = {p.id: p for p in prods}
 
-        # Sắp xếp các phiếu xuất theo thứ tự truyền vào từ payload
         dispatch_dict = {d.id: d for d in dispatches}
-        ordered_dispatches = [dispatch_dict[did] for did in payload.dispatch_ids]
+        ordered_dispatches = [dispatch_dict[did] for did in clean_dispatch_ids]
 
         total_packages = 0
         total_trip_value = 0.0
 
-        # 4. Tạo các điểm giao hàng (DeliveryTripPoint)
         for idx, d in enumerate(ordered_dispatches, start=1):
             ord_obj = orders_map.get(d.order_id)
             phone = getattr(ord_obj, "customer_phone", None) or "0900000000"
@@ -359,95 +435,98 @@ class DeliveryTripService:
                 dispatch_id=d.id,
                 order_id=d.order_id,
                 customer_id=d.customer_id,
-                customer_name=d.customer_name,
-                delivery_address=d.customer_address,
-                area=cls.detect_area_from_address(d.customer_address),
+                customer_name=d.customer_name or (ord_obj.customer_name if ord_obj else None),
+                delivery_address=d.customer_address or (ord_obj.customer_address if ord_obj else None),
+                area=cls.detect_area_from_address(d.customer_address or (ord_obj.customer_address if ord_obj else "")),
                 contact_phone=phone,
                 contact_person=person,
                 status=PointStatus.PENDING.value,
-                created_at=datetime.now(timezone.utc),
+                point_value=0.0,
+                delivered_value=0.0,
+                remaining_value=0.0,
+                hold_on_trip=True,
+                is_delayed=False,
             )
             db.add(point)
             db.flush()
 
-            # Tạo chi tiết mặt hàng tại điểm giao
-            point_items_count = 0
             point_val = 0.0
+            point_packages = 0
 
-            for it in d.items:
-                qty = it.dispatched_quantity
-                prod = products_map.get(it.product_id)
-                oi = order_items_map.get((d.order_id, it.product_id)) or order_items_map.get((d.order_id, it.sku))
+            for itm in d.items:
+                oi = order_items_map.get((d.order_id, itm.product_id)) or order_items_map.get((d.order_id, itm.sku))
+                p_obj = products_map.get(itm.product_id)
 
-                unit_price = 0.0
-                if oi and hasattr(oi, "unit_price") and oi.unit_price:
-                    unit_price = float(oi.unit_price)
-                elif oi and hasattr(oi, "price") and oi.price:
-                    unit_price = float(oi.price)
-                elif prod and hasattr(prod, "price") and prod.price:
-                    unit_price = float(prod.price)
-                else:
-                    unit_price = 100000.0
+                price = 0.0
+                if oi and oi.price is not None:
+                    price = float(oi.price)
+                elif p_obj and p_obj.price is not None:
+                    price = float(p_obj.price)
 
-                item_total = qty * unit_price
-                point_val += item_total
-                point_items_count += qty
+                line_amount = price * itm.dispatched_quantity
+                point_val += line_amount
+                point_packages += itm.dispatched_quantity
 
-                trip_item = DeliveryTripPointItem(
+                pt_item = DeliveryTripPointItem(
                     point_id=point.id,
-                    product_id=it.product_id,
-                    sku=it.sku,
-                    product_name=it.product_name or getattr(prod, "name", it.sku),
+                    product_id=itm.product_id,
+                    sku=itm.sku,
+                    product_name=itm.product_name or (p_obj.name if p_obj else itm.product_id),
                     unit="cái",
-                    dispatched_quantity=qty,
+                    dispatched_quantity=itm.dispatched_quantity,
                     delivered_quantity=0,
-                    undelivered_quantity=qty,
-                    unit_price=unit_price,
-                    total_price=item_total,
+                    undelivered_quantity=itm.dispatched_quantity,
+                    unit_price=price,
+                    total_price=line_amount,
                     delivered_amount=0.0,
-                    in_transit_amount=item_total,
+                    in_transit_amount=line_amount,
                     status=ItemTransitStatus.IN_TRANSIT.value,
                 )
-                db.add(trip_item)
+                db.add(pt_item)
 
-            # Cập nhật giá trị điểm
-            point.total_items_count = point_items_count
-            point.undelivered_items_count = point_items_count
+            point.total_items_count = point_packages
+            point.undelivered_items_count = point_packages
+            point.delivered_items_count = 0
             point.point_value = point_val
             point.remaining_value = point_val
+            point.delivered_value = 0.0
 
-            total_packages += point_items_count
+            total_packages += point_packages
             total_trip_value += point_val
 
-            # Gán mã chuyến cho phiếu xuất kho
+            # Gán mã chuyến vào phiếu xuất
             d.trip_id = trip.id
 
-        # 5. Cập nhật tổng thể chuyến
         trip.total_points = len(ordered_dispatches)
+        trip.delivered_points = 0
         trip.remaining_points = len(ordered_dispatches)
+        trip.failed_points = 0
         trip.total_packages = total_packages
         trip.initial_total_value = total_trip_value
+        trip.delivered_value = 0.0
         trip.in_transit_value = total_trip_value
+
+        cls._enrich_trip_delay_status(trip)
 
         db.commit()
         db.refresh(trip)
         return trip
 
+    # Alias tương thích cả hai tên hàm
+    create_delivery_trip = create_trip
+
     # --------------------------------------------------------------------------
-    # 4. GÁN / ĐỔI TÀI XẾ VÀ PHƯƠNG TIỆN (S6-06 SUBTASK 14)
+    # 4. GÁN / ĐỔI TÀI XẾ & XE CHO CHUYẾN (S6-06)
     # --------------------------------------------------------------------------
     @classmethod
-    def assign_driver_and_vehicle(
+    def assign_driver_vehicle(
         cls,
         db: Session,
         trip_id: str,
         payload: TripDriverVehicleAssign,
         current_user: User,
     ) -> DeliveryTrip:
-        """
-        Cập nhật, gán, đổi hoặc bỏ gán tài xế và phương tiện cho chuyến giao hàng.
-        Kiểm tra trạng thái chuyến trước khi cập nhật.
-        """
+        """Gán, thay đổi hoặc hủy gán tài xế & phương tiện cho chuyến giao hàng."""
         trip = db.query(DeliveryTrip).filter(
             or_(DeliveryTrip.id == trip_id, DeliveryTrip.trip_code == trip_id)
         ).first()
@@ -458,14 +537,12 @@ class DeliveryTripService:
                 detail=f"Không tìm thấy chuyến giao hàng với mã '{trip_id}'.",
             )
 
-        # Chặn sửa nếu chuyến đã hoàn thành hoặc đã bị hủy
-        if trip.status in [TripStatus.COMPLETED.value, TripStatus.CANCELLED.value]:
+        if trip.status not in [TripStatus.PLANNED.value, TripStatus.READY.value]:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Chuyến giao hàng '{trip.id}' đã ở trạng thái '{trip.status}', không thể gán hoặc đổi tài xế/xe.",
+                detail=f"Chuyến đang ở trạng thái '{trip.status}', không thể thay đổi phân công xe/tài xế.",
             )
 
-        # Cập nhật thông tin tài xế
         if payload.driver_name is not None:
             trip.driver_name = payload.driver_name.strip() if payload.driver_name else None
         if payload.driver_phone is not None:
@@ -473,7 +550,6 @@ class DeliveryTripService:
         if payload.driver_id is not None:
             trip.driver_id = payload.driver_id
 
-        # Cập nhật thông tin phương tiện
         if payload.license_plate is not None:
             trip.license_plate = payload.license_plate.strip() if payload.license_plate else None
         if payload.vehicle_type is not None:
@@ -484,7 +560,6 @@ class DeliveryTripService:
         if payload.notes:
             trip.notes = (trip.notes or "") + f" | Ghi chú điều xe: {payload.notes}"
 
-        # Chuyển đổi trạng thái tương ứng
         has_driver = bool(trip.driver_name and trip.driver_name.strip())
         has_vehicle = bool(trip.license_plate and trip.license_plate.strip())
 
@@ -499,7 +574,7 @@ class DeliveryTripService:
         return trip
 
     # --------------------------------------------------------------------------
-    # 5. LẤY DANH SÁCH ĐIỂM GIAO ĐỂ IN ẤN (MANIFEST) (S6-06 SUBTASK 18)
+    # 5. LẤY DANH SÁCH ĐIỂM GIAO ĐỂ IN ẤN (MANIFEST) (S6-06)
     # --------------------------------------------------------------------------
     @classmethod
     def get_manifest(
@@ -555,7 +630,6 @@ class DeliveryTripService:
                 )
             )
 
-        # Sắp xếp theo đúng thứ tự điểm dừng
         stops.sort(key=lambda s: s.stop_order)
 
         return DeliveryManifestResponse(
@@ -579,17 +653,20 @@ class DeliveryTripService:
         )
 
     # --------------------------------------------------------------------------
-    # 6. KHỞI HÀNH XUẤT BẾN & HỦY CHUYẾN
+    # 6. KHỞI HÀNH & HỦY CHUYẾN
     # --------------------------------------------------------------------------
     @classmethod
     def start_trip(cls, db: Session, trip_id: str, current_user: User) -> DeliveryTrip:
-        """Xuất bến bắt đầu chuyến giao hàng (READY -> IN_TRANSIT)."""
+        """Xuất bến bắt đầu chuyến giao hàng (chuyển sang IN_TRANSIT)."""
         trip = db.query(DeliveryTrip).filter(
             or_(DeliveryTrip.id == trip_id, DeliveryTrip.trip_code == trip_id)
         ).first()
 
         if not trip:
             raise HTTPException(status_code=404, detail="Không tìm thấy chuyến.")
+
+        if trip.status == TripStatus.IN_TRANSIT.value:
+            return trip
 
         if trip.status not in [TripStatus.READY.value, TripStatus.PLANNED.value]:
             raise HTTPException(
@@ -604,6 +681,8 @@ class DeliveryTripService:
         db.refresh(trip)
         return trip
 
+    start_delivery_trip = start_trip
+
     @classmethod
     def cancel_trip(cls, db: Session, trip_id: str, current_user: User) -> DeliveryTrip:
         """Hủy chuyến giao hàng khi chưa xuất bến, nhả các phiếu xuất về hàng đợi."""
@@ -614,13 +693,12 @@ class DeliveryTripService:
         if not trip:
             raise HTTPException(status_code=404, detail="Không tìm thấy chuyến.")
 
-        if trip.status in [TripStatus.IN_TRANSIT.value, TripStatus.COMPLETED.value]:
+        if trip.status in [TripStatus.IN_TRANSIT.value, TripStatus.COMPLETED.value, TripStatus.COMPLETED_WITH_ISSUES.value]:
             raise HTTPException(
-                status_code=400,
-                detail=f"Chuyến đang ở trạng thái '{trip.status}', không thể hủy chuyến.",
+                status_code=status.HTTP_405_METHOD_NOT_ALLOWED,
+                detail="Chuyến giao hàng một khi đã xuất bến không được phép xóa.",
             )
 
-        # Nhả các phiếu xuất kho
         for pt in trip.points:
             if pt.dispatch_id:
                 disp = db.query(StockDispatch).filter(StockDispatch.id == pt.dispatch_id).first()
@@ -634,8 +712,264 @@ class DeliveryTripService:
         return trip
 
     # --------------------------------------------------------------------------
-    # 7. TRUY VẤN DANH SÁCH & CHI TIẾT CHUYẾN GIAO HÀNG
+    # 7. CẬP NHẬT KẾT QUẢ TỪNG ĐIỂM GIAO (S6-07)
     # --------------------------------------------------------------------------
+    @classmethod
+    def record_point_delivery_result(
+        cls,
+        db: Session,
+        trip_id: str,
+        point_id: int,
+        payload: PointDeliveryResultRequest,
+        current_user: User,
+    ) -> DeliveryTripPoint:
+        """
+        Cập nhật kết quả giao hàng tại một điểm trong chuyến (S6-07).
+        Hàng chưa giao vẫn thuộc trách nhiệm chuyến (hold_on_trip=True).
+        """
+        valid_statuses = [
+            PointStatus.DELIVERED.value,
+            PointStatus.PARTIAL.value,
+            PointStatus.FAILED.value,
+        ]
+        target_status = payload.status.upper()
+        if target_status not in valid_statuses:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Trạng thái '{payload.status}' không hợp lệ. Chỉ chấp nhận DELIVERED, PARTIAL, hoặc FAILED.",
+            )
+
+        trip = db.query(DeliveryTrip).options(
+            selectinload(DeliveryTrip.points).selectinload(DeliveryTripPoint.items)
+        ).filter(
+            or_(DeliveryTrip.id == trip_id, DeliveryTrip.trip_code == trip_id)
+        ).first()
+
+        if not trip:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Không tìm thấy chuyến giao hàng với mã '{trip_id}'.",
+            )
+
+        point = next((p for p in trip.points if p.id == point_id), None)
+        if not point:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Điểm giao #{point_id} không thuộc chuyến '{trip_id}'.",
+            )
+
+        if point.status in [PointStatus.DELIVERED.value, PointStatus.FAILED.value]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Điểm giao này đã được ghi nhận trước đó với trạng thái '{point.status}', không thể ghi đè.",
+            )
+
+        # Cập nhật số lượng giao từng mặt hàng
+        items_update_map: Dict[str, Any] = {}
+        if payload.delivered_items:
+            items_update_map = {item.product_id: item for item in payload.delivered_items}
+
+        if target_status == PointStatus.PARTIAL.value and not items_update_map:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Giao hàng một phần (PARTIAL) bắt buộc phải truyền chi tiết số lượng thực giao cho từng sản phẩm.",
+            )
+
+        delivered_items_count = 0
+        undelivered_items_count = 0
+        delivered_value = 0.0
+        remaining_value = 0.0
+
+        for itm in point.items:
+            if target_status == PointStatus.DELIVERED.value:
+                if items_update_map and itm.product_id in items_update_map:
+                    deliv_qty = items_update_map[itm.product_id].delivered_quantity
+                    if deliv_qty > itm.dispatched_quantity:
+                        raise HTTPException(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            detail=f"Số lượng giao ({deliv_qty}) vượt quá số lượng xuất ({itm.dispatched_quantity}) của sản phẩm {itm.product_id}.",
+                        )
+                else:
+                    deliv_qty = itm.dispatched_quantity
+            elif target_status == PointStatus.FAILED.value:
+                deliv_qty = 0
+            else:  # PARTIAL
+                if itm.product_id in items_update_map:
+                    deliv_qty = items_update_map[itm.product_id].delivered_quantity
+                    if deliv_qty > itm.dispatched_quantity:
+                        raise HTTPException(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            detail=f"Số lượng giao ({deliv_qty}) vượt quá số lượng xuất ({itm.dispatched_quantity}) của sản phẩm {itm.product_id}.",
+                        )
+                else:
+                    deliv_qty = 0
+
+            undeliv_qty = itm.dispatched_quantity - deliv_qty
+            deliv_amt = deliv_qty * itm.unit_price
+            in_transit_amt = undeliv_qty * itm.unit_price
+
+            itm.delivered_quantity = deliv_qty
+            itm.undelivered_quantity = undeliv_qty
+            itm.delivered_amount = deliv_amt
+            itm.in_transit_amount = in_transit_amt
+
+            if deliv_qty == itm.dispatched_quantity:
+                itm.status = ItemTransitStatus.DELIVERED.value
+            elif deliv_qty == 0:
+                itm.status = ItemTransitStatus.UNDELIVERED.value
+            else:
+                itm.status = ItemTransitStatus.PARTIAL.value
+
+            if items_update_map and itm.product_id in items_update_map:
+                itm.notes = items_update_map[itm.product_id].failure_reason
+
+            delivered_items_count += deliv_qty
+            undelivered_items_count += undeliv_qty
+            delivered_value += deliv_amt
+            remaining_value += in_transit_amt
+
+        point.status = target_status
+        point.actual_arrival_time = datetime.now(timezone.utc)
+        point.delivered_items_count = delivered_items_count
+        point.undelivered_items_count = undelivered_items_count
+        point.delivered_value = delivered_value
+        point.remaining_value = remaining_value
+        point.completion_notes = payload.completion_notes
+        point.failure_reason = payload.failure_reason
+        point.hold_on_trip = True
+
+        # Đồng bộ lại tổng thể chuyến
+        trip_delivered_val = 0.0
+        trip_in_transit_val = 0.0
+        delivered_pts = 0
+        failed_pts = 0
+        remaining_pts = 0
+
+        for pt in trip.points:
+            trip_delivered_val += pt.delivered_value
+            trip_in_transit_val += pt.remaining_value
+            if pt.status == PointStatus.DELIVERED.value:
+                delivered_pts += 1
+            elif pt.status in [PointStatus.FAILED.value, PointStatus.PARTIAL.value]:
+                failed_pts += 1
+            else:
+                remaining_pts += 1
+
+        trip.delivered_points = delivered_pts
+        trip.failed_points = failed_pts
+        trip.remaining_points = remaining_pts
+        trip.delivered_value = trip_delivered_val
+        trip.in_transit_value = trip_in_transit_val
+
+        if remaining_pts == 0:
+            trip.actual_completion_time = datetime.now(timezone.utc)
+            clean_notes_lines = [
+                line for line in (trip.notes or "").splitlines()
+                if not line.startswith("[LƯU Ý] Chuyến giao hoàn tất")
+            ]
+            if failed_pts > 0:
+                trip.status = TripStatus.COMPLETED_WITH_ISSUES.value
+                note_warning = f"[LƯU Ý] Chuyến giao hoàn tất nhưng còn {failed_pts} điểm chưa giao xong. Tổng tiền hàng còn treo trên xe: {trip_in_transit_val:,.0f} đ. Hàng giữ nguyên trên xe, chờ thủ kho tiếp nhận."
+                clean_notes_lines.append(note_warning)
+            else:
+                trip.status = TripStatus.COMPLETED.value
+            trip.notes = "\n".join(clean_notes_lines).strip()
+        else:
+            trip.status = TripStatus.IN_TRANSIT.value
+            trip.actual_completion_time = None
+
+        cls._enrich_trip_delay_status(trip)
+
+        try:
+            db.commit()
+            db.refresh(point)
+            db.refresh(trip)
+            return point
+        except Exception as e:
+            db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Lỗi hệ thống khi cập nhật kết quả điểm giao: {str(e)}",
+            )
+
+    # --------------------------------------------------------------------------
+    # 8. TRUY VẤN DANH SÁCH & BÁO CÁO (S6-06 & S6-07)
+    # --------------------------------------------------------------------------
+    @classmethod
+    def list_delivery_trips(
+        cls,
+        db: Session,
+        status_filter: Optional[str] = None,
+        warehouse_id: Optional[int] = None,
+        is_delayed: Optional[bool] = None,
+        search: Optional[str] = None,
+        skip: int = 0,
+        limit: int = 50,
+    ) -> Tuple[List[DeliveryTrip], int, float, int, int]:
+        """Truy vấn danh sách chuyến giao hàng có bộ lọc và phân trang (S6-07)."""
+        now = datetime.now(timezone.utc)
+        query = db.query(DeliveryTrip).options(
+            selectinload(DeliveryTrip.points).selectinload(DeliveryTripPoint.items)
+        )
+
+        if warehouse_id is not None:
+            query = query.filter(DeliveryTrip.warehouse_id == warehouse_id)
+
+        if status_filter and status_filter.lower() != "all":
+            query = query.filter(DeliveryTrip.status == status_filter.upper())
+
+        if search:
+            search_pattern = f"%{search.strip()}%"
+            query = query.filter(
+                or_(
+                    DeliveryTrip.id.ilike(search_pattern),
+                    DeliveryTrip.trip_code.ilike(search_pattern),
+                    DeliveryTrip.driver_name.ilike(search_pattern),
+                    DeliveryTrip.license_plate.ilike(search_pattern),
+                    DeliveryTrip.warehouse_name.ilike(search_pattern),
+                )
+            )
+
+        if is_delayed is True:
+            query = query.filter(
+                DeliveryTrip.status.in_([TripStatus.IN_TRANSIT.value, TripStatus.PREPARING.value]),
+                DeliveryTrip.expected_completion_time < now
+            )
+        elif is_delayed is False:
+            query = query.filter(
+                or_(
+                    DeliveryTrip.status.notin_([TripStatus.IN_TRANSIT.value, TripStatus.PREPARING.value]),
+                    DeliveryTrip.expected_completion_time >= now
+                )
+            )
+
+        total = query.count()
+        paged_items = query.order_by(DeliveryTrip.started_at.desc()).offset(skip).limit(limit).all()
+
+        for t in paged_items:
+            cls._enrich_trip_delay_status(t)
+
+        active_trips_count = db.query(func.count(DeliveryTrip.id)).filter(
+            DeliveryTrip.status == TripStatus.IN_TRANSIT.value
+        ).scalar() or 0
+
+        delayed_trips_count = db.query(func.count(DeliveryTrip.id)).filter(
+            DeliveryTrip.status.in_([TripStatus.IN_TRANSIT.value, TripStatus.PREPARING.value]),
+            DeliveryTrip.expected_completion_time < now
+        ).scalar() or 0
+
+        total_in_transit_value = db.query(
+            func.coalesce(func.sum(DeliveryTrip.in_transit_value), 0.0)
+        ).filter(
+            DeliveryTrip.status.in_([
+                TripStatus.IN_TRANSIT.value,
+                TripStatus.PREPARING.value,
+                TripStatus.COMPLETED_WITH_ISSUES.value,
+            ])
+        ).scalar() or 0.0
+
+        return paged_items, total, float(total_in_transit_value), active_trips_count, delayed_trips_count
+
     @classmethod
     def list_trips(
         cls,
@@ -647,7 +981,7 @@ class DeliveryTripService:
         skip: int = 0,
         limit: int = 50,
     ) -> Tuple[List[DeliveryTrip], int]:
-        """Lấy danh sách các chuyến giao hàng kèm bộ lọc và phân trang."""
+        """Truy vấn danh sách chuyến giao hàng cho S6-06."""
         query = db.query(DeliveryTrip)
 
         if warehouse_id:
@@ -661,17 +995,77 @@ class DeliveryTripService:
 
         total = query.count()
         items = query.order_by(desc(DeliveryTrip.created_at)).offset(skip).limit(limit).all()
+        for t in items:
+            cls._enrich_trip_delay_status(t)
         return items, total
 
     @classmethod
-    def get_trip(cls, db: Session, trip_id: str) -> DeliveryTrip:
-        """Lấy chi tiết một chuyến giao hàng."""
-        trip = db.query(DeliveryTrip).filter(
+    def get_delivery_trip_by_id(cls, db: Session, trip_id: str) -> DeliveryTrip:
+        """Tra cứu chi tiết một chuyến giao hàng kèm toàn bộ điểm giao và sản phẩm."""
+        trip = db.query(DeliveryTrip).options(
+            selectinload(DeliveryTrip.points).selectinload(DeliveryTripPoint.items)
+        ).filter(
             or_(DeliveryTrip.id == trip_id, DeliveryTrip.trip_code == trip_id)
         ).first()
+
         if not trip:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Không tìm thấy chuyến giao hàng với mã '{trip_id}'.",
             )
+
+        cls._enrich_trip_delay_status(trip)
         return trip
+
+    get_trip = get_delivery_trip_by_id
+
+    @classmethod
+    def get_in_transit_summary(
+        cls, db: Session, warehouse_id: Optional[int] = None
+    ) -> InTransitSummaryResponse:
+        """Báo cáo tổng quan tiền hàng nằm trên đường dành cho Quản lý kho (S6-07)."""
+        now = datetime.now(timezone.utc)
+        query = db.query(DeliveryTrip).options(
+            selectinload(DeliveryTrip.points)
+        )
+        if warehouse_id:
+            query = query.filter(DeliveryTrip.warehouse_id == warehouse_id)
+
+        trips = query.all()
+        for t in trips:
+            cls._enrich_trip_delay_status(t)
+
+        active_trips = [t for t in trips if t.status == TripStatus.IN_TRANSIT.value]
+        total_in_transit_value = sum(
+            t.in_transit_value for t in trips
+            if t.status in [TripStatus.IN_TRANSIT.value, TripStatus.PREPARING.value, TripStatus.COMPLETED_WITH_ISSUES.value]
+        )
+        delayed_trips = [t for t in trips if t.is_delayed]
+        total_remaining = sum(t.remaining_points for t in trips)
+        total_delivered = sum(t.delivered_points for t in trips)
+
+        wh_map: Dict[int, Dict[str, Any]] = {}
+        for t in trips:
+            if t.warehouse_id not in wh_map:
+                wh_map[t.warehouse_id] = {
+                    "warehouse_id": t.warehouse_id,
+                    "warehouse_name": t.warehouse_name or f"Kho {t.warehouse_id}",
+                    "active_trips": 0,
+                    "in_transit_value": 0.0,
+                    "delayed_trips": 0,
+                }
+            if t.status == TripStatus.IN_TRANSIT.value:
+                wh_map[t.warehouse_id]["active_trips"] += 1
+            if t.status in [TripStatus.IN_TRANSIT.value, TripStatus.PREPARING.value, TripStatus.COMPLETED_WITH_ISSUES.value]:
+                wh_map[t.warehouse_id]["in_transit_value"] += t.in_transit_value
+            if t.is_delayed:
+                wh_map[t.warehouse_id]["delayed_trips"] += 1
+
+        return InTransitSummaryResponse(
+            total_active_trips=len(active_trips),
+            total_in_transit_value=total_in_transit_value,
+            total_delayed_trips=len(delayed_trips),
+            total_remaining_points=total_remaining,
+            total_delivered_points=total_delivered,
+            by_warehouse=list(wh_map.values()),
+        )

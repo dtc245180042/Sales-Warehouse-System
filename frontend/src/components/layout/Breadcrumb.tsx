@@ -48,6 +48,8 @@ const routeNames: Record<string, string> = {
   import: 'Nhập Excel',
   new: 'Thêm Mới',
   agents: 'Đại Lý',
+  'debt-risk': 'Cấu Hình Quy Tắc Chặn Bán',
+  'debt-risk-config': 'Cấu Hình Quy Tắc Chặn Bán',
 };
 
 export const Breadcrumb: React.FC = () => {
@@ -91,6 +93,16 @@ export const Breadcrumb: React.FC = () => {
           name = 'Báo Cáo Bán Hàng';
         } else if (typeof name === 'string' && name.startsWith('STK-TAKE-')) {
           name = name.replace('STK-TAKE-', 'PKK-2026-');
+        } else if (value === 'debt-risk' || value === 'debt-risk-config') {
+          const searchParams = new URLSearchParams(location.search);
+          const tab = searchParams.get('tab') || (location.hash ? location.hash.replace('#', '') : '');
+          if (tab === 'flagged') {
+            name = 'Đại Lý Bị Gắn Cờ';
+          } else if (tab === 'history') {
+            name = 'Nhật Ký Cảnh Báo & Khóa/Mở Bán';
+          } else {
+            name = 'Cấu Hình Quy Tắc Chặn Bán';
+          }
         }
 
         return (

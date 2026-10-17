@@ -31,8 +31,13 @@ def hook_sau_khi_ghi_nhan_thanh_toan(db: Session, payment: Payment):
     TUYỆT ĐỐI KHÔNG ghi trực tiếp vào CustomerCreditProfile.current_debt tại đây.
     """
     try:
-        # Trang sẽ cắm: customer_debt_service.ghi_giam_cong_no(...)
-        pass
+        from app.services.debt_risk_service import hook_sau_khi_ghi_nhan_thanh_toan_handler
+        hook_sau_khi_ghi_nhan_thanh_toan_handler(
+            db=db,
+            customer_id=payment.customer_id,
+            payment_amount=float(payment.amount or 0.0),
+            collector_name=payment.collector_name or "system"
+        )
     except Exception as e:
         logger.error(f"[Hook Trang] Lỗi khi gọi ghi nhận giảm nợ cho phiếu thu {payment.id}: {e}")
 

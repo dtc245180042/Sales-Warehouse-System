@@ -3,6 +3,7 @@ import { NavLink, Link, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
   ShieldCheck,
+  ShieldAlert,
   Settings,
   FolderTree,
   ChevronDown,
@@ -198,6 +199,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
           path: '/customers',
           icon: <Store className="w-5 h-5" />,
           allowedRoles: ALL_ROLES,
+        },
+        {
+          title: 'Quy tắc rủi ro & Chặn bán',
+          path: '/settings/debt-risk',
+          icon: <ShieldAlert className="w-5 h-5" />,
+          allowedRoles: ['Admin', 'Accountant', 'SalesManager', 'Director', 'Manager'],
         },
         {
           title: 'Nhà cung cấp',

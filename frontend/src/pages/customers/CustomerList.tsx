@@ -82,7 +82,7 @@ export const CustomerList: React.FC = () => {
   const [totalPages, setTotalPages] = useState<number>(() => cachedPage?.total_pages || Math.max(1, Math.ceil((cachedPage?.total || 2381) / urlPageSize)));
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
-  const [viewMode, setViewMode] = useState<'table' | 'cards'>(urlView);
+  const [viewMode] = useState<'table'>('table');
 
   // Search input state (với debounce hỗ trợ nhập mượt mà)
   const [searchInput, setSearchInput] = useState<string>(urlSearch);
@@ -657,7 +657,31 @@ export const CustomerList: React.FC = () => {
       key: 'status',
       header: 'Trạng Thái',
       sortable: true,
-      render: (c) => getStatusBadge(c.status),
+      render: (c) => {
+        const risk = c.riskLevel || c.risk_level;
+        const isFlagged = Boolean(c.isFlagged ?? c.is_flagged);
+        return (
+          <div className="space-y-1">
+            <div>{getStatusBadge(c.status)}</div>
+            {isFlagged && risk && risk !== 'SAFE' && (
+              <span
+                className={`inline-block text-[10px] font-extrabold px-1.5 py-0.5 rounded border ${
+                  risk === 'HIGH_RISK'
+                    ? 'bg-rose-100 text-rose-800 border-rose-300 dark:bg-rose-950 dark:text-rose-200'
+                    : risk === 'OVERDUE'
+                    ? 'bg-red-100 text-red-800 border-red-300 dark:bg-red-950 dark:text-red-200'
+                    : risk === 'LIMIT_EXCEEDED'
+                    ? 'bg-purple-100 text-purple-800 border-purple-300 dark:bg-purple-950 dark:text-purple-200'
+                    : 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950 dark:text-amber-200'
+                }`}
+                title={c.flagReason || c.flag_reason || undefined}
+              >
+                Cờ: {risk === 'HIGH_RISK' ? 'Nguy cơ cao' : risk === 'OVERDUE' ? 'Quá hạn' : risk === 'LIMIT_EXCEEDED' ? 'Vượt mức' : 'Cảnh báo'}
+              </span>
+            )}
+          </div>
+        );
+      },
     },
     {
       key: 'actions',
@@ -743,42 +767,6 @@ export const CustomerList: React.FC = () => {
       subtitle={`Hệ thống quản lý ${totalCount.toLocaleString('vi-VN')} đại lý và khách hàng trong tuyến phân phối`}
       actions={
         <div className="flex items-center gap-2">
-          {/* Nút chuyển đổi View Mode: Bảng vs Thẻ Ngoài Hiện Trường */}
-          <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700">
-            <button
-              type="button"
-              onClick={() => {
-                setViewMode('table');
-                updateParams({ view: 'table' });
-              }}
-              className={`p-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition-all ${
-                viewMode === 'table'
-                  ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-sm'
-                  : 'text-slate-500 hover:text-slate-900 dark:hover:text-slate-200'
-              }`}
-              title="Chế độ xem bảng chi tiết"
-            >
-              <ListIcon className="w-4 h-4" />
-              <span className="hidden sm:inline">Bảng</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setViewMode('cards');
-                updateParams({ view: 'cards' });
-              }}
-              className={`p-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition-all ${
-                viewMode === 'cards'
-                  ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-sm'
-                  : 'text-slate-500 hover:text-slate-900 dark:hover:text-slate-200'
-              }`}
-              title="Chế độ thẻ di động ngoài đường"
-            >
-              <LayoutGrid className="w-4 h-4" />
-              <span className="hidden sm:inline">Thẻ</span>
-            </button>
-          </div>
-
           {isManagerOrAdmin && (
             <Button
               variant="secondary"
@@ -1052,7 +1040,17 @@ export const CustomerList: React.FC = () => {
                           {c.name}
                         </Link>
                       </div>
-                      <div>{getStatusBadge(c.status)}</div>
+                      <div className="flex flex-col items-end gap-1">
+                        <div>{getStatusBadge(c.status)}</div>
+                        {(c.isFlagged || c.is_flagged) && (c.riskLevel || c.risk_level) && (c.riskLevel || c.risk_level) !== 'SAFE' && (
+                          <span
+                            className="text-[10px] font-extrabold px-1.5 py-0.2 rounded bg-rose-100 text-rose-800 border border-rose-300 dark:bg-rose-950 dark:text-rose-200"
+                            title={c.flagReason || c.flag_reason || undefined}
+                          >
+                            Cờ: {c.riskLevel || c.risk_level}
+                          </span>
+                        )}
+                      </div>
                     </div>
 
                     {/* Địa chỉ & Khu vực */}

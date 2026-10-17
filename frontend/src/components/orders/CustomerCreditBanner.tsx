@@ -26,6 +26,9 @@ export interface CustomerCreditStatusInfo {
   hasOverdue: boolean;
   overdueDays: number;
   overdueOrderCode?: string | null;
+  isFlagged?: boolean;
+  riskLevel?: string;
+  flagReason?: string | null;
 }
 
 interface CustomerCreditBannerProps {
@@ -93,7 +96,21 @@ export const CustomerCreditBanner: React.FC<CustomerCreditBannerProps> = ({
     const hasOverdue = Boolean(profile?.hasOverdue);
     const overdueDays = Number(profile?.overdueDays ?? 0);
     const overdueCode = profile?.overdueOrderCode ?? null;
-    const isBlocked = Boolean(profile?.isBlocked || (hasOverdue && overdueDays > 0));
+
+    const isFlagged = Boolean(profile?.isFlagged ?? profile?.is_flagged);
+    const riskLevel = profile?.riskLevel || profile?.risk_level || (hasOverdue ? 'OVERDUE' : (currDebt > limit && limit > 0 ? 'LIMIT_EXCEEDED' : 'SAFE'));
+    const flagReason = profile?.flagReason || profile?.flag_reason || null;
+    const actionApplied = profile?.actionApplied || (profile as any)?.action_applied || '';
+    const backendIsBlocked = Boolean(profile?.isBlocked || (profile as any)?.is_blocked);
+    const backendRequiresApproval = Boolean(profile?.requiresApproval || (profile as any)?.requires_approval);
+
+    // ĐỒNG BỘ QUY TẮC TOÀN HỆ THỐNG:
+    // Nếu actionApplied là BLOCK, hoặc backend đánh dấu isBlocked, hoặc có nợ quá hạn (không phải WARNING_ONLY/REQUIRE_APPROVAL)
+    const isBlocked = Boolean(
+      actionApplied === 'BLOCK' ||
+      backendIsBlocked ||
+      (hasOverdue && overdueDays > 0 && actionApplied !== 'WARNING_ONLY' && actionApplied !== 'REQUIRE_APPROVAL')
+    );
 
     const unpaidFromNew = Math.max(0, Number(newOrderAmount) - Number(newOrderPaid));
     const projectedTotalDebt = currDebt + unpaidFromNew;
@@ -103,20 +120,48 @@ export const CustomerCreditBanner: React.FC<CustomerCreditBannerProps> = ({
     let requiresApproval = false;
     let approvalMsg: string | null = null;
 
-    if (!isBlocked && unpaidFromNew > 0) {
-      if (limit <= 0) {
+    if (!isBlocked) {
+      if (actionApplied === 'REQUIRE_APPROVAL' || backendRequiresApproval) {
         requiresApproval = true;
-        approvalMsg = `Đại lý chưa được cấp hạn mức công nợ (Hạn mức: 0 đ). Đơn hàng cần được Quản lý duyệt.`;
-      } else if (projectedTotalDebt > limit) {
-        requiresApproval = true;
-        approvalMsg = `Đơn hàng làm tổng công nợ (${formatCurrency(projectedTotalDebt)}) vượt hạn mức (${formatCurrency(limit)}) là ${formatCurrency(excess)}. Đơn cần Quản lý duyệt.`;
+        const riskLabel =
+          riskLevel === 'HIGH_RISK'
+            ? 'Nguy cơ cao'
+            : riskLevel === 'OVERDUE'
+            ? 'Nợ quá hạn'
+            : riskLevel === 'LIMIT_EXCEEDED'
+            ? 'Vượt hạn mức'
+            : 'Cảnh báo nợ';
+        approvalMsg = flagReason || `Đại lý đang bị gắn cờ rủi ro công nợ (${riskLabel}). Đơn hàng cần được Quản lý duyệt theo cấu hình.`;
+      } else if (actionApplied === 'WARNING_ONLY') {
+        requiresApproval = false;
+      } else if (unpaidFromNew > 0 || isFlagged) {
+        if (isFlagged && riskLevel !== 'SAFE') {
+          requiresApproval = true;
+          const riskLabel =
+            riskLevel === 'HIGH_RISK'
+              ? 'Nguy cơ cao'
+              : riskLevel === 'OVERDUE'
+              ? 'Nợ quá hạn'
+              : riskLevel === 'LIMIT_EXCEEDED'
+              ? 'Vượt hạn mức'
+              : 'Cảnh báo nợ';
+          approvalMsg = flagReason || `Đại lý đang bị gắn cờ rủi ro công nợ (${riskLabel}). Đơn hàng cần được Quản lý duyệt theo cấu hình.`;
+        } else if (limit <= 0) {
+          requiresApproval = true;
+          approvalMsg = `Đại lý chưa được cấp hạn mức công nợ (Hạn mức: 0 đ). Đơn hàng cần được Quản lý duyệt.`;
+        } else if (projectedTotalDebt > limit) {
+          requiresApproval = true;
+          approvalMsg = `Đơn hàng làm tổng công nợ (${formatCurrency(projectedTotalDebt)}) vượt hạn mức (${formatCurrency(limit)}) là ${formatCurrency(excess)}. Đơn cần Quản lý duyệt.`;
+        }
       }
     }
 
     const avail = Math.max(0, limit - currDebt);
     const blockMsg = isBlocked
-      ? profile?.blockReason ||
-        `Đại lý đang có khoản nợ quá hạn ${overdueDays} ngày (Đơn ${overdueCode || 'cũ'}). Hệ thống chặn tạo và chốt đơn hoàn toàn.`
+      ? flagReason || profile?.blockReason ||
+        (riskLevel === 'LIMIT_EXCEEDED'
+          ? `Đại lý đang vượt hạn mức công nợ (${formatCurrency(currDebt)} / ${formatCurrency(limit)}). Hệ thống từ chối nhận đơn mới theo quy tắc Khóa Bán Hoàn Toàn (BLOCK).`
+          : `Đại lý đang có khoản nợ quá hạn ${overdueDays} ngày (Đơn ${overdueCode || 'cũ'}). Hệ thống từ chối nhận đơn mới theo quy tắc Khóa Bán Hoàn Toàn (BLOCK).`)
       : null;
 
     return {
@@ -131,6 +176,9 @@ export const CustomerCreditBanner: React.FC<CustomerCreditBannerProps> = ({
       hasOverdue,
       overdueDays,
       overdueOrderCode: overdueCode,
+      isFlagged,
+      riskLevel,
+      flagReason,
     };
   }, [profile, newOrderAmount, newOrderPaid]);
 
@@ -217,17 +265,37 @@ export const CustomerCreditBanner: React.FC<CustomerCreditBannerProps> = ({
           </div>
         </div>
 
-        {/* Status Chip */}
-        <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 text-[11px] font-bold rounded-full border ${statusBadgeColor}`}>
-          {isBlocked ? (
-            <Ban className="w-3 h-3" />
-          ) : requiresApproval ? (
-            <AlertTriangle className="w-3 h-3" />
-          ) : (
-            <CheckCircle2 className="w-3 h-3" />
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {creditStatus.isFlagged && (
+            <span
+              className={`inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-extrabold rounded-full border ${
+                creditStatus.riskLevel === 'HIGH_RISK'
+                  ? 'bg-rose-100 text-rose-800 border-rose-300 dark:bg-rose-950 dark:text-rose-200'
+                  : creditStatus.riskLevel === 'OVERDUE'
+                  ? 'bg-red-100 text-red-800 border-red-300 dark:bg-red-950 dark:text-red-200'
+                  : creditStatus.riskLevel === 'LIMIT_EXCEEDED'
+                  ? 'bg-purple-100 text-purple-800 border-purple-300 dark:bg-purple-950 dark:text-purple-200'
+                  : 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950 dark:text-amber-200'
+              }`}
+              title={`Cờ rủi ro công nợ: ${creditStatus.flagReason || creditStatus.riskLevel}`}
+            >
+              <ShieldAlert className="w-3 h-3" />
+              <span>CỜ: {creditStatus.riskLevel === 'HIGH_RISK' ? 'NGUY CƠ CAO' : creditStatus.riskLevel === 'OVERDUE' ? 'NỢ QUÁ HẠN' : creditStatus.riskLevel === 'LIMIT_EXCEEDED' ? 'VƯỢT HẠN MỨC' : 'CẢNH BÁO'}</span>
+            </span>
           )}
-          <span>{statusBadgeText}</span>
-        </span>
+
+          {/* Status Chip */}
+          <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 text-[11px] font-bold rounded-full border ${statusBadgeColor}`}>
+            {isBlocked ? (
+              <Ban className="w-3 h-3" />
+            ) : requiresApproval ? (
+              <AlertTriangle className="w-3 h-3" />
+            ) : (
+              <CheckCircle2 className="w-3 h-3" />
+            )}
+            <span>{statusBadgeText}</span>
+          </span>
+        </div>
       </div>
 
       {/* KPI 3 columns */}
@@ -301,12 +369,19 @@ export const CustomerCreditBanner: React.FC<CustomerCreditBannerProps> = ({
         <div className="p-2.5 rounded-xl bg-rose-100/80 dark:bg-rose-950/60 border border-rose-300 dark:border-rose-800 text-rose-900 dark:text-rose-100 text-xs space-y-1">
           <div className="flex items-center gap-1.5 font-bold">
             <ShieldAlert className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
-            <span>Chặn tạo đơn: Đại lý có nợ quá hạn!</span>
+            <span>
+              {creditStatus.riskLevel === 'LIMIT_EXCEEDED'
+                ? '🔒 Chặn tạo đơn: Đại lý vượt hạn mức công nợ (Khóa bán)!'
+                : creditStatus.riskLevel === 'HIGH_RISK'
+                ? '🔒 Chặn tạo đơn: Đại lý nguy cơ cao (Quá hạn & Vượt mức)!'
+                : '🔒 Chặn tạo đơn: Đại lý có nợ quá hạn (Khóa bán)!'}
+            </span>
           </div>
           <p className="text-[11px] leading-relaxed text-rose-800 dark:text-rose-200">
-            {blockReason ||
-              `Đại lý đang có đơn hàng ${overdueOrderCode || ''} nợ quá hạn ${overdueDays} ngày (quy định tối đa ${maxDebtDays} ngày). Hệ thống từ chối nhận đơn mới cho đến khi hoàn tất thanh toán khoản nợ quá hạn này.`}
+            {creditStatus.blockReason ||
+              `Đại lý đang vi phạm công nợ theo quy định của hệ thống. Nút tạo đơn bị vô hiệu hóa cho đến khi hoàn tất giải tỏa nợ.`}
           </p>
+
         </div>
       )}
 

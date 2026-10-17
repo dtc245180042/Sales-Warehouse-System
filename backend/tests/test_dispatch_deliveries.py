@@ -1,4 +1,5 @@
 import io
+from typing import Optional
 from datetime import date, datetime, timedelta, timezone
 import pytest
 from fastapi.testclient import TestClient

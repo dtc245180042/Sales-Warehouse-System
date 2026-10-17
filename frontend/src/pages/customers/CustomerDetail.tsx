@@ -61,7 +61,7 @@ export const CustomerDetail: React.FC = () => {
   const [creditProfile, setCreditProfile] = useState<CustomerCreditProfile | null>(null);
   const [isCreditModalOpen, setIsCreditModalOpen] = useState(false);
   const [creditLimitInput, setCreditLimitInput] = useState<number>(0);
-  const [maxDebtDaysInput, setMaxDebtDaysInput] = useState<number>(30);
+  const [maxDebtDaysInput, setMaxDebtDaysInput] = useState<string>('30');
   const [creditReasonInput, setCreditReasonInput] = useState<string>('');
   const [submittingCredit, setSubmittingCredit] = useState(false);
 
@@ -100,7 +100,7 @@ export const CustomerDetail: React.FC = () => {
       const cp = await creditService.getProfile(customerId);
       setCreditProfile(cp);
       setCreditLimitInput(cp.creditLimit);
-      setMaxDebtDaysInput(cp.maxDebtDays);
+      setMaxDebtDaysInput(String(cp.maxDebtDays ?? 0));
     } catch (err) {
       console.warn('[CustomerDetail] Error fetching credit profile, using customer defaults:', err);
       const defaultLimit = fallbackCustomer?.creditLimit || 50000000;
@@ -119,7 +119,7 @@ export const CustomerDetail: React.FC = () => {
       };
       setCreditProfile(fallbackProfile);
       setCreditLimitInput(defaultLimit);
-      setMaxDebtDaysInput(defaultDays);
+      setMaxDebtDaysInput(String(defaultDays ?? 0));
     }
   };
 
@@ -189,9 +189,10 @@ export const CustomerDetail: React.FC = () => {
 
     try {
       setSubmittingCredit(true);
+      const parsedDays = maxDebtDaysInput === '' ? 0 : parseInt(maxDebtDaysInput, 10);
       const updated = await creditService.updateProfile(customer.id, {
         credit_limit: Number(creditLimitInput),
-        max_debt_days: Number(maxDebtDaysInput),
+        max_debt_days: parsedDays,
         reason: cleanReason,
       });
       setCreditProfile(updated);
@@ -949,33 +950,43 @@ export const CustomerDetail: React.FC = () => {
             <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
               Số ngày nợ tối đa (ngày) *
             </label>
-            <div className="grid grid-cols-4 gap-2 mb-2">
-              {[0, 15, 30, 45].map((d) => (
-                <button
-                  key={d}
-                  type="button"
-                  onClick={() => setMaxDebtDaysInput(d)}
-                  className={`py-1.5 px-2 rounded-lg text-xs font-bold border transition-all ${
-                    maxDebtDaysInput === d
-                      ? 'border-indigo-600 bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300'
-                      : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'
-                  }`}
-                >
-                  {d === 0 ? '0 ngày' : `${d} ngày`}
-                </button>
-              ))}
-            </div>
             <input
-              type="number"
-              min="0"
-              max="365"
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              placeholder="0"
               value={maxDebtDaysInput}
-              onChange={(e) => setMaxDebtDaysInput(Number(e.target.value) || 0)}
+              onChange={(e) => {
+                const raw = e.target.value.replace(/\D/g, '');
+                if (raw === '') {
+                  setMaxDebtDaysInput('');
+                  return;
+                }
+                const clean = raw.replace(/^0+(?=\d)/, '');
+                const num = parseInt(clean, 10);
+                if (!isNaN(num) && num > 730) {
+                  setMaxDebtDaysInput('730');
+                } else {
+                  setMaxDebtDaysInput(clean);
+                }
+              }}
+              onFocus={(e) => {
+                if (maxDebtDaysInput === '0') {
+                  e.target.select();
+                }
+              }}
+              onBlur={() => {
+                if (maxDebtDaysInput === '') {
+                  setMaxDebtDaysInput('0');
+                }
+              }}
               className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs sm:text-sm font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none"
               required
             />
             <p className="mt-1 text-[11px] text-slate-400">
-              {maxDebtDaysInput === 0 ? '0 = Bắt buộc thanh toán ngay, không cho nợ ngày' : `Đại lý được nợ tối đa ${maxDebtDaysInput} ngày kể từ khi xuất kho.`}
+              {parseInt(maxDebtDaysInput || '0', 10) === 0
+                ? '0 = Bắt buộc thanh toán ngay, không cho nợ ngày (tối đa cho phép: 730 ngày / 2 năm)'
+                : `Đại lý được nợ tối đa ${parseInt(maxDebtDaysInput || '0', 10)} ngày kể từ khi xuất kho (tối đa cho phép: 730 ngày / 2 năm).`}
             </p>
           </div>
 

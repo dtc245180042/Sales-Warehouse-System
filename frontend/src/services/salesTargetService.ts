@@ -8,6 +8,7 @@ import {
 } from '../types/SalesTarget';
 import { getStorageItem, setStorageItem } from './storage';
 import { initialOrders } from '../mock/orders';
+import { initialUsers } from '../mock/users';
 import { parseSafeDate } from '../utils/formatters';
 
 const STORAGE_KEY = 'kv_sales_targets';
@@ -232,21 +233,6 @@ export const salesTargetService = {
   },
 
   getProgress: async (year: number, month: number): Promise<SalesTargetProgressItem[]> => {
-    try {
-      const res = await apiClient.get('/sales-targets/progress', { params: { year, month } });
-      if (
-        res.data &&
-        Array.isArray(res.data) &&
-        res.data.length > 0 &&
-        res.data[0].targetRevenue !== undefined &&
-        res.data[0].targetId !== undefined
-      ) {
-        return res.data;
-      }
-    } catch {
-      // Fallback
-    }
-
     let list = getStorageItem<SalesTarget[]>(STORAGE_KEY, INITIAL_DEMO_TARGETS);
     if (!Array.isArray(list) || list.length === 0) {
       list = INITIAL_DEMO_TARGETS;
@@ -255,12 +241,29 @@ export const salesTargetService = {
 
     const targets = list.filter((t) => Number(t.year) === Number(year) && Number(t.month) === Number(month));
 
+    // Lấy danh sách người dùng để đồng bộ vai trò / khu vực nếu chưa có
+    const users = getStorageItem<any[]>('kv_users', initialUsers);
+
     // Lấy danh sách đơn hàng thực tế để tính toán doanh số và số đơn
     const orders = getStorageItem<any[]>('kv_orders', initialOrders);
 
     return targets.map((t) => {
       const targetRev = Number(t.targetRevenue) || 0;
       const targetOrd = Number(t.targetOrders) || 100;
+
+      const matchedUser =
+        t.scope === 'individual' && t.userId
+          ? users.find(
+              (u) =>
+                String(u.id) === String(t.userId) ||
+                (u.email && u.email === t.userId) ||
+                (u.name && u.name === t.userName)
+            )
+          : null;
+
+      const userRole = t.userRole || matchedUser?.role || 'SalesStaff';
+      const userTerritory =
+        t.territory || matchedUser?.territory || (t.scope === 'individual' ? 'Khu vực kinh doanh' : undefined);
 
       // Lọc các đơn hàng phát sinh trong kỳ tháng/năm của chỉ tiêu
       const matchingOrders = (orders || []).filter((o) => {
@@ -274,11 +277,21 @@ export const salesTargetService = {
         }
 
         if (t.scope === 'individual') {
-          const matchId = t.userId && (String(o.staffId) === String(t.userId) || String(o.staff_id) === String(t.userId));
-          const matchName = t.userName && (
-            (o.staffName && o.staffName.toLowerCase() === t.userName.toLowerCase()) ||
-            (o.staff_name && o.staff_name.toLowerCase() === t.userName.toLowerCase())
-          );
+          const matchId =
+            t.userId &&
+            (String(o.staffId) === String(t.userId) ||
+              String(o.staff_id) === String(t.userId) ||
+              (matchedUser && String(o.staffId) === String(matchedUser.id)));
+
+          const matchName =
+            t.userName &&
+            ((o.staffName && o.staffName.toLowerCase() === t.userName.toLowerCase()) ||
+              (o.staff_name && o.staff_name.toLowerCase() === t.userName.toLowerCase()) ||
+              (matchedUser &&
+                matchedUser.name &&
+                o.staffName &&
+                o.staffName.toLowerCase() === matchedUser.name.toLowerCase()));
+
           return Boolean(matchId || matchName);
         } else {
           const terr = (t.territory || '').toLowerCase();
@@ -316,8 +329,8 @@ export const salesTargetService = {
         scope: t.scope,
         userId: t.userId,
         userName: t.userName,
-        userRole: t.userRole,
-        territory: t.territory,
+        userRole: userRole,
+        territory: userTerritory,
         targetRevenue: targetRev,
         currentRevenue: currentRev,
         remainingRevenue: remainingRev,

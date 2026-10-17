@@ -29,6 +29,7 @@ export interface SalesTargetCreateRequest {
   scope: TargetScope;
   userId?: string;
   userName?: string;
+  userRole?: string;
   territory?: string;
   targetRevenue: number;
   targetOrders?: number;

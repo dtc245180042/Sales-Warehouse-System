@@ -122,7 +122,7 @@ export const PaymentListPage: React.FC = () => {
       const q = searchQuery.toLowerCase();
       const matchSearch =
         p.id.toLowerCase().includes(q) ||
-        p.customer_name.toLowerCase().includes(q) ||
+        (p.customer_name && p.customer_name.toLowerCase().includes(q)) ||
         p.customer_id.toLowerCase().includes(q) ||
         (p.reference_code && p.reference_code.toLowerCase().includes(q));
 

@@ -301,7 +301,7 @@ export const PriceHistoryPage: React.FC = () => {
             )}
             <button
               type="button"
-              onClick={loadData}
+              onClick={() => loadData()}
               className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-300 hover:text-indigo-600 px-3 py-1.5 bg-slate-100 dark:bg-slate-700/50 rounded-lg transition"
             >
               <RefreshCw className="w-3.5 h-3.5" />

@@ -51,5 +51,7 @@ export interface BackorderItem {
   dispatched_quantity: number;
   shortfall_quantity: number;
   warehouse_id: number;
+  warehouse_name?: string;
+  status?: string;
   created_at: string;
 }

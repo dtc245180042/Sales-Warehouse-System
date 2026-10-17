@@ -4,38 +4,7 @@ import { getStorageItem, setStorageItem } from './storage';
 
 const STORAGE_KEY = 'kv_credit_notes';
 
-const INITIAL_DEMO_CREDIT_NOTES: CreditNote[] = [
-  {
-    id: 'CN-2026-0000001',
-    client_request_id: 'REQ-CN-20261016-001',
-    return_order_id: 'TH-2026-0000001',
-    invoice_id: 'HD-2026-0000001',
-    customer_id: 'CUS-001',
-    customer_name: 'Đại lý Dương Quang Trung',
-    adjustment_amount: 53980000,
-    adjustment_date: '2026-10-16T10:00:00Z',
-    created_by: 2,
-    created_by_name: 'Đỗ Thị Kế Toán Trưởng',
-    notes: 'Giảm trừ nợ hàng trả do lỗi kỹ thuật màn hình thiết bị điện tử',
-    created_at: '2026-10-16T10:00:00Z',
-    items: [
-      {
-        id: 1,
-        credit_note_id: 'CN-2026-0000001',
-        return_order_item_id: 1,
-        product_id: 'PRD-001',
-        sku: 'IP15PM-256-TI',
-        product_name: 'iPhone 15 Pro Max 256GB Titan Tự Nhiên',
-        unit: 'Chiếc',
-        quantity: 2,
-        unit_price: 26990000,
-        discount_amount: 0,
-        vat_amount: 0,
-        subtotal: 53980000,
-      },
-    ],
-  },
-];
+const INITIAL_DEMO_CREDIT_NOTES: CreditNote[] = [];
 
 export const creditNoteService = {
   /**

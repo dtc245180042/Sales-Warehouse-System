@@ -52,7 +52,7 @@ export const RevenueReport: React.FC = () => {
   const totalYearRevenue = monthlyRevenueData.reduce((sum, item) => sum + item.revenue, 0);
   const totalYearProfit = monthlyRevenueData.reduce((sum, item) => sum + item.profit, 0);
   const totalOrders = monthlyRevenueData.reduce((sum, item) => sum + item.orders, 0);
-  const avgProfitMargin = Math.round((totalYearProfit / totalYearRevenue) * 100);
+  const avgProfitMargin = totalYearRevenue > 0 ? Math.round((totalYearProfit / totalYearRevenue) * 100) : 0;
 
   const handleExportCSV = () => {
     exportToCSV({

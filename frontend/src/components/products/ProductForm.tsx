@@ -267,12 +267,12 @@ export const ProductForm: React.FC<ProductFormProps> = ({
       name: initialValues?.name || '',
       sku: initialValues?.sku || '',
       barcode: initialValues?.barcode || `893850${Math.floor(100000 + Math.random() * 900000)}`,
-      category: initialValues?.category || productCategories[0].name,
+      category: initialValues?.category || productCategories[0]?.name || '',
       categoryId: initialValues?.categoryId,
-      supplierId: initialValues?.supplierId || initialSuppliers[0].id,
-      costPrice: initialValues?.costPrice ?? 1000000,
-      salePrice: initialValues?.salePrice ?? 1500000,
-      stock: initialValues?.stock ?? 10,
+      supplierId: initialValues?.supplierId || initialSuppliers[0]?.id || '',
+      costPrice: initialValues?.costPrice ?? 0,
+      salePrice: initialValues?.salePrice ?? 0,
+      stock: initialValues?.stock ?? 0,
       minStock: initialValues?.minStock ?? 5,
       unit: initialValues?.unit || 'Chiếc',
       image: initialValues?.image || '',
@@ -658,6 +658,7 @@ export const ProductForm: React.FC<ProductFormProps> = ({
                 {...register('supplierId')}
                 className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
               >
+                <option value="">-- Chọn nhà cung cấp --</option>
                 {initialSuppliers.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.name}

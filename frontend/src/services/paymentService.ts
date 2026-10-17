@@ -4,30 +4,7 @@ import { getStorageItem, setStorageItem } from './storage';
 
 const STORAGE_KEY = 'kv_payments';
 
-const INITIAL_DEMO_PAYMENTS: Payment[] = [
-  {
-    id: 'PT-2026-0000001',
-    customer_id: 'CUS-002',
-    customer_name: 'Đại lý Trần Trung Hiếu',
-    amount: 50000000,
-    payment_method: 'BANK_TRANSFER',
-    payment_date: '2026-10-15T14:00:00Z',
-    collector_id: 2,
-    collector_name: 'Đỗ Thị Kế Toán Trưởng',
-    reference_code: 'VCB-TRANS-998822',
-    notes: 'Thu nợ đợt 1 tiền mua thiết bị điện tử chuyển khoản qua Vietcombank',
-    created_at: '2026-10-15T14:00:00Z',
-    allocations: [
-      {
-        id: 1,
-        payment_id: 'PT-2026-0000001',
-        invoice_id: 'HD-2026-0000002',
-        allocated_amount: 50000000,
-        created_at: '2026-10-15T14:00:00Z',
-      },
-    ],
-  },
-];
+const INITIAL_DEMO_PAYMENTS: Payment[] = [];
 
 export const paymentService = {
   getPayments: async (params?: {

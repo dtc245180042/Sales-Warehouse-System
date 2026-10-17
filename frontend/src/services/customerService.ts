@@ -136,7 +136,7 @@ export const customerService = {
       return memoryCachePaginated[key];
     }
 
-    if (!forceRefresh && activePaginatedPromises[key]) {
+    if (!forceRefresh && key in activePaginatedPromises) {
       return activePaginatedPromises[key];
     }
 

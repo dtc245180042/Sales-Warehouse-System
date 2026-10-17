@@ -103,3 +103,8 @@ export const parseCurrencyInput = (formattedValue: string | undefined | null): n
   return clean ? parseInt(clean, 10) : 0;
 };
 
+export const formatPercent = (val: number, decimals: number = 1): string => {
+  return `${(val || 0).toFixed(decimals)}%`;
+};
+
+

@@ -32,7 +32,6 @@ import {
 import { categoryService } from '../../services/categoryService';
 import { orderService } from '../../services/orderService';
 import { Order } from '../../types/Order';
-import { initialProducts } from '../../mock/products';
 import { formatCurrency, formatNumber } from '../../utils/formatters';
 import { exportToCSV } from '../../utils/csvExporter';
 import { Category, CategoryTree, CategoryProduct } from '../../types/Category';

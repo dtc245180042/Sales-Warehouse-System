@@ -4,56 +4,7 @@ import { getStorageItem, setStorageItem } from './storage';
 
 const STORAGE_KEY = 'kv_product_lots';
 
-const INITIAL_DEMO_LOTS: ProductLot[] = [
-  {
-    id: 10,
-    lot_number: 'LOT-2026-IP15P-01',
-    product_id: 'PRD-001',
-    product_name: 'iPhone 15 Pro Max 256GB Titan Tự Nhiên',
-    sku: 'IP15PM-256-TI',
-    warehouse_id: 1,
-    warehouse_name: 'Kho Tổng Thiết Bị Điện Tử',
-    mfg_date: '2025-01-10',
-    exp_date: '2026-11-20',
-    initial_quantity: 50,
-    remaining_quantity: 20,
-    status: 'NEAR_EXPIRY',
-    notes: 'Lô sản xuất đợt 1, ưu tiên xuất kho trước theo FEFO',
-    created_at: '2025-01-10T08:00:00Z',
-  },
-  {
-    id: 11,
-    lot_number: 'LOT-2026-IP15P-02',
-    product_id: 'PRD-001',
-    product_name: 'iPhone 15 Pro Max 256GB Titan Tự Nhiên',
-    sku: 'IP15PM-256-TI',
-    warehouse_id: 1,
-    warehouse_name: 'Kho Tổng Thiết Bị Điện Tử',
-    mfg_date: '2025-06-01',
-    exp_date: '2027-06-01',
-    initial_quantity: 100,
-    remaining_quantity: 85,
-    status: 'ACTIVE',
-    notes: 'Hàng chính hãng Apple nguyên seal đợt mới',
-    created_at: '2025-06-01T08:00:00Z',
-  },
-  {
-    id: 12,
-    lot_number: 'LOT-2025-SNY-01',
-    product_id: 'PRD-005',
-    product_name: 'Tai nghe Chống Ồn Sony WH-1000XM5 Đen',
-    sku: 'SNY-WH1000XM5',
-    warehouse_id: 1,
-    warehouse_name: 'Kho Tổng Thiết Bị Điện Tử',
-    mfg_date: '2024-01-01',
-    exp_date: '2025-12-31',
-    initial_quantity: 30,
-    remaining_quantity: 4,
-    status: 'EXPIRED',
-    notes: 'Lô tai nghe mẫu quá hạn bảo hành lưu kho, cần kiểm định lại',
-    created_at: '2024-01-01T08:00:00Z',
-  },
-];
+const INITIAL_DEMO_LOTS: ProductLot[] = [];
 
 export const lotService = {
   getLots: async (params?: {

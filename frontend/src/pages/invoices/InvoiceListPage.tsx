@@ -79,7 +79,7 @@ export const InvoiceListPage: React.FC = () => {
       const q = searchQuery.toLowerCase();
       const matchSearch =
         inv.id.toLowerCase().includes(q) ||
-        inv.customer_name.toLowerCase().includes(q) ||
+        (inv.customer_name && inv.customer_name.toLowerCase().includes(q)) ||
         inv.customer_id.toLowerCase().includes(q) ||
         (inv.customer_tax_code && inv.customer_tax_code.toLowerCase().includes(q));
 

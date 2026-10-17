@@ -26,7 +26,6 @@ import { productService } from '../../services/productService';
 import { categoryService } from '../../services/categoryService';
 import { CategoryTree } from '../../types/Category';
 import { Product } from '../../types/Product';
-import { productCategories } from '../../mock/products';
 import { useToast } from '../../contexts/ToastContext';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -650,19 +649,11 @@ export const ProductList: React.FC = () => {
                 title="Lọc theo ngành hàng hoặc nhóm hàng"
               >
                 <option value="all">Tất cả ngành hàng & nhóm hàng</option>
-                {categoryFilterOptions.length > 0 ? (
-                  categoryFilterOptions.map((c) => (
-                    <option key={c.id} value={c.name}>
-                      {c.label}
-                    </option>
-                  ))
-                ) : (
-                  productCategories.map((c) => (
-                    <option key={c.id} value={c.name}>
-                      {c.name}
-                    </option>
-                  ))
-                )}
+                {categoryFilterOptions.map((c) => (
+                  <option key={c.id} value={c.name}>
+                    {c.label}
+                  </option>
+                ))}
               </select>
 
               <select

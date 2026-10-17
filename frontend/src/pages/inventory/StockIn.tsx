@@ -77,7 +77,7 @@ export const StockIn: React.FC = () => {
   const { showToast } = useToast();
 
   const [products, setProducts] = useState<Product[]>(() => productService.getCached());
-  const [supplierId, setSupplierId] = useState(initialSuppliers[0].id);
+  const [supplierId, setSupplierId] = useState(initialSuppliers[0]?.id || '');
   const [warehouseId, setWarehouseId] = useState<number>(1);
   const [receiptCode, setReceiptCode] = useState(`PNK-${Date.now().toString().slice(-6)}`);
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);

@@ -19,6 +19,7 @@ import { PageContainer } from '../../components/layout/PageContainer';
 import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/common/Badge';
 import { Modal } from '../../components/common/Modal';
+import { CurrencyInput } from '../../components/common/CurrencyInput';
 import { invoiceService } from '../../services/invoiceService';
 import { paymentService } from '../../services/paymentService';
 import { Invoice, InvoiceCreateRequest } from '../../types/Invoice';
@@ -606,10 +607,11 @@ export const InvoiceListPage: React.FC = () => {
               <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1">
                 Số tiền thu (VNĐ) *
               </label>
-              <input
-                type="number"
+              <CurrencyInput
                 value={quickPayAmount}
-                onChange={(e) => setQuickPayAmount(Number(e.target.value))}
+                onChange={(val) => setQuickPayAmount(val)}
+                suffix="VNĐ"
+                placeholder="VD: 10.000.000"
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-bold text-emerald-600 focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
             </div>
@@ -729,18 +731,26 @@ export const InvoiceListPage: React.FC = () => {
                 <label className="block text-xs text-slate-600 mb-1">Số lượng *</label>
                 <input
                   type="number"
-                  value={newQuantity}
-                  onChange={(e) => setNewQuantity(Number(e.target.value))}
+                  min={1}
+                  value={newQuantity === 0 ? '' : newQuantity}
+                  placeholder="1"
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setNewQuantity(val === '' ? 0 : Math.max(0, parseInt(val, 10) || 0));
+                  }}
+                  onBlur={() => {
+                    if (!newQuantity || newQuantity < 1) setNewQuantity(1);
+                  }}
                   className="w-full px-3 py-1.5 border border-slate-300 rounded text-sm"
                 />
               </div>
               <div>
                 <label className="block text-xs text-slate-600 mb-1">Đơn giá (VNĐ) *</label>
-                <input
-                  type="number"
+                <CurrencyInput
                   value={newUnitPrice}
-                  onChange={(e) => setNewUnitPrice(Number(e.target.value))}
-                  className="w-full px-3 py-1.5 border border-slate-300 rounded text-sm"
+                  onChange={(val) => setNewUnitPrice(val)}
+                  placeholder="VD: 32.490.000"
+                  className="w-full px-3 py-1.5 border border-slate-300 rounded text-sm font-semibold text-slate-800"
                 />
               </div>
               <div>

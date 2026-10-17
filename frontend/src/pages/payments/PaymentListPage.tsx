@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   CreditCard,
   Search,
@@ -14,18 +14,22 @@ import {
   ArrowRight,
   Printer,
   Receipt,
+  ChevronDown,
+  Check,
 } from 'lucide-react';
 import { PageContainer } from '../../components/layout/PageContainer';
 import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/common/Badge';
 import { Modal } from '../../components/common/Modal';
 import { PaymentPrintModal } from '../../components/payments/PaymentPrintModal';
+import { CurrencyInput } from '../../components/common/CurrencyInput';
 import { paymentService } from '../../services/paymentService';
 import { invoiceService } from '../../services/invoiceService';
 import { Payment, PaymentCreateRequest } from '../../types/Payment';
 import { Invoice } from '../../types/Invoice';
 import { useToast } from '../../contexts/ToastContext';
 import { formatCurrency } from '../../utils/formatters';
+import { initialCustomers } from '../../mock/customers';
 
 export const PaymentListPage: React.FC = () => {
   const { showToast } = useToast();
@@ -51,6 +55,9 @@ export const PaymentListPage: React.FC = () => {
   // Form State
   const [selectedCustomerId, setSelectedCustomerId] = useState('CUS-001');
   const [selectedCustomerName, setSelectedCustomerName] = useState('Đại lý Dương Quang Trung');
+  const [customerSearch, setCustomerSearch] = useState('');
+  const [isCustomerDropdownOpen, setIsCustomerDropdownOpen] = useState(false);
+  const customerDropdownRef = useRef<HTMLDivElement>(null);
   const [amount, setAmount] = useState<number>(50000000);
   const [paymentMethod, setPaymentMethod] = useState<'BANK_TRANSFER' | 'CASH' | 'DEBT_OFFSET'>('BANK_TRANSFER');
   const [refCode, setRefCode] = useState('VCB-987654');
@@ -75,6 +82,40 @@ export const PaymentListPage: React.FC = () => {
   useEffect(() => {
     loadData();
   }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        customerDropdownRef.current &&
+        !customerDropdownRef.current.contains(event.target as Node)
+      ) {
+        setIsCustomerDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const availableAgents = useMemo(() => {
+    return initialCustomers.map((c) => ({
+      id: c.id,
+      name: c.name,
+      code: c.code || c.id,
+      phone: c.phone,
+    }));
+  }, []);
+
+  const filteredAgents = useMemo(() => {
+    if (!customerSearch.trim()) return availableAgents;
+    const q = customerSearch.toLowerCase().trim();
+    return availableAgents.filter(
+      (a) =>
+        a.name.toLowerCase().includes(q) ||
+        a.id.toLowerCase().includes(q) ||
+        a.code.toLowerCase().includes(q) ||
+        (a.phone && a.phone.includes(q))
+    );
+  }, [availableAgents, customerSearch]);
 
   const filteredPayments = useMemo(() => {
     return payments.filter((p) => {
@@ -468,41 +509,100 @@ export const PaymentListPage: React.FC = () => {
         }
       >
         <div className="space-y-4">
-          <div>
+          <div ref={customerDropdownRef} className="relative">
             <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1">
               Chọn Đại Lý Nộp Tiền *
             </label>
-            <select
-              value={selectedCustomerId}
-              onChange={(e) => {
-                setSelectedCustomerId(e.target.value);
-                const opt = e.target.options[e.target.selectedIndex].text;
-                setSelectedCustomerName(opt.split(' (')[0]);
-              }}
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+            <button
+              type="button"
+              onClick={() => setIsCustomerDropdownOpen((prev) => !prev)}
+              className="w-full flex items-center justify-between px-3.5 py-2.5 border border-slate-300 rounded-lg text-sm bg-white hover:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500 transition text-left"
             >
-              <option value="CUS-001">Đại lý Dương Quang Trung (CUS-001)</option>
-              <option value="CUS-002">Đại lý Trần Trung Hiếu (CUS-002)</option>
-              <option value="CUS-003">Đại lý Nguyễn Thị Thu Hà (CUS-003)</option>
-              <option value="CUS-004">Đại lý Vi Văn Huy (CUS-004)</option>
-              <option value="CUS-005">Đại lý Ngô Phương Mai (CUS-005)</option>
-              <option value="CUS-006">Đại lý Lưu Thanh Nguyên (CUS-006)</option>
-              <option value="CUS-007">Đại lý Lê Hồng Phong (CUS-007)</option>
-              <option value="CUS-008">Đại lý Trần Văn Phúc (CUS-008)</option>
-              <option value="CUS-009">Đại lý Nguyễn Thị Trang (CUS-009)</option>
-              <option value="CUS-010">Đại lý Đinh Trọng Việt (CUS-010)</option>
-              <option value="CUS-011">Đại lý Nguyễn Văn Toàn (CUS-011)</option>
-            </select>
+              <div className="flex items-center gap-2 truncate">
+                <Building className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                <span className="font-medium text-slate-800 truncate">
+                  {selectedCustomerName} ({selectedCustomerId})
+                </span>
+              </div>
+              <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${isCustomerDropdownOpen ? 'rotate-180' : ''}`} />
+            </button>
+
+            {isCustomerDropdownOpen && (
+              <div className="absolute z-50 left-0 right-0 mt-1.5 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-100">
+                {/* Ô tìm kiếm trong thẻ */}
+                <div className="p-2 border-b border-slate-100 bg-slate-50/80">
+                  <div className="relative">
+                    <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="text"
+                      autoFocus
+                      placeholder="Tìm kiếm theo tên hoặc mã đại lý..."
+                      value={customerSearch}
+                      onChange={(e) => setCustomerSearch(e.target.value)}
+                      className="w-full pl-9 pr-7 py-1.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    />
+                    {customerSearch && (
+                      <button
+                        type="button"
+                        onClick={() => setCustomerSearch('')}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-400 hover:text-slate-600"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Danh sách đại lý */}
+                <div className="max-h-56 overflow-y-auto divide-y divide-slate-100">
+                  {filteredAgents.length === 0 ? (
+                    <div className="p-4 text-center text-xs text-slate-400">
+                      Không tìm thấy đại lý nào phù hợp
+                    </div>
+                  ) : (
+                    filteredAgents.map((agent) => {
+                      const isSelected = agent.id === selectedCustomerId;
+                      return (
+                        <button
+                          key={agent.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedCustomerId(agent.id);
+                            setSelectedCustomerName(agent.name);
+                            setIsCustomerDropdownOpen(false);
+                            setCustomerSearch('');
+                          }}
+                          className={`w-full flex items-center justify-between px-3.5 py-2.5 text-left text-xs transition ${
+                            isSelected
+                              ? 'bg-primary-50 text-primary-900 font-semibold'
+                              : 'hover:bg-slate-50 text-slate-700'
+                          }`}
+                        >
+                          <div>
+                            <p className="font-medium text-slate-900">{agent.name}</p>
+                            <p className="text-[11px] text-slate-400 font-mono mt-0.5">
+                              {agent.id} {agent.phone ? `• ${agent.phone}` : ''}
+                            </p>
+                          </div>
+                          {isSelected && <Check className="w-4 h-4 text-primary-600 flex-shrink-0" />}
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1">
               Số tiền thu thực tế (VNĐ) *
             </label>
-            <input
-              type="number"
+            <CurrencyInput
               value={amount}
-              onChange={(e) => setAmount(Number(e.target.value))}
+              onChange={(val) => setAmount(val)}
+              suffix="VNĐ"
+              placeholder="VD: 50.000.000"
               className="w-full px-3 py-2 border border-slate-300 rounded-lg text-base font-bold text-emerald-600 focus:outline-none focus:ring-2 focus:ring-primary-500"
             />
           </div>

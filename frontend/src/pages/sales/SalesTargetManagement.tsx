@@ -30,6 +30,7 @@ import { SalesTarget, TargetScope } from '../../types/SalesTarget';
 import { User as UserType } from '../../types/User';
 import { LockedTargetEditModal } from '../../components/sales/LockedTargetEditModal';
 import { TargetAuditHistory } from '../../components/sales/TargetAuditHistory';
+import { CurrencyInput } from '../../components/common/CurrencyInput';
 import { formatNumber } from '../../utils/formatters';
 
 const TERRITORY_OPTIONS = [
@@ -644,16 +645,13 @@ export const SalesTargetManagement: React.FC = () => {
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
                   Chỉ tiêu doanh số (VND) <span className="text-rose-500">*</span>
                 </label>
-                <input
-                  type="number"
-                  step={10000000}
+                <CurrencyInput
                   value={createRevenue}
-                  onChange={(e) => setCreateRevenue(Number(e.target.value) || 0)}
+                  onChange={(val) => setCreateRevenue(val)}
+                  suffix="VNĐ"
+                  placeholder="VD: 500.000.000"
                   className="w-full px-3 py-2 text-sm font-semibold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
                 />
-                <div className="text-[11px] text-slate-400 mt-1">
-                  Định dạng: {formatNumber(createRevenue)} đ
-                </div>
               </div>
 
               {/* Target Orders */}
@@ -663,8 +661,13 @@ export const SalesTargetManagement: React.FC = () => {
                 </label>
                 <input
                   type="number"
-                  value={createOrders}
-                  onChange={(e) => setCreateOrders(Number(e.target.value) || 0)}
+                  min={0}
+                  value={createOrders === 0 ? '' : createOrders}
+                  placeholder="VD: 100"
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setCreateOrders(val === '' ? 0 : Math.max(0, parseInt(val, 10) || 0));
+                  }}
                   className="w-full px-3 py-2 text-sm bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
                 />
               </div>
@@ -725,16 +728,13 @@ export const SalesTargetManagement: React.FC = () => {
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
                   Chỉ tiêu doanh số mới (VND) <span className="text-rose-500">*</span>
                 </label>
-                <input
-                  type="number"
-                  step={5000000}
+                <CurrencyInput
                   value={editRevenue}
-                  onChange={(e) => setEditRevenue(Number(e.target.value) || 0)}
+                  onChange={(val) => setEditRevenue(val)}
+                  suffix="VNĐ"
+                  placeholder="VD: 500.000.000"
                   className="w-full px-3 py-2 text-sm font-semibold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
                 />
-                <div className="text-[11px] text-slate-400 mt-1">
-                  Định dạng: {formatNumber(editRevenue)} đ
-                </div>
               </div>
 
               <div>
@@ -743,8 +743,13 @@ export const SalesTargetManagement: React.FC = () => {
                 </label>
                 <input
                   type="number"
-                  value={editOrders}
-                  onChange={(e) => setEditOrders(Number(e.target.value) || 0)}
+                  min={0}
+                  value={editOrders === 0 ? '' : editOrders}
+                  placeholder="VD: 100"
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setEditOrders(val === '' ? 0 : Math.max(0, parseInt(val, 10) || 0));
+                  }}
                   className="w-full px-3 py-2 text-sm bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
                 />
               </div>

@@ -13,8 +13,8 @@ class CreditProfileUpdate(BaseModel):
     max_debt_days: int = Field(
         ...,
         ge=0,
-        le=365,
-        description="Số ngày nợ tối đa cho phép (0 đến 365 ngày)"
+        le=730,
+        description="Số ngày nợ tối đa cho phép (0 đến 730 ngày / 2 năm)"
     )
     reason: str = Field(
         ...,

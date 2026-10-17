@@ -36,12 +36,18 @@ import { Modal } from '../../components/common/Modal';
 import { ConfirmDialog } from '../../components/common/ConfirmDialog';
 import { EmptyState } from '../../components/common/EmptyState';
 import { CurrencyInput } from '../../components/common/CurrencyInput';
+import { SearchableSelect } from '../../components/common/SearchableSelect';
 import { formatCurrency } from '../../utils/formatters';
 import { customerService } from '../../services/customerService';
 import { creditService } from '../../services/creditService';
 import { Customer, CustomerFilterOptions, SalesRep } from '../../types/Customer';
 import { useToast } from '../../contexts/ToastContext';
 import { useAuth } from '../../contexts/AuthContext';
+import {
+  validateVNPhoneNumber,
+  isVNPrefixUnderConstruction,
+  normalizeVNPhoneNumber,
+} from '../../utils/phoneUtils';
 
 export const CustomerList: React.FC = () => {
   const { showToast } = useToast();
@@ -131,12 +137,54 @@ export const CustomerList: React.FC = () => {
     assigned_sales_rep: 'Lê Thị Nhân Viên Kinh Doanh',
     status: 'active' as 'active' | 'inactive' | 'locked',
   });
+  const [phoneError, setPhoneError] = useState<string>('');
+
+  const handlePhoneChange = (val: string) => {
+    let cleaned = val.replace(/[^\d+]/g, '');
+    if (cleaned.startsWith('+')) {
+      cleaned = '+' + cleaned.slice(1).replace(/\+/g, '');
+    } else {
+      cleaned = cleaned.replace(/\+/g, '');
+    }
+    const maxLen = cleaned.startsWith('+84') ? 12 : 11;
+    if (cleaned.length > maxLen) {
+      cleaned = cleaned.slice(0, maxLen);
+    }
+    setFormData((prev) => ({ ...prev, phone: cleaned }));
+
+    if (!cleaned) {
+      setPhoneError('');
+      return;
+    }
+
+    const prefixCheck = isVNPrefixUnderConstruction(cleaned);
+    if (!prefixCheck.valid) {
+      setPhoneError(prefixCheck.message || 'Đầu số không đúng định dạng vùng Việt Nam');
+      return;
+    }
+
+    const normalized = normalizeVNPhoneNumber(cleaned);
+    const isLandline = normalized.startsWith('02');
+    const targetLen = isLandline ? 11 : 10;
+    if (normalized.length === targetLen) {
+      const fullCheck = validateVNPhoneNumber(cleaned);
+      if (!fullCheck.valid) {
+        setPhoneError(fullCheck.message || 'Số điện thoại không hợp lệ');
+      } else {
+        setPhoneError('');
+      }
+    } else if (normalized.length > targetLen) {
+      setPhoneError(`Số điện thoại vượt quá độ dài quy định (${normalized.length}/${targetLen} số).`);
+    } else {
+      setPhoneError('');
+    }
+  };
 
   // Modal Thiết Lập Hạn Mức Tín Dụng & Công Nợ
   const [creditCustomer, setCreditCustomer] = useState<Customer | null>(null);
   const [isCreditModalOpen, setIsCreditModalOpen] = useState(false);
   const [creditLimitInput, setCreditLimitInput] = useState<number>(50000000);
-  const [maxDebtDaysInput, setMaxDebtDaysInput] = useState<number>(30);
+  const [maxDebtDaysInput, setMaxDebtDaysInput] = useState<string>('30');
   const [creditReasonInput, setCreditReasonInput] = useState<string>('');
   const [submittingCredit, setSubmittingCredit] = useState(false);
 
@@ -338,6 +386,7 @@ export const CustomerList: React.FC = () => {
       assigned_sales_rep: filterOptions.sales_reps[0] || 'Lê Thị Nhân Viên Kinh Doanh',
       status: 'active',
     });
+    setPhoneError('');
     setIsModalOpen(true);
   };
 
@@ -355,6 +404,7 @@ export const CustomerList: React.FC = () => {
       assigned_sales_rep: c.assigned_sales_rep || c.assignedSalesRep || filterOptions.sales_reps[0] || '',
       status: (c.status as any) || 'active',
     });
+    setPhoneError('');
     setIsModalOpen(true);
   };
 
@@ -364,6 +414,15 @@ export const CustomerList: React.FC = () => {
       showToast('Vui lòng điền đầy đủ tên và số điện thoại', 'warning');
       return;
     }
+
+    // Ràng buộc định dạng đầu số vùng Việt Nam
+    const phoneCheck = validateVNPhoneNumber(formData.phone);
+    if (!phoneCheck.valid) {
+      showToast(phoneCheck.message || 'Số điện thoại không đúng định dạng đầu số vùng Việt Nam', 'warning');
+      setPhoneError(phoneCheck.message || 'Số điện thoại không hợp lệ');
+      return;
+    }
+    const normalizedPhone = phoneCheck.normalized || formData.phone.trim();
 
     const trimmedTaxCode = formData.tax_code.trim();
     if (trimmedTaxCode) {
@@ -378,7 +437,7 @@ export const CustomerList: React.FC = () => {
       if (editingCustomer) {
         await customerService.update(editingCustomer.id, {
           name: formData.name.trim(),
-          phone: formData.phone.trim(),
+          phone: normalizedPhone,
           email: formData.email.trim() || undefined,
           address: formData.address.trim() || undefined,
           customer_group: formData.customer_group,
@@ -393,7 +452,7 @@ export const CustomerList: React.FC = () => {
       } else {
         await customerService.create({
           name: formData.name.trim(),
-          phone: formData.phone.trim(),
+          phone: normalizedPhone,
           email: formData.email.trim() || undefined,
           address: formData.address.trim() || undefined,
           customer_group: formData.customer_group,
@@ -429,7 +488,7 @@ export const CustomerList: React.FC = () => {
   const handleOpenCreditModal = (customer: Customer) => {
     setCreditCustomer(customer);
     setCreditLimitInput(customer.creditLimit ?? customer.credit_limit ?? 50000000);
-    setMaxDebtDaysInput(customer.maxDebtDays ?? customer.max_debt_days ?? 30);
+    setMaxDebtDaysInput(String(customer.maxDebtDays ?? customer.max_debt_days ?? 0));
     setCreditReasonInput('');
     setIsCreditModalOpen(true);
   };
@@ -437,11 +496,16 @@ export const CustomerList: React.FC = () => {
   const handleCreditSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!creditCustomer) return;
+    const parsedDays = maxDebtDaysInput === '' ? 0 : parseInt(maxDebtDaysInput, 10);
+    if (parsedDays < 0 || parsedDays > 730) {
+      showToast('Số ngày nợ tối đa phải từ 0 đến 730 ngày (không quá 2 năm).', 'error');
+      return;
+    }
     try {
       setSubmittingCredit(true);
       await creditService.updateProfile(creditCustomer.id, {
         credit_limit: creditLimitInput,
-        max_debt_days: maxDebtDaysInput,
+        max_debt_days: parsedDays,
         reason: creditReasonInput || 'Điều chỉnh từ danh sách đại lý',
       });
       showToast(`Đã thiết lập hạn mức tín dụng cho đại lý '${creditCustomer.name}' thành công!`, 'success');
@@ -1208,19 +1272,19 @@ export const CustomerList: React.FC = () => {
             <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
               Nhân viên kinh doanh mới <span className="text-rose-500">*</span>
             </label>
-            <select
+            <SearchableSelect
               value={selectedStaffId}
-              onChange={(e) => setSelectedStaffId(e.target.value)}
-              className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs sm:text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              onChange={setSelectedStaffId}
+              placeholder="Chọn nhân viên kinh doanh"
+              searchPlaceholder="Tìm kiếm nhân viên kinh doanh..."
+              options={salesReps.map((sr) => ({
+                value: sr.id,
+                label: sr.fullName,
+                subLabel: `(${sr.assignedCustomerCount} đại lý)`,
+                keywords: `${sr.fullName} ${sr.username || ''} ${sr.phoneNumber || ''} ${sr.email || ''}`,
+              }))}
               required
-            >
-              <option value="">-- Chọn nhân viên kinh doanh --</option>
-              {salesReps.map((sr) => (
-                <option key={sr.id} value={sr.id}>
-                  {sr.fullName} ({sr.assignedCustomerCount} đại lý)
-                </option>
-              ))}
-            </select>
+            />
           </div>
 
           <div>
@@ -1283,40 +1347,40 @@ export const CustomerList: React.FC = () => {
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                 Nhân viên bàn giao (người cũ) <span className="text-rose-500">*</span>
               </label>
-              <select
+              <SearchableSelect
                 value={bulkFromStaffId}
-                onChange={(e) => setBulkFromStaffId(e.target.value)}
-                className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs sm:text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                onChange={setBulkFromStaffId}
+                placeholder="Chọn nhân viên bàn giao"
+                searchPlaceholder="Tìm theo tên nhân viên..."
+                options={salesReps.map((sr) => ({
+                  value: sr.id,
+                  label: sr.fullName,
+                  subLabel: `(${sr.assignedCustomerCount} đại lý)`,
+                  keywords: `${sr.fullName} ${sr.username || ''} ${sr.phoneNumber || ''} ${sr.email || ''}`,
+                }))}
                 required
-              >
-                <option value="">-- Chọn nhân viên bàn giao --</option>
-                {salesReps.map((sr) => (
-                  <option key={sr.id} value={sr.id}>
-                    {sr.fullName} ({sr.assignedCustomerCount} đại lý)
-                  </option>
-                ))}
-              </select>
+              />
             </div>
 
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                 Nhân viên tiếp nhận (người mới) <span className="text-rose-500">*</span>
               </label>
-              <select
+              <SearchableSelect
                 value={bulkToStaffId}
-                onChange={(e) => setBulkToStaffId(e.target.value)}
-                className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs sm:text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                required
-              >
-                <option value="">-- Chọn nhân viên tiếp nhận --</option>
-                {salesReps
+                onChange={setBulkToStaffId}
+                placeholder="Chọn nhân viên tiếp nhận"
+                searchPlaceholder="Tìm theo tên nhân viên..."
+                options={salesReps
                   .filter((sr) => sr.id !== bulkFromStaffId)
-                  .map((sr) => (
-                    <option key={sr.id} value={sr.id}>
-                      {sr.fullName} ({sr.assignedCustomerCount} đại lý)
-                    </option>
-                  ))}
-              </select>
+                  .map((sr) => ({
+                    value: sr.id,
+                    label: sr.fullName,
+                    subLabel: `(${sr.assignedCustomerCount} đại lý)`,
+                    keywords: `${sr.fullName} ${sr.username || ''} ${sr.phoneNumber || ''} ${sr.email || ''}`,
+                  }))}
+                required
+              />
             </div>
           </div>
 
@@ -1387,16 +1451,36 @@ export const CustomerList: React.FC = () => {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                Số điện thoại <span className="text-rose-500">*</span>
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                  Số điện thoại <span className="text-rose-500">*</span>
+                </label>
+                {formData.phone && (
+                  <span className={`text-[10px] font-mono ${phoneError ? 'text-rose-500' : 'text-slate-400'}`}>
+                    {normalizeVNPhoneNumber(formData.phone).length}/{normalizeVNPhoneNumber(formData.phone).startsWith('02') ? 11 : 10} số
+                  </span>
+                )}
+              </div>
               <input
-                type="text"
+                type="tel"
+                inputMode="numeric"
                 value={formData.phone}
-                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs sm:text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                onChange={(e) => handlePhoneChange(e.target.value)}
+                placeholder="Ví dụ: 0901234567 hoặc 02412345678"
+                className={`w-full px-3 py-2 bg-white dark:bg-slate-800 border ${
+                  phoneError
+                    ? 'border-rose-400 dark:border-rose-500 focus:ring-rose-400'
+                    : 'border-slate-200 dark:border-slate-700 focus:ring-indigo-500'
+                } rounded-xl text-xs sm:text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2`}
                 required
               />
+              {phoneError ? (
+                <p className="mt-1 text-[11px] text-rose-500 font-medium">{phoneError}</p>
+              ) : (
+                <p className="mt-1 text-[10px] text-slate-400">
+                  Đầu số VN: 03x, 05x, 07x, 08x, 09x (di động 10 số) hoặc 02x (cố định 11 số)
+                </p>
+              )}
             </div>
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Email</label>
@@ -1547,33 +1631,43 @@ export const CustomerList: React.FC = () => {
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                 Số ngày nợ tối đa (ngày) *
               </label>
-              <div className="grid grid-cols-4 gap-2 mb-2">
-                {[0, 15, 30, 45].map((d) => (
-                  <button
-                    key={d}
-                    type="button"
-                    onClick={() => setMaxDebtDaysInput(d)}
-                    className={`py-1.5 px-2 rounded-lg text-xs font-bold border transition-all ${
-                      maxDebtDaysInput === d
-                        ? 'border-indigo-600 bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300'
-                        : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'
-                    }`}
-                  >
-                    {d === 0 ? '0 ngày' : `${d} ngày`}
-                  </button>
-                ))}
-              </div>
               <input
-                type="number"
-                min="0"
-                max="365"
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                placeholder="0"
                 value={maxDebtDaysInput}
-                onChange={(e) => setMaxDebtDaysInput(Number(e.target.value) || 0)}
+                onChange={(e) => {
+                  const raw = e.target.value.replace(/\D/g, '');
+                  if (raw === '') {
+                    setMaxDebtDaysInput('');
+                    return;
+                  }
+                  const clean = raw.replace(/^0+(?=\d)/, '');
+                  const num = parseInt(clean, 10);
+                  if (!isNaN(num) && num > 730) {
+                    setMaxDebtDaysInput('730');
+                  } else {
+                    setMaxDebtDaysInput(clean);
+                  }
+                }}
+                onFocus={(e) => {
+                  if (maxDebtDaysInput === '0') {
+                    e.target.select();
+                  }
+                }}
+                onBlur={() => {
+                  if (maxDebtDaysInput === '') {
+                    setMaxDebtDaysInput('0');
+                  }
+                }}
                 className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs sm:text-sm font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                 required
               />
               <p className="mt-1 text-[11px] text-slate-400">
-                {maxDebtDaysInput === 0 ? '0 = Bắt buộc thanh toán ngay, không cho nợ ngày' : `Đại lý được nợ tối đa ${maxDebtDaysInput} ngày kể từ khi xuất kho.`}
+                {parseInt(maxDebtDaysInput || '0', 10) === 0
+                  ? '0 = Bắt buộc thanh toán ngay, không cho nợ ngày (tối đa cho phép: 730 ngày / 2 năm)'
+                  : `Đại lý được nợ tối đa ${parseInt(maxDebtDaysInput || '0', 10)} ngày kể từ khi xuất kho (tối đa cho phép: 730 ngày / 2 năm).`}
               </p>
             </div>
 

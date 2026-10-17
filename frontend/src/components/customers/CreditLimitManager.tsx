@@ -118,8 +118,8 @@ export const CreditLimitManager: React.FC<Props> = ({ customerId, customerName }
       setErrorMsg('Hạn mức công nợ tối đa cho phép là 10.000.000.000 đ (10 tỷ).');
       return;
     }
-    if (maxDebtDays < 0 || maxDebtDays > 365) {
-      setErrorMsg('Số ngày nợ tối đa phải từ 0 đến 365 ngày.');
+    if (maxDebtDays < 0 || maxDebtDays > 730) {
+      setErrorMsg('Số ngày nợ tối đa phải từ 0 đến 730 ngày (không quá 2 năm).');
       return;
     }
     const cleanReason = reason.trim();
@@ -477,7 +477,7 @@ export const CreditLimitManager: React.FC<Props> = ({ customerId, customerName }
                       const raw = e.target.value.replace(/\D/g, '').replace(/^0+(?=\d)/, '');
                       setDaysInput(raw);
                       const num = raw === '' ? 0 : Number(raw);
-                      if (num <= 365) {
+                      if (num <= 730) {
                         setMaxDebtDays(num);
                       }
                     }}

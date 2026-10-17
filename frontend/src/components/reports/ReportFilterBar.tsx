@@ -9,6 +9,7 @@ import {
   RefreshCw,
   GitCompare,
   SlidersHorizontal,
+  ChevronDown,
 } from 'lucide-react';
 import {
   ReportDimension,
@@ -126,34 +127,31 @@ export const ReportFilterBar: React.FC<ReportFilterBarProps> = ({
           </div>
         </div>
 
-        {/* Dimension Pills */}
-        <div className="flex items-center gap-2 flex-wrap">
-          <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mr-1">
+        {/* Dimension Select Dropdown (Thẻ option) */}
+        <div className="flex items-center gap-2">
+          <label
+            htmlFor="select-report-dimension"
+            className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider"
+          >
             <SlidersHorizontal className="w-3.5 h-3.5 text-primary-500" />
             <span>Chiều nhóm:</span>
-          </div>
+          </label>
 
-          <div className="flex items-center gap-1.5 flex-wrap">
-            {DIMENSIONS.map((dim) => {
-              const active = value.dimension === dim.key;
-              return (
-                <button
-                  key={dim.key}
-                  type="button"
-                  id={`dim-btn-${dim.key}`}
-                  onClick={() => handleDimensionChange(dim.key)}
-                  title={dim.desc}
-                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                    active
-                      ? 'bg-primary-600 text-white shadow-sm ring-2 ring-primary-500/20'
-                      : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
-                  }`}
-                >
-                  {dim.icon}
-                  <span>{dim.label}</span>
-                </button>
-              );
-            })}
+          <div className="relative">
+            <select
+              id="select-report-dimension"
+              aria-label="Chọn chiều nhóm báo cáo"
+              value={value.dimension}
+              onChange={(e) => handleDimensionChange(e.target.value as ReportDimension)}
+              className="px-3 py-1.5 pr-8 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-primary-500 shadow-sm cursor-pointer appearance-none"
+            >
+              {DIMENSIONS.map((dim) => (
+                <option key={dim.key} value={dim.key}>
+                  {dim.label}
+                </option>
+              ))}
+            </select>
+            <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
           </div>
         </div>
       </div>

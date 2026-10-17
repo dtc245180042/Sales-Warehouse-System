@@ -32,6 +32,11 @@ import { exportToCSV } from '../../utils/csvExporter';
 import { agentService } from '../../services/agentService';
 import { Agent, AgentStatus, AgentGroup } from '../../types/Agent';
 import { useToast } from '../../contexts/ToastContext';
+import {
+  validateVNPhoneNumber,
+  isVNPrefixUnderConstruction,
+  normalizeVNPhoneNumber,
+} from '../../utils/phoneUtils';
 
 // ─── Hằng số cấu hình ───────────────────────────────────────────────────────
 
@@ -333,6 +338,14 @@ export const AgentList: React.FC = () => {
       showToast('Vui lòng nhập tên và số điện thoại đại lý', 'warning');
       return;
     }
+
+    const phoneCheck = validateVNPhoneNumber(formData.phone);
+    if (!phoneCheck.valid) {
+      showToast(phoneCheck.message || 'Số điện thoại không đúng định dạng đầu số vùng Việt Nam', 'warning');
+      return;
+    }
+    const normalizedPhone = phoneCheck.normalized || formData.phone.trim();
+
     const trimmedTaxCode = (formData.taxCode || '').trim();
     if (trimmedTaxCode) {
       const taxRegex = /^(\d{10}|\d{10}-\d{3}|\d{13})$/;
@@ -344,10 +357,10 @@ export const AgentList: React.FC = () => {
 
     try {
       if (editingAgent) {
-        await agentService.update(editingAgent.id, formData);
+        await agentService.update(editingAgent.id, { ...formData, phone: normalizedPhone });
         showToast('Cập nhật thông tin đại lý thành công vào CSDL!', 'success');
       } else {
-        await agentService.create(formData);
+        await agentService.create({ ...formData, phone: normalizedPhone });
         showToast('Thêm mới đại lý thành công vào CSDL!', 'success');
       }
       setIsModalOpen(false);
@@ -1083,17 +1096,40 @@ export const AgentList: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                Số điện thoại *
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                  Số điện thoại *
+                </label>
+                {formData.phone && (
+                  <span className="text-[10px] font-mono text-slate-400">
+                    {normalizeVNPhoneNumber(formData.phone).length}/{normalizeVNPhoneNumber(formData.phone).startsWith('02') ? 11 : 10} số
+                  </span>
+                )}
+              </div>
               <input
                 type="tel"
+                inputMode="numeric"
                 value={formData.phone}
-                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                placeholder="0901234567"
+                onChange={(e) => {
+                  let cleaned = e.target.value.replace(/[^\d+]/g, '');
+                  if (cleaned.startsWith('+')) {
+                    cleaned = '+' + cleaned.slice(1).replace(/\+/g, '');
+                  } else {
+                    cleaned = cleaned.replace(/\+/g, '');
+                  }
+                  const maxLen = cleaned.startsWith('+84') ? 12 : 11;
+                  if (cleaned.length > maxLen) {
+                    cleaned = cleaned.slice(0, maxLen);
+                  }
+                  setFormData({ ...formData, phone: cleaned });
+                }}
+                placeholder="Ví dụ: 0901234567 hoặc 02412345678"
                 className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
                 required
               />
+              <p className="mt-1 text-[10px] text-slate-400">
+                Chỉ cho phép đầu số VN: 03x, 05x, 07x, 08x, 09x (di động 10 số) hoặc 02x (cố định 11 số)
+              </p>
             </div>
 
             <div>

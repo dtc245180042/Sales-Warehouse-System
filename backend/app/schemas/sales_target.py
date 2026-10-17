@@ -28,3 +28,17 @@ class SalesProgressDashboard(BaseModel):
     actual_sales: float
     completion_rate: float # Tỷ lệ % hoàn thành
     shortfall_amount: float # Số tiền còn thiếu/vượt
+    # Trường tương thích với Frontend
+    targetId: Optional[str] = None
+    scope: Optional[str] = "individual"
+    userId: Optional[str] = None
+    userName: Optional[str] = None
+    territory: Optional[str] = None
+    targetRevenue: Optional[float] = None
+    currentRevenue: Optional[float] = None
+    remainingRevenue: Optional[float] = None
+    revenuePercentage: Optional[float] = None
+    targetOrders: Optional[int] = 100
+    currentOrders: Optional[int] = 0
+    ordersPercentage: Optional[float] = 0.0
+    status: Optional[str] = "active"

@@ -67,12 +67,17 @@ def update_sales_target(
 @router.get("/progress", response_model=List[SalesProgressDashboard])
 def get_sales_progress(
     month_year: Optional[str] = None,
+    year: Optional[int] = Query(default=None),
+    month: Optional[int] = Query(default=None),
     region_code: Optional[str] = None,
     employee_id: Optional[str] = None,
     user_role: str = Header(default="EMPLOYEE"), # SCRUM-801
     current_user_id: str = Header(default="EMP001")
 ):
     results = []
+    
+    if not month_year and year and month:
+        month_year = f"{year}-{month:02d}"
     
     # SCRUM-801: Quy tắc phân quyền xem tiến độ
     search_emp = employee_id
@@ -81,8 +86,8 @@ def get_sales_progress(
         
     # Giả lập tính toán doanh số thực tế (SCRUM-800)
     mock_targets = [
-        {"id": 1, "employee_id": "EMP001", "region_code": "NORTH", "month_year": "2026-10", "target_amount": 100000000.0, "actual": 85000000.0},
-        {"id": 2, "employee_id": "EMP002", "region_code": "SOUTH", "month_year": "2026-10", "target_amount": 150000000.0, "actual": 160000000.0}
+        {"id": 1, "employee_id": "EMP001", "name": "Nguyễn Văn Bán Hàng", "region_code": "NORTH", "territory": "Khu vực Miền Bắc", "month_year": "2026-10", "target_amount": 100000000.0, "actual": 85000000.0},
+        {"id": 2, "employee_id": "EMP002", "name": "Lê Thị Thu Thảo", "region_code": "SOUTH", "territory": "Khu vực Miền Nam", "month_year": "2026-10", "target_amount": 150000000.0, "actual": 160000000.0}
     ]
     
     for item in mock_targets:
@@ -96,7 +101,7 @@ def get_sales_progress(
         actual = item["actual"]
         target_amt = item["target_amount"]
         rate = round((actual / target_amt) * 100, 2) if target_amt > 0 else 0.0
-        shortfall = target_amt - actual
+        shortfall = max(0.0, target_amt - actual)
         
         results.append(SalesProgressDashboard(
             employee_id=item["employee_id"],
@@ -105,7 +110,20 @@ def get_sales_progress(
             target_amount=target_amt,
             actual_sales=actual,
             completion_rate=rate,
-            shortfall_amount=shortfall
+            shortfall_amount=shortfall,
+            targetId=f"TGT-{item['id']}",
+            scope="individual",
+            userId=item["employee_id"],
+            userName=item.get("name", item["employee_id"]),
+            territory=item.get("territory", item["region_code"]),
+            targetRevenue=target_amt,
+            currentRevenue=actual,
+            remainingRevenue=shortfall,
+            revenuePercentage=rate,
+            targetOrders=100,
+            currentOrders=int(rate),
+            ordersPercentage=rate,
+            status="active"
         ))
         
     return results

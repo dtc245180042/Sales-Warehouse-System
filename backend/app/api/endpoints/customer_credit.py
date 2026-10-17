@@ -45,6 +45,20 @@ def get_customer_credit_profile(
     profile.overdue_order_code = overdue_info["overdue_order_code"]
     profile.is_blocked = overdue_info["is_blocked"]
     profile.block_reason = overdue_info["block_reason"]
+
+    # Đính kèm thông tin cờ rủi ro công nợ theo đúng cấu hình hệ thống hiện hành (Story S7-04)
+    from app.services.debt_risk_service import evaluate_customer_debt_risk
+    flag = evaluate_customer_debt_risk(db=db, customer_id=customer_id, source="LIVE_CHECK", commit=True)
+    profile.is_flagged = flag.is_flagged
+    profile.risk_level = flag.risk_level
+    profile.flag_reason = flag.flag_reason
+    profile.action_applied = flag.action_applied
+    profile.requires_approval = flag.requires_approval
+    if flag.is_blocked:
+        profile.is_blocked = True
+        profile.block_reason = flag.flag_reason or profile.block_reason
+    elif flag.requires_approval:
+        profile.is_blocked = False
     return profile
 
 

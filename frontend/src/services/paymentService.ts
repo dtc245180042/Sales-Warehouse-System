@@ -73,4 +73,22 @@ export const paymentService = {
     }
     throw new Error('Không thể kết nối máy chủ để ghi nhận thanh toán');
   },
+
+  /**
+   * Lấy trang HTML in ấn Phiếu thu tiền chuẩn A4 hoàn chỉnh từ Backend (SCRUM-270)
+   */
+  getPrintHtml: async (paymentId: string): Promise<string> => {
+    const response = await apiClient.get<string>(`/payments/${paymentId}/print-html`, {
+      responseType: 'text',
+    });
+    return response.data;
+  },
+
+  /**
+   * Lấy cấu trúc JSON chi tiết in ấn phiếu thu tiền
+   */
+  getPrintData: async (paymentId: string): Promise<any> => {
+    const response = await apiClient.get<any>(`/payments/${paymentId}/print`);
+    return response.data;
+  },
 };

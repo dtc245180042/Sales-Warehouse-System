@@ -3,6 +3,7 @@ import { NavLink, Link, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
   ShieldCheck,
+  ShieldAlert,
   Settings,
   FolderTree,
   ChevronDown,
@@ -207,6 +208,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
           allowedRoles: ALL_ROLES,
         },
         {
+          title: 'Quy tắc rủi ro & Chặn bán',
+          path: '/settings/debt-risk',
+          icon: <ShieldAlert className="w-5 h-5" />,
+          allowedRoles: ['Admin', 'Accountant', 'SalesManager', 'Director', 'Manager'],
+        },
+        {
           title: 'Nhà cung cấp',
           path: '/suppliers',
           icon: <Building2 className="w-5 h-5" />,
@@ -406,6 +413,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
           ],
         },
         {
+          title: 'Sổ công nợ theo đại lý',
+          path: '/reports/agency-debts',
+          icon: <Scale className="w-5 h-5" />,
+          allowedRoles: [
+            'Admin',
+            'SalesManager',
+            'Director',
+            'Accountant',
+            'Manager',
+            'SalesStaff',
+          ],
+        },
+        {
           title: 'Doanh số Đa chiều',
           path: '/reports/sales-multidim',
           icon: <Layers className="w-5 h-5" />,
@@ -442,6 +462,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
             'Director',
             'Manager',
             'Accountant',
+          ],
+        },
+        {
+          title: 'Công nợ Quá hạn',
+          path: '/reports/debt-aging',
+          icon: <TrendingDown className="w-5 h-5" />,
+          allowedRoles: [
+            'Admin',
+            'Director',
+            'Manager',
+            'Accountant',
+            'SalesManager',
+            'SalesStaff',
           ],
         },
       ],

@@ -37,6 +37,14 @@ export interface Customer {
   maxDebtDays?: number;
   available_credit?: number;
   availableCredit?: number;
+  risk_level?: string;
+  riskLevel?: string;
+  is_flagged?: boolean;
+  isFlagged?: boolean;
+  is_debt_blocked?: boolean;
+  isDebtBlocked?: boolean;
+  flag_reason?: string;
+  flagReason?: string;
 }
 
 export interface SalesRep {

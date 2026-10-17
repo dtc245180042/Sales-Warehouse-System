@@ -354,6 +354,53 @@ def check_credit_for_order_placement(
     profile = get_or_create_credit_profile(db, customer.id)
     order_unpaid = max(0, int(round(unpaid_amount)))
 
+    # 0. Kiểm tra chính sách gắn cờ rủi ro công nợ theo cấu hình (S7-04, SCRUM-726)
+    from app.services.debt_risk_service import check_order_debt_risk_policy
+    risk_policy = check_order_debt_risk_policy(
+        db=db,
+        customer_id=customer.id,
+        unpaid_amount=unpaid_amount,
+        order_id=order_id
+    )
+    if risk_policy.get("is_blocked"):
+        return {
+            "allowed": False,
+            "action": "BLOCK",
+            "requires_approval": False,
+            "is_blocked": True,
+            "error_message": risk_policy["error_message"],
+            "warning_message": None,
+            "credit_limit": profile.credit_limit,
+            "max_debt_days": profile.max_debt_days,
+            "dispatched_debt": profile.current_debt,
+            "current_debt": profile.current_debt,
+            "available_credit": max(0, profile.credit_limit - profile.current_debt),
+            "order_unpaid_amount": order_unpaid,
+            "excess_amount": 0,
+            "overdue_days": 0,
+            "overdue_order_code": None,
+            "approval_reason": None,
+        }
+    if risk_policy.get("requires_approval") and unpaid_amount > 0:
+        return {
+            "allowed": True,
+            "action": "REQUIRE_APPROVAL",
+            "requires_approval": True,
+            "is_blocked": False,
+            "error_message": None,
+            "warning_message": risk_policy.get("warning_message"),
+            "credit_limit": profile.credit_limit,
+            "max_debt_days": profile.max_debt_days,
+            "dispatched_debt": profile.current_debt,
+            "current_debt": profile.current_debt,
+            "available_credit": max(0, profile.credit_limit - profile.current_debt),
+            "order_unpaid_amount": order_unpaid,
+            "excess_amount": 0,
+            "overdue_days": 0,
+            "overdue_order_code": None,
+            "approval_reason": risk_policy.get("approval_reason"),
+        }
+
     # 1. Kiểm tra nợ quá hạn trước tiên (Chặn hoàn toàn nếu vi phạm)
     overdue_info = check_customer_overdue_debt(db=db, customer_id=customer.id, order_id=order_id)
     if overdue_info["is_blocked"]:

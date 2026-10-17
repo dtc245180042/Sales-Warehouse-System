@@ -19,6 +19,7 @@ import { Dashboard } from '../pages/dashboard/Dashboard';
 import { UserManagement } from '../pages/users/UserManagement';
 import { UserImportPage } from '../pages/users/UserImportPage';
 import { Settings } from '../pages/settings/Settings';
+import { DebtRiskConfigPage } from '../pages/settings/DebtRiskConfigPage';
 import { Profile } from '../pages/profile/Profile';
 import { PriceListManagement } from '../pages/sales/PriceListManagement';
 import { VolumeDiscountManagementPage } from '../pages/sales/VolumeDiscountManagementPage';
@@ -59,6 +60,8 @@ import { RevenueReport } from '../pages/reports/RevenueReport';
 import { InventoryReport } from '../pages/reports/InventoryReport';
 import { SalesMultiDimReport } from '../pages/reports/SalesMultiDimReport';
 import { InventoryTurnoverReport } from '../pages/reports/InventoryTurnoverReport';
+import { DebtAgingReportPage } from '../pages/reports/DebtAgingReportPage';
+import { AgencyDebtAgingReport } from '../pages/reports/AgencyDebtAgingReport';
 
 // Inventory & Stock Ledger & Stock Take Pages
 import { InventoryOverview } from '../pages/inventory/InventoryOverview';
@@ -348,6 +351,24 @@ export const AppRoutes: React.FC = () => {
           }
         />
 
+        {/* Cấu hình Quy tắc Rủi ro & Chặn bán Công nợ */}
+        <Route
+          path="/settings/debt-risk"
+          element={
+            <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
+              <DebtRiskConfigPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/settings/debt-risk-config"
+          element={
+            <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
+              <DebtRiskConfigPage />
+            </ProtectedRoute>
+          }
+        />
+
         {/* Nhật ký thao tác - Chỉ Admin (Sprint 2 - SCRUM-212) */}
         <Route
           path="/activity-log"
@@ -534,6 +555,24 @@ export const AppRoutes: React.FC = () => {
           element={
             <ProtectedRoute allowedRoles={['Admin', 'WarehouseManager', 'WarehouseStaff', 'Director', 'Manager', 'Accountant']}>
               <InventoryTurnoverReport />
+            </ProtectedRoute>
+          }
+        />
+        {/* Sổ công nợ theo đại lý (Story S7-03) */}
+        <Route
+          path="/reports/agency-debts"
+          element={
+            <ProtectedRoute allowedRoles={['Admin', 'SalesManager', 'Director', 'Accountant', 'Manager', 'SalesStaff']}>
+              <AgencyDebtAgingReport />
+            </ProtectedRoute>
+          }
+        />
+        {/* Phân tích tuổi nợ đại lý (Story S8-09) */}
+        <Route
+          path="/reports/debt-aging"
+          element={
+            <ProtectedRoute allowedRoles={['Admin', 'Director', 'Manager', 'Accountant', 'SalesManager', 'SalesStaff']}>
+              <DebtAgingReportPage />
             </ProtectedRoute>
           }
         />

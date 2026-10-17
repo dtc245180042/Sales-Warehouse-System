@@ -10,6 +10,16 @@ export interface CustomerCreditProfile {
   overdueOrderCode?: string | null;
   isBlocked?: boolean;
   blockReason?: string | null;
+  isFlagged?: boolean;
+  is_flagged?: boolean;
+  riskLevel?: string;
+  risk_level?: string;
+  flagReason?: string | null;
+  flag_reason?: string | null;
+  actionApplied?: string;
+  action_applied?: string;
+  requiresApproval?: boolean;
+  requires_approval?: boolean;
   updatedBy?: string;
   createdAt?: string;
   updatedAt?: string;

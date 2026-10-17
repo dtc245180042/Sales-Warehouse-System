@@ -18,6 +18,8 @@ import {
   Edit3,
   Calendar,
   FileSpreadsheet,
+  RefreshCw,
+  Sliders,
 } from 'lucide-react';
 import { PageContainer } from '../../components/layout/PageContainer';
 import { Button } from '../../components/common/Button';
@@ -30,8 +32,10 @@ import { customerService } from '../../services/customerService';
 import { orderService } from '../../services/orderService';
 import { customerLockService, CustomerLockStatus, CustomerLockHistoryItem } from '../../services/customerLockService';
 import { creditService } from '../../services/creditService';
+import { debtRiskService } from '../../services/debtRiskService';
 import { CustomerCreditProfile } from '../../types/CreditProfile';
 import { Customer } from '../../types/Customer';
+import { CustomerDebtFlag, CustomerDebtFlagHistoryItem } from '../../types/DebtRisk';
 import { Order } from '../../types/Order';
 import { useToast } from '../../contexts/ToastContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -46,6 +50,11 @@ export const CustomerDetail: React.FC = () => {
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [customerOrders, setCustomerOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // S7-04 Trạng thái gắn cờ rủi ro & lịch sử
+  const [debtFlag, setDebtFlag] = useState<CustomerDebtFlag | null>(null);
+  const [debtFlagHistory, setDebtFlagHistory] = useState<CustomerDebtFlagHistoryItem[]>([]);
+  const [isReevaluating, setIsReevaluating] = useState(false);
 
   // Hồ sơ hạn mức công nợ
   const [creditProfile, setCreditProfile] = useState<CustomerCreditProfile | null>(null);
@@ -113,6 +122,36 @@ export const CustomerDetail: React.FC = () => {
     }
   };
 
+  const fetchDebtRiskData = async (customerId: string) => {
+    try {
+      const [flagData, historyData] = await Promise.all([
+        debtRiskService.getFlag(customerId),
+        debtRiskService.getHistory(customerId),
+      ]);
+      setDebtFlag(flagData);
+      setDebtFlagHistory(historyData);
+    } catch (err) {
+      console.warn('[CustomerDetail] Error fetching debt risk data:', err);
+    }
+  };
+
+  const handleReevaluateRisk = async () => {
+    if (!customer) return;
+    try {
+      setIsReevaluating(true);
+      const res = await debtRiskService.reevaluate(customer.id);
+      setDebtFlag(res);
+      const hist = await debtRiskService.getHistory(customer.id);
+      setDebtFlagHistory(hist);
+      showToast(`Đã đánh giá lại rủi ro cho đại lý '${customer.name}': Cấp độ ${res.riskLevel}`, 'info');
+      await fetchCreditData(customer.id, customer);
+    } catch (err: any) {
+      showToast(err.message || 'Lỗi khi đánh giá lại rủi ro', 'error');
+    } finally {
+      setIsReevaluating(false);
+    }
+  };
+
   useEffect(() => {
     if (!id) return;
     const fetch = async () => {
@@ -125,7 +164,11 @@ export const CustomerDetail: React.FC = () => {
             (o) => o.customerId === found.id || o.customerName === found.name
           );
           setCustomerOrders(matchOrders);
-          await Promise.all([fetchLockData(found.id), fetchCreditData(found.id, found)]);
+          await Promise.all([
+            fetchLockData(found.id),
+            fetchCreditData(found.id, found),
+            fetchDebtRiskData(found.id),
+          ]);
         }
       } finally {
         setLoading(false);
@@ -325,6 +368,76 @@ export const CustomerDetail: React.FC = () => {
         </div>
       )}
 
+      {/* Banner Cảnh báo cờ rủi ro công nợ */}
+      {debtFlag && (debtFlag.is_flagged || debtFlag.risk_level !== 'SAFE') && (
+        <div
+          id="debt-risk-flag-banner"
+          className={`mb-6 p-4 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm ${
+            debtFlag.risk_level === 'HIGH_RISK'
+              ? 'bg-rose-50/90 dark:bg-rose-950/40 border-rose-300 dark:border-rose-800 text-rose-900 dark:text-rose-100'
+              : debtFlag.risk_level === 'OVERDUE'
+              ? 'bg-red-50/90 dark:bg-red-950/40 border-red-300 dark:border-red-800 text-red-900 dark:text-red-100'
+              : debtFlag.risk_level === 'LIMIT_EXCEEDED'
+              ? 'bg-purple-50/90 dark:bg-purple-950/40 border-purple-300 dark:border-purple-800 text-purple-900 dark:text-purple-100'
+              : 'bg-amber-50/90 dark:bg-amber-950/40 border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-100'
+          }`}
+        >
+          <div className="flex items-start gap-3.5">
+            <ShieldAlert className="w-6 h-6 shrink-0 mt-0.5 text-rose-600 dark:text-rose-400" />
+            <div className="space-y-1 text-xs sm:text-sm">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h4 className="font-extrabold uppercase tracking-tight">
+                  CỜ RỦI RO CÔNG NỢ ĐẠI LÝ
+                </h4>
+                <span className="text-xs px-2.5 py-0.5 rounded-full font-bold bg-white/80 dark:bg-slate-900/80 border border-current shadow-xs">
+                  {debtFlag.risk_level === 'HIGH_RISK'
+                    ? '🔴 NGUY CƠ CAO'
+                    : debtFlag.risk_level === 'OVERDUE'
+                    ? '⏰ NỢ QUÁ HẠN'
+                    : debtFlag.risk_level === 'LIMIT_EXCEEDED'
+                    ? '📉 VƯỢT HẠN MỨC'
+                    : '⚠️ CẢNH BÁO (>80%)'}
+                </span>
+                <span className="text-xs px-2 py-0.5 rounded-full font-semibold bg-black/10 dark:bg-white/10">
+                  Hành vi: {debtFlag.action_applied === 'BLOCK' ? '🔒 Khóa bán' : debtFlag.action_applied === 'REQUIRE_APPROVAL' ? '📝 Chuyển chờ duyệt' : '⚠️ Cảnh báo'}
+                </span>
+              </div>
+              <p className="text-xs leading-relaxed opacity-90">
+                {debtFlag.flag_reason || 'Đại lý vi phạm hạn mức tiền hoặc có khoản nợ quá hạn ngày thanh toán cho phép.'}
+              </p>
+              <div className="flex items-center gap-4 text-[11px] opacity-75 pt-0.5">
+                <span>Dư nợ: <strong>{formatCurrency(debtFlag.total_debt)}</strong></span>
+                {debtFlag.overdue_amount > 0 && (
+                  <span>Quá hạn: <strong>{formatCurrency(debtFlag.overdue_amount)}</strong> ({debtFlag.max_overdue_days} ngày)</span>
+                )}
+                {debtFlag.excess_amount > 0 && (
+                  <span>Vượt mức: <strong>{formatCurrency(debtFlag.excess_amount)}</strong></span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleReevaluateRisk}
+              disabled={isReevaluating}
+              className="bg-white/80 dark:bg-slate-800 text-xs shadow-xs"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${isReevaluating ? 'animate-spin' : ''}`} />
+              {isReevaluating ? 'Đang đánh giá...' : 'Đánh giá lại ngay'}
+            </Button>
+            <Link to="/settings/debt-risk">
+              <Button variant="outline" size="sm" className="text-xs">
+                <Sliders className="w-3.5 h-3.5 mr-1" />
+                Cấu hình
+              </Button>
+            </Link>
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left Column: Profile Card (1 col) */}
         <div className="space-y-6">
@@ -341,7 +454,7 @@ export const CustomerDetail: React.FC = () => {
             <h3 className="text-lg font-bold text-slate-900 dark:text-white">{customer.name}</h3>
             <p className="text-xs text-slate-400 mt-0.5">{customer.code}</p>
 
-            <div className="mt-3 flex justify-center gap-2">
+            <div className="mt-3 flex flex-wrap justify-center gap-1.5">
               {isLocked ? (
                 <Badge variant="danger" size="sm" dot>
                   Đã khoá giao dịch
@@ -350,6 +463,24 @@ export const CustomerDetail: React.FC = () => {
                 <Badge variant={customer.status === 'active' ? 'success' : 'neutral'} size="sm" dot>
                   {customer.status === 'active' ? 'Đang hoạt động' : 'Tạm ngưng'}
                 </Badge>
+              )}
+              {debtFlag && (
+                <span
+                  className={`text-[11px] px-2 py-0.5 rounded-full font-bold border ${
+                    debtFlag.risk_level === 'HIGH_RISK'
+                      ? 'bg-rose-100 text-rose-800 border-rose-300 dark:bg-rose-950 dark:text-rose-200'
+                      : debtFlag.risk_level === 'OVERDUE'
+                      ? 'bg-red-100 text-red-800 border-red-300 dark:bg-red-950 dark:text-red-200'
+                      : debtFlag.risk_level === 'LIMIT_EXCEEDED'
+                      ? 'bg-purple-100 text-purple-800 border-purple-300 dark:bg-purple-950 dark:text-purple-200'
+                      : debtFlag.risk_level === 'WARNING'
+                      ? 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950 dark:text-amber-200'
+                      : 'bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950 dark:text-emerald-200'
+                  }`}
+                  title={debtFlag.flag_reason || undefined}
+                >
+                  Cờ: {debtFlag.risk_level}
+                </span>
               )}
             </div>
 
@@ -518,6 +649,65 @@ export const CustomerDetail: React.FC = () => {
               </div>
             ) : (
               <p className="text-xs text-slate-400 italic">Chưa có lịch sử thay đổi trạng thái giao dịch.</p>
+            )}
+          </div>
+
+          {/* Lịch sử cảnh báo và thay đổi trạng thái rủi ro công nợ */}
+          <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-card">
+            <div className="flex items-center justify-between gap-2 mb-3">
+              <div className="flex items-center gap-2">
+                <ShieldAlert className="w-4 h-4 text-rose-500" />
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200">
+                  Lịch Sử Rủi Ro & Khóa Bán
+                </h4>
+              </div>
+              <span className="text-[10px] font-semibold text-slate-400">
+                {debtFlagHistory.length} bản ghi
+              </span>
+            </div>
+
+            {debtFlagHistory.length > 0 ? (
+              <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
+                {debtFlagHistory.map((h) => {
+                  const isLock = h.event_type === 'AUTO_LOCKED' || h.event_type === 'FLAGGED';
+                  return (
+                    <div
+                      key={h.id}
+                      className="p-2.5 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 text-xs space-y-1"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span
+                          className={`font-bold px-1.5 py-0.5 rounded text-[10px] ${
+                            isLock
+                              ? 'bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300'
+                              : 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300'
+                          }`}
+                        >
+                          {h.event_type === 'FLAGGED'
+                            ? '🚩 GẮN CỜ RỦI RO'
+                            : h.event_type === 'UNFLAGGED'
+                            ? '✅ GỠ CỜ RỦI RO'
+                            : h.event_type === 'AUTO_LOCKED'
+                            ? '🔒 TỰ ĐỘNG KHÓA BÁN'
+                            : h.event_type === 'AUTO_UNLOCKED'
+                            ? '🔓 TỰ ĐỘNG MỞ BÁN'
+                            : h.event_type === 'REEVALUATED'
+                            ? '🔄 ĐÁNH GIÁ LẠI'
+                            : h.event_type}
+                        </span>
+                        <span className="text-[11px] text-slate-400">{formatDate(h.created_at || '')}</span>
+                      </div>
+                      <p className="text-slate-700 dark:text-slate-300 font-medium">{h.reason}</p>
+                      <div className="flex items-center justify-between text-[10px] text-slate-400 pt-0.5">
+                        <span>Nguồn: <strong>{h.source}</strong></span>
+                        <span>Dư nợ: <strong>{formatCurrency(h.total_debt)}</strong></span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-xs text-slate-400 italic">Chưa phát sinh cảnh báo hay vi phạm công nợ nào.</p>
             )}
           </div>
         </div>

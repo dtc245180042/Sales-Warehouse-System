@@ -123,6 +123,11 @@ class CustomerResponse(CustomerBase):
     max_debt_days: Optional[int] = None
     current_debt: Optional[int] = None
 
+    # Thông tin cờ rủi ro công nợ (S7-04)
+    risk_level: Optional[str] = "SAFE"
+    is_flagged: Optional[bool] = False
+    is_debt_blocked: Optional[bool] = False
+
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
@@ -190,6 +195,18 @@ class CustomerResponse(CustomerBase):
         limit = self.credit_limit if self.credit_limit is not None else 50000000
         debt = self.current_debt if self.current_debt is not None else 0
         return max(0, limit - debt)
+
+    @computed_field
+    def isFlagged(self) -> bool:
+        return bool(self.is_flagged)
+
+    @computed_field
+    def riskLevel(self) -> str:
+        return self.risk_level or "SAFE"
+
+    @computed_field
+    def isDebtBlocked(self) -> bool:
+        return bool(self.is_debt_blocked)
 
 
 class CustomerPaginationResponse(BaseModel):

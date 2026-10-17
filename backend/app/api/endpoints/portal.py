@@ -1,6 +1,10 @@
 from typing import List, Optional
-from fastapi import APIRouter, Depends, Query, Header, Request, Response, status
+from datetime import datetime
+from fastapi import APIRouter, Depends, Query, Header, Request, Response, status, HTTPException
+from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
+from app.schemas.payment_reminder import NotificationResponse, NotificationListResponse
+from app.services import payment_reminder_service
 
 from app.core.database import lay_phien_db
 from app.core.dependencies import lay_dai_ly_hien_tai, lay_nguoi_dung_hien_tai
@@ -19,9 +23,14 @@ from app.schemas.portal import (
     PortalReorderPreviewResponse,
     PortalReorderRequest,
     PortalReorderResponse,
+    PortalDebtOverviewResponse,
+    PortalInvoiceListResponse,
+    PortalInvoiceDetailResponse,
 )
 from app.schemas.customer_delivery_address import DeliveryAddressResponse
+from app.schemas.delivery_tracking import DeliveryTimelineResponse, DeliveryTrackingListResponse
 from app.services import portal_service
+from app.services.delivery_tracking_service import DeliveryTrackingService
 
 router = APIRouter(prefix="/portal", tags=["Cổng Đại Lý Đặt Hàng (SCRUM-242)"])
 
@@ -245,3 +254,275 @@ def create_portal_reorder(
         user_id=current_user.id,
         username=current_user.username,
     )
+
+
+# ==============================================================================
+# THEO DÕI GIAO HÀNG ĐẠI LÝ (S6-09, SCRUM-694, SCRUM-698)
+# ==============================================================================
+
+@router.get(
+    "/orders/{order_id}/timeline",
+    response_model=DeliveryTimelineResponse,
+    summary="Theo dõi timeline trạng thái giao hàng của đơn (S6-09 / SCRUM-694)",
+)
+def get_portal_order_timeline(
+    order_id: str,
+    db: Session = Depends(lay_phien_db),
+    current_customer: Customer = Depends(lay_dai_ly_hien_tai),
+):
+    """
+    Theo dõi tiến trình giao hàng 5 mốc theo từng đơn dành cho Đại lý:
+    - 1. Đã duyệt (APPROVED) -> 2. Đang soạn (PACKING) -> 3. Đã xuất (EXPORTED) -> 4. Đang giao (DELIVERING) -> 5. Đã giao (DELIVERED)
+    - Chống IDOR: Chỉ xem đơn của chính đại lý đăng nhập.
+    """
+    return DeliveryTrackingService.get_delivery_timeline(
+        db=db,
+        order_id=order_id,
+        current_customer=current_customer,
+    )
+
+
+@router.get(
+    "/delivery-tracking",
+    response_model=DeliveryTrackingListResponse,
+    summary="Danh sách tiến trình giao hàng của đại lý (S6-09 / SCRUM-698)",
+)
+def get_portal_delivery_tracking_list(
+    status: Optional[str] = Query(None, description="Lọc theo trạng thái đơn hàng"),
+    page: int = Query(1, ge=1, description="Số trang hiển thị"),
+    limit: int = Query(20, ge=1, le=100, description="Số lượng mỗi trang"),
+    db: Session = Depends(lay_phien_db),
+    current_customer: Customer = Depends(lay_dai_ly_hien_tai),
+):
+    """
+    Theo dõi danh sách tiến trình giao hàng của riêng đại lý đăng nhập (SCRUM-698).
+    Chống IDOR: Chỉ hiển thị các đơn thuộc về đại lý này.
+    """
+    return DeliveryTrackingService.list_delivery_trackings(
+        db=db,
+        status_filter=status,
+        page=page,
+        limit=limit,
+        current_customer=current_customer,
+    )
+
+
+# ==============================================================================
+# QUẢN LÝ CÔNG NỢ & HOÁ ĐƠN ĐẠI LÝ (S7-07, SCRUM-753, SCRUM-754, SCRUM-756)
+# ==============================================================================
+
+@router.get(
+    "/debt",
+    response_model=PortalDebtOverviewResponse,
+    summary="Xem công nợ tổng quan và danh sách hoá đơn của chính đại lý (SCRUM-753, SCRUM-754)",
+)
+def get_portal_debt_overview(
+    status_filter: Optional[str] = Query(None, alias="status", description="Lọc theo trạng thái hoá đơn (ALL, UNPAID, PARTIALLY_PAID, PAID, OVERDUE)"),
+    from_date: Optional[datetime] = Query(None, description="Từ ngày phát hành"),
+    to_date: Optional[datetime] = Query(None, description="Đến ngày phát hành"),
+    page: int = Query(1, ge=1, description="Số trang hiển thị"),
+    limit: int = Query(20, ge=1, le=100, description="Số lượng mỗi trang"),
+    customer_id: Optional[str] = Query(None, description="Mã đại lý cần tra cứu (chống IDOR: chỉ cho phép đại lý của mình)"),
+    db: Session = Depends(lay_phien_db),
+    current_customer: Customer = Depends(lay_dai_ly_hien_tai),
+):
+    """
+    Xem công nợ của chính đại lý:
+    - Trả về hạn mức công nợ (credit_limit), tổng nợ còn phải trả (total_debt), hạn mức còn lại (available_credit)
+    - Cảnh báo nợ quá hạn (has_overdue, overdue_debt, max_debt_days)
+    - Danh sách các hoá đơn phát hành kèm số tiền, hạn thanh toán, trạng thái
+    - Kiểm soát truy cập: Chỉ trả dữ liệu của đại lý đang đăng nhập, chống IDOR sang đại lý khác (SCRUM-754).
+    """
+    if customer_id and customer_id != current_customer.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Bạn không có quyền truy cập dữ liệu công nợ của đại lý khác.",
+        )
+    return portal_service.get_portal_debt_overview(
+        db=db,
+        customer=current_customer,
+        status_filter=status_filter,
+        from_date=from_date,
+        to_date=to_date,
+        page=page,
+        limit=limit,
+    )
+
+
+@router.get(
+    "/invoices",
+    response_model=PortalInvoiceListResponse,
+    summary="Danh sách hoá đơn bán hàng của chính đại lý (SCRUM-753, SCRUM-754)",
+)
+def get_portal_invoices(
+    status_filter: Optional[str] = Query(None, alias="status", description="Lọc theo trạng thái (ALL, UNPAID, PARTIALLY_PAID, PAID, OVERDUE)"),
+    from_date: Optional[datetime] = Query(None, description="Từ ngày phát hành"),
+    to_date: Optional[datetime] = Query(None, description="Đến ngày phát hành"),
+    page: int = Query(1, ge=1, description="Số trang hiển thị"),
+    limit: int = Query(20, ge=1, le=100, description="Số lượng mỗi trang"),
+    customer_id: Optional[str] = Query(None, description="Mã đại lý cần tra cứu"),
+    db: Session = Depends(lay_phien_db),
+    current_customer: Customer = Depends(lay_dai_ly_hien_tai),
+):
+    """
+    Danh sách hoá đơn bán hàng của đại lý kèm phân trang và lọc theo trạng thái.
+    Kiểm soát truy cập: Đại lý chỉ xem được hoá đơn của chính mình (SCRUM-754).
+    """
+    if customer_id and customer_id != current_customer.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Bạn không có quyền truy cập dữ liệu hoá đơn của đại lý khác.",
+        )
+    return portal_service.get_portal_invoices(
+        db=db,
+        customer=current_customer,
+        status_filter=status_filter,
+        from_date=from_date,
+        to_date=to_date,
+        page=page,
+        limit=limit,
+    )
+
+
+@router.get(
+    "/invoices/{invoice_id}",
+    response_model=PortalInvoiceDetailResponse,
+    summary="Tra cứu chi tiết hoá đơn đã phát hành cho đại lý (SCRUM-756, SCRUM-754)",
+)
+def get_portal_invoice_detail(
+    invoice_id: str,
+    db: Session = Depends(lay_phien_db),
+    current_customer: Customer = Depends(lay_dai_ly_hien_tai),
+):
+    """
+    Tra cứu chi tiết hoá đơn đã phát hành kèm các dòng sản phẩm chi tiết.
+    Kiểm soát an toàn: Từ chối 403 nếu truy cập hoá đơn của đại lý khác (chống IDOR).
+    """
+    return portal_service.get_portal_invoice_detail(
+        db=db,
+        customer=current_customer,
+        invoice_id=invoice_id,
+    )
+
+
+@router.get(
+    "/invoices/{invoice_id}/download",
+    summary="Tải lại file hoá đơn đã phát hành từ hệ thống (SCRUM-756, SCRUM-754)",
+)
+def download_portal_invoice(
+    invoice_id: str,
+    format: str = Query("html", description="Định dạng tải về (html)"),
+    db: Session = Depends(lay_phien_db),
+    current_customer: Customer = Depends(lay_dai_ly_hien_tai),
+):
+    """
+    Cho phép đại lý tải lại file hoá đơn bán hàng định dạng in ấn khổ A4 từ hệ thống.
+    Kiểm soát quyền truy cập: Chỉ tải được hoá đơn thuộc tài khoản đại lý hiện tại.
+    """
+    html_content = portal_service.render_invoice_html(
+        db=db,
+        customer=current_customer,
+        invoice_id=invoice_id,
+    )
+    filename = f"HoaDon_{invoice_id}.html"
+    return Response(
+        content=html_content,
+        media_type="text/html; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"'
+        },
+    )
+
+
+@router.get(
+    "/invoices/{invoice_id}/print",
+    response_class=HTMLResponse,
+    summary="Xem trước mẫu in hoá đơn đã phát hành chuẩn A4 (SCRUM-756)",
+)
+def print_portal_invoice(
+    invoice_id: str,
+    db: Session = Depends(lay_phien_db),
+    current_customer: Customer = Depends(lay_dai_ly_hien_tai),
+):
+    """
+    Trả về trang HTML in ấn hoá đơn hoàn chỉnh chuẩn A4 để đại lý xem trước hoặc in trực tiếp.
+    """
+    html_content = portal_service.render_invoice_html(
+        db=db,
+        customer=current_customer,
+        invoice_id=invoice_id,
+    )
+    return HTMLResponse(content=html_content, media_type="text/html; charset=utf-8")
+
+
+# ==============================================================================
+# THÔNG BÁO NHẮC HẠN THANH TOÁN CHO ĐẠI LÝ (S7-08, SCRUM-759)
+# ==============================================================================
+
+@router.get(
+    "/notifications",
+    response_model=NotificationListResponse,
+    summary="Danh sách thông báo trong ứng dụng của đại lý (SCRUM-759)",
+)
+def get_portal_notifications(
+    is_read: Optional[bool] = Query(None, description="Lọc theo trạng thái đã đọc hay chưa"),
+    page: int = Query(1, ge=1, description="Số trang hiển thị"),
+    limit: int = Query(20, ge=1, le=100, description="Số lượng mỗi trang"),
+    db: Session = Depends(lay_phien_db),
+    current_customer: Customer = Depends(lay_dai_ly_hien_tai),
+):
+    """
+    Lấy danh sách thông báo nhắc hạn thanh toán và biến động hệ thống của đại lý.
+    Kiểm soát an toàn: Chỉ trả thông báo thuộc về chính đại lý đang đăng nhập (chống IDOR).
+    """
+    return payment_reminder_service.get_agency_notifications(
+        db=db,
+        customer_id=current_customer.id,
+        is_read=is_read,
+        page=page,
+        limit=limit,
+    )
+
+
+@router.patch(
+    "/notifications/{notification_id}/read",
+    response_model=NotificationResponse,
+    summary="Đánh dấu đã đọc một thông báo (SCRUM-759)",
+)
+def mark_portal_notification_as_read(
+    notification_id: int,
+    db: Session = Depends(lay_phien_db),
+    current_customer: Customer = Depends(lay_dai_ly_hien_tai),
+):
+    """Đánh dấu thông báo là đã đọc. Chỉ cho phép thao tác trên thông báo của chính mình."""
+    notif = payment_reminder_service.mark_notification_as_read(
+        db=db,
+        customer_id=current_customer.id,
+        notification_id=notification_id,
+    )
+    if not notif:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Không tìm thấy thông báo hoặc bạn không có quyền truy cập.",
+        )
+    return NotificationResponse.model_validate(notif)
+
+
+@router.patch(
+    "/notifications/read-all",
+    summary="Đánh dấu tất cả thông báo của đại lý là đã đọc (SCRUM-759)",
+)
+def mark_all_portal_notifications_as_read(
+    db: Session = Depends(lay_phien_db),
+    current_customer: Customer = Depends(lay_dai_ly_hien_tai),
+):
+    """Đánh dấu tất cả thông báo chưa đọc của đại lý thành đã đọc."""
+    updated_count = payment_reminder_service.mark_all_notifications_as_read(
+        db=db,
+        customer_id=current_customer.id,
+    )
+    return {
+        "success": True,
+        "message": f"Đã đánh dấu {updated_count} thông báo là đã đọc.",
+        "updated_count": updated_count,
+    }

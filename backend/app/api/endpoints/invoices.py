@@ -1,17 +1,20 @@
 from typing import List, Optional
 from datetime import datetime
-from fastapi import APIRouter, Depends, Query, status, HTTPException
+from fastapi import APIRouter, Depends, Query, status, HTTPException, Response
+from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 
 from app.core.database import lay_phien_db
 from app.core.dependencies import lay_nguoi_dung_hien_tai
 from app.models.auth import User
+from app.models.customer import Customer
 from app.schemas.invoice import (
     InvoiceCreateRequest,
     InvoiceResponse,
     InvoicePrintTemplateResponse,
 )
 from app.services.invoice_service import InvoiceService
+from app.services.portal_service import render_invoice_html
 
 router = APIRouter(prefix="/invoices", tags=["Hóa đơn bán hàng (Invoices - Story S7-01)"])
 
@@ -110,6 +113,53 @@ def du_lieu_in_hoa_don(
     Cung cấp dữ liệu định dạng chuẩn phục vụ chức năng in ấn / xuất PDF cho Thủy (S7-09).
     """
     return InvoiceService.get_print_template(db=db, invoice_id=id, current_user=current_user)
+
+
+@router.get(
+    "/{id}/download",
+    summary="Tải lại file hoá đơn đã phát hành (SCRUM-756)",
+    status_code=status.HTTP_200_OK,
+)
+def tai_file_hoa_don(
+    id: str,
+    current_user: User = Depends(lay_nguoi_dung_hien_tai),
+    db: Session = Depends(lay_phien_db),
+):
+    """
+    Tải file hoá đơn đã phát hành có kiểm soát Customer Scope (chống IDOR).
+    """
+    invoice = InvoiceService.get_invoice_by_id(db=db, invoice_id=id, current_user=current_user)
+    customer = db.query(Customer).filter(Customer.id == invoice.customer_id).first()
+    if not customer:
+        customer = Customer(id=invoice.customer_id, code=invoice.customer_id, name=invoice.customer_name or "Đại lý")
+    html_content = render_invoice_html(db=db, customer=customer, invoice_id=id)
+    return Response(
+        content=html_content,
+        media_type="text/html; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="HoaDon_{id}.html"'},
+    )
+
+
+@router.get(
+    "/{id}/print-html",
+    response_class=HTMLResponse,
+    summary="Xem trang in hoá đơn đã phát hành chuẩn A4 (SCRUM-756)",
+    status_code=status.HTTP_200_OK,
+)
+def xem_trang_in_hoa_don(
+    id: str,
+    current_user: User = Depends(lay_nguoi_dung_hien_tai),
+    db: Session = Depends(lay_phien_db),
+):
+    """
+    Xem trang in hoá đơn chuẩn A4 có kiểm soát Customer Scope.
+    """
+    invoice = InvoiceService.get_invoice_by_id(db=db, invoice_id=id, current_user=current_user)
+    customer = db.query(Customer).filter(Customer.id == invoice.customer_id).first()
+    if not customer:
+        customer = Customer(id=invoice.customer_id, code=invoice.customer_id, name=invoice.customer_name or "Đại lý")
+    html_content = render_invoice_html(db=db, customer=customer, invoice_id=id)
+    return HTMLResponse(content=html_content, media_type="text/html; charset=utf-8")
 
 
 # ==============================================================================

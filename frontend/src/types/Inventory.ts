@@ -77,6 +77,8 @@ export interface InventoryHistoryRecord {
   id: string;
   code: string;
   type: InventoryTransactionType;
+  movementType?: string;
+  sourceRoute?: string;
   productId: string;
   productName: string;
   sku: string;
@@ -87,3 +89,4 @@ export interface InventoryHistoryRecord {
   date: string;
   note: string;
 }
+

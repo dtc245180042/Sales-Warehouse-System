@@ -36,6 +36,8 @@ import {
   CreditCard,
   Truck,
   CalendarClock,
+  Target,
+  AlertOctagon,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { UserRole } from '../../types/User';
@@ -173,6 +175,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
           path: '/credit-notes',
           icon: <FileCheck2 className="w-5 h-5" />,
           allowedRoles: ALL_ROLES,
+        },
+        {
+          title: 'Chỉ tiêu doanh số',
+          path: '/sales/targets',
+          icon: <Target className="w-5 h-5" />,
+          allowedRoles: ALL_ROLES.filter((r) => r !== 'User'),
+        },
+        {
+          title: 'Tiến độ doanh số',
+          path: '/sales/targets/progress',
+          icon: <TrendingUp className="w-5 h-5" />,
+          allowedRoles: ALL_ROLES.filter((r) => r !== 'User'),
         },
       ],
     },
@@ -328,6 +342,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
               allowedRoles: ALL_ROLES,
             },
             {
+              title: 'Điều chỉnh tồn kho',
+              path: '/inventory/adjustments',
+              icon: <AlertOctagon className="w-3.5 h-3.5" />,
+              allowedRoles: ALL_ROLES,
+            },
+            {
               title: 'Lịch sử thẻ kho',
               path: '/inventory/history',
               icon: <History className="w-3.5 h-3.5" />,
@@ -379,6 +399,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
           ],
         },
         {
+          title: 'Doanh số Đa chiều',
+          path: '/reports/sales-multidim',
+          icon: <Layers className="w-5 h-5" />,
+          allowedRoles: [
+            'Admin',
+            'SalesManager',
+            'Director',
+            'Accountant',
+            'Manager',
+            'SalesStaff',
+          ],
+        },
+        {
           title: 'Báo cáo Tồn kho',
           path: '/reports/inventory',
           icon: <Package className="w-5 h-5" />,
@@ -388,6 +421,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
             'WarehouseStaff',
             'Director',
             'Manager',
+            'Accountant',
+          ],
+        },
+        {
+          title: 'Vòng quay Tồn kho',
+          path: '/reports/inventory-turnover',
+          icon: <RotateCcw className="w-5 h-5" />,
+          allowedRoles: [
+            'Admin',
+            'WarehouseManager',
+            'WarehouseStaff',
+            'Director',
+            'Manager',
+            'Accountant',
           ],
         },
       ],

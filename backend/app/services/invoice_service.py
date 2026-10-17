@@ -26,26 +26,30 @@ TZ_VN = ZoneInfo("Asia/Ho_Chi_Minh")
 
 def lay_so_luong_tinh_tien(dispatch_item: StockDispatchItem) -> int:
     """
-    Xác định số lượng tính tiền của dòng hàng trên hóa đơn (AC-1).
-    - Hiện tại: Trả về dispatch_item.dispatched_quantity (số lượng thực xuất từ S6-05).
-    - Khi Story S6-08 của Trường hoàn thành: Tự động ưu tiên trả về delivered_quantity
-      (số thực giao), đảm bảo mở rộng mượt mà không phải sửa logic tính toán hóa đơn.
+    Xác định số lượng tính tiền của dòng hàng trên hóa đơn (AC-1 & S6-08).
+    - Khi phiếu xuất đã ở trạng thái DELIVERED: Tính theo số lượng thực giao (delivered_quantity).
+    - Khi phiếu xuất ở trạng thái CONFIRMED (tương thích trước khi giao nhận): Tính theo thực xuất (dispatched_quantity).
     """
-    delivered = getattr(dispatch_item, "delivered_quantity", None)
-    if delivered is not None:
-        return int(delivered)
+    dispatch = getattr(dispatch_item, "dispatch", None)
+    if dispatch and getattr(dispatch, "status", None) == "DELIVERED":
+        delivered = getattr(dispatch_item, "delivered_quantity", None)
+        if delivered is not None and delivered > 0:
+            return int(delivered)
     return int(dispatch_item.dispatched_quantity)
 
 
 def kiem_tra_dieu_kien_lap_hoa_don(dispatch: StockDispatch) -> bool:
     """
-    Kiểm tra phiếu xuất có đủ điều kiện để lập hóa đơn hay không.
-    - Hiện tại: Phiếu phải ở trạng thái CONFIRMED (đã xuất kho thực tế).
-    - Khi S6-08 của Trường hoàn thành: Bổ sung điều kiện phiếu ở trạng thái DELIVERED.
+    Kiểm tra phiếu xuất có đủ điều kiện để lập hóa đơn hay không (S6-08 / SC-259 & S7-01).
+    - Chuẩn S6-08: Kích hoạt khi phiếu xuất đã xác nhận giao thành công (DELIVERED).
+    - Tương thích ngược: Cho phép CONFIRMED khi chưa kích hoạt giao nhận.
+    - Nghiêm cấm phát hành hóa đơn khi giao thất bại (DELIVERY_FAILED) hoặc trạng thái không hợp lệ.
     """
-    if dispatch.status != DispatchStatus.CONFIRMED.value:
+    if not dispatch or not dispatch.status:
         return False
-    return True
+    if dispatch.status in ["DELIVERY_FAILED", "CANCELLED", "DRAFT", "PENDING"]:
+        return False
+    return dispatch.status in [DispatchStatus.CONFIRMED.value, "DELIVERED"]
 
 
 def hook_sau_khi_lap_hoa_don(db: Session, invoice: Invoice):

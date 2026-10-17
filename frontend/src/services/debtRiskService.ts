@@ -124,14 +124,14 @@ export const debtRiskService = {
    */
   getSummary: async (forceRefresh = false): Promise<DebtRiskOverviewSummary> => {
     if (!forceRefresh && cachedSummary) {
-      apiClient.get('/debt-risk/summary').then((res) => {
+      apiClient.get<DebtRiskOverviewSummary>('/debt-risk/summary').then((res) => {
         cachedSummary = res.data;
       }).catch(() => {});
       return cachedSummary;
     }
-    const res = await apiClient.get('/debt-risk/summary');
+    const res = await apiClient.get<DebtRiskOverviewSummary>('/debt-risk/summary');
     cachedSummary = res.data;
-    return cachedSummary;
+    return res.data;
   },
 
   /**

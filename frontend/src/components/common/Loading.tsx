@@ -3,10 +3,12 @@ import { Loader2 } from 'lucide-react';
 
 interface LoadingProps {
   text?: string;
+  message?: string;
   fullPage?: boolean;
 }
 
-export const Loading: React.FC<LoadingProps> = ({ text = 'Đang tải dữ liệu...', fullPage = false }) => {
+export const Loading: React.FC<LoadingProps> = ({ text, message, fullPage = false }) => {
+  const displayText = message || text || 'Đang tải dữ liệu...';
   if (fullPage) {
     return (
       <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-white/80 dark:bg-slate-950/80 backdrop-blur-sm">

@@ -251,7 +251,7 @@ export const ReturnListPage: React.FC = () => {
   };
 
   const isWarehouseRole =
-    role === 'WarehouseManager' || role === 'WH Manager' || role === 'Admin' || role === 'admin';
+    role === 'WarehouseManager' || role === 'WarehouseStaff' || role === 'Admin';
 
   return (
     <PageContainer

@@ -1,4 +1,4 @@
-export type InvoiceStatus = 'UNPAID' | 'PARTIALLY_PAID' | 'PAID';
+export type InvoiceStatus = 'UNPAID' | 'PARTIALLY_PAID' | 'PAID' | 'CANCELLED';
 
 export interface InvoiceItem {
   id: number;
@@ -43,7 +43,11 @@ export interface Invoice {
 export interface InvoiceCreateRequest {
   client_request_id?: string;
   customer_id: string;
-  dispatch_ids: string[];
+  customer_name?: string;
+  customer_address?: string;
+  customer_tax_code?: string;
+  dispatch_ids?: string[];
   due_date?: string;
   notes?: string;
+  items?: any[];
 }

@@ -727,18 +727,6 @@ class DeliveryTripService:
         Cập nhật kết quả giao hàng tại một điểm trong chuyến (S6-07).
         Hàng chưa giao vẫn thuộc trách nhiệm chuyến (hold_on_trip=True).
         """
-        valid_statuses = [
-            PointStatus.DELIVERED.value,
-            PointStatus.PARTIAL.value,
-            PointStatus.FAILED.value,
-        ]
-        target_status = payload.status.upper()
-        if target_status not in valid_statuses:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Trạng thái '{payload.status}' không hợp lệ. Chỉ chấp nhận DELIVERED, PARTIAL, hoặc FAILED.",
-            )
-
         trip = db.query(DeliveryTrip).options(
             selectinload(DeliveryTrip.points).selectinload(DeliveryTripPoint.items)
         ).filter(
@@ -751,103 +739,131 @@ class DeliveryTripService:
                 detail=f"Không tìm thấy chuyến giao hàng với mã '{trip_id}'.",
             )
 
-        point = next((p for p in trip.points if p.id == point_id), None)
+        point = None
+        for p in trip.points:
+            if p.id == point_id:
+                point = p
+                break
+
         if not point:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Điểm giao #{point_id} không thuộc chuyến '{trip_id}'.",
+                detail=f"Không tìm thấy điểm giao hàng ID {point_id} trong chuyến '{trip_id}'.",
             )
 
-        if point.status in [PointStatus.DELIVERED.value, PointStatus.FAILED.value]:
+        clean_status = payload.status.upper().strip()
+        valid_statuses = [
+            PointStatus.DELIVERED.value,
+            PointStatus.PARTIAL.value,
+            PointStatus.FAILED.value,
+        ]
+        if clean_status not in valid_statuses:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Điểm giao này đã được ghi nhận trước đó với trạng thái '{point.status}', không thể ghi đè.",
+                detail=f"Trạng thái giao '{payload.status}' không hợp lệ. Chỉ chấp nhận DELIVERED, PARTIAL hoặc FAILED.",
             )
 
-        # Cập nhật số lượng giao từng mặt hàng
-        items_update_map: Dict[str, Any] = {}
+        if clean_status in [PointStatus.PARTIAL.value, PointStatus.FAILED.value] and not payload.failure_reason:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Bắt buộc phải nhập lý do (failure_reason) khi giao thất bại hoặc giao một phần.",
+            )
+
+        valid_product_ids = {item.product_id for item in point.items}
         if payload.delivered_items:
-            items_update_map = {item.product_id: item for item in payload.delivered_items}
+            for itm in payload.delivered_items:
+                if itm.product_id not in valid_product_ids:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Sản phẩm '{itm.product_id}' không tồn tại trong danh sách hàng của điểm giao này.",
+                    )
 
-        if target_status == PointStatus.PARTIAL.value and not items_update_map:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Giao hàng một phần (PARTIAL) bắt buộc phải truyền chi tiết số lượng thực giao cho từng sản phẩm.",
-            )
+        if clean_status == PointStatus.PARTIAL.value:
+            if not payload.delivered_items:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Bắt buộc phải truyền danh sách sản phẩm và số lượng giao (delivered_items) khi cập nhật trạng thái PARTIAL (giao một phần).",
+                )
 
-        delivered_items_count = 0
-        undelivered_items_count = 0
-        delivered_value = 0.0
-        remaining_value = 0.0
+        delivered_items_map: Dict[str, int] = {}
+        if payload.delivered_items:
+            for itm in payload.delivered_items:
+                delivered_items_map[itm.product_id] = itm.delivered_quantity
 
-        for itm in point.items:
-            if target_status == PointStatus.DELIVERED.value:
-                if items_update_map and itm.product_id in items_update_map:
-                    deliv_qty = items_update_map[itm.product_id].delivered_quantity
-                    if deliv_qty > itm.dispatched_quantity:
-                        raise HTTPException(
-                            status_code=status.HTTP_400_BAD_REQUEST,
-                            detail=f"Số lượng giao ({deliv_qty}) vượt quá số lượng xuất ({itm.dispatched_quantity}) của sản phẩm {itm.product_id}.",
-                        )
-                else:
-                    deliv_qty = itm.dispatched_quantity
-            elif target_status == PointStatus.FAILED.value:
-                deliv_qty = 0
-            else:  # PARTIAL
-                if itm.product_id in items_update_map:
-                    deliv_qty = items_update_map[itm.product_id].delivered_quantity
-                    if deliv_qty > itm.dispatched_quantity:
-                        raise HTTPException(
-                            status_code=status.HTTP_400_BAD_REQUEST,
-                            detail=f"Số lượng giao ({deliv_qty}) vượt quá số lượng xuất ({itm.dispatched_quantity}) của sản phẩm {itm.product_id}.",
-                        )
-                else:
-                    deliv_qty = 0
+        if clean_status == PointStatus.PARTIAL.value:
+            total_dispatched_at_point = sum(itm.dispatched_quantity for itm in point.items)
+            total_delivered_at_point = sum(delivered_items_map.get(itm.product_id, 0) for itm in point.items)
+            if total_delivered_at_point == 0:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Số lượng giao thực tế bằng 0. Vui lòng chọn trạng thái FAILED (thất bại) thay vì PARTIAL.",
+                )
+            if total_delivered_at_point == total_dispatched_at_point:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Tất cả sản phẩm đã được giao đủ 100%. Vui lòng chọn trạng thái DELIVERED (đã giao) thay vì PARTIAL.",
+                )
 
-            undeliv_qty = itm.dispatched_quantity - deliv_qty
-            deliv_amt = deliv_qty * itm.unit_price
-            in_transit_amt = undeliv_qty * itm.unit_price
-
-            itm.delivered_quantity = deliv_qty
-            itm.undelivered_quantity = undeliv_qty
-            itm.delivered_amount = deliv_amt
-            itm.in_transit_amount = in_transit_amt
-
-            if deliv_qty == itm.dispatched_quantity:
-                itm.status = ItemTransitStatus.DELIVERED.value
-            elif deliv_qty == 0:
-                itm.status = ItemTransitStatus.UNDELIVERED.value
+        for item in point.items:
+            if clean_status == PointStatus.DELIVERED.value and not payload.delivered_items:
+                item.delivered_quantity = item.dispatched_quantity
+                item.undelivered_quantity = 0
+                item.delivered_amount = item.total_price
+                item.in_transit_amount = 0.0
+                item.status = ItemTransitStatus.DELIVERED.value
+                item.notes = None
+            elif clean_status == PointStatus.FAILED.value and not payload.delivered_items:
+                item.delivered_quantity = 0
+                item.undelivered_quantity = item.dispatched_quantity
+                item.delivered_amount = 0.0
+                item.in_transit_amount = item.total_price
+                item.status = ItemTransitStatus.UNDELIVERED_HELD_ON_TRIP.value
+                item.notes = payload.failure_reason
             else:
-                itm.status = ItemTransitStatus.PARTIAL.value
+                qty_delivered = delivered_items_map.get(
+                    item.product_id,
+                    item.dispatched_quantity if clean_status == PointStatus.DELIVERED.value else 0
+                )
+                if qty_delivered > item.dispatched_quantity:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Số lượng giao ({qty_delivered}) của sản phẩm '{item.product_id}' không được vượt quá số lượng xuất bốc ({item.dispatched_quantity}).",
+                    )
+                item.delivered_quantity = qty_delivered
+                item.undelivered_quantity = item.dispatched_quantity - qty_delivered
+                item.delivered_amount = float(item.delivered_quantity) * item.unit_price
+                item.in_transit_amount = float(item.undelivered_quantity) * item.unit_price
 
-            if items_update_map and itm.product_id in items_update_map:
-                itm.notes = items_update_map[itm.product_id].failure_reason
+                if item.undelivered_quantity > 0:
+                    item.status = ItemTransitStatus.UNDELIVERED_HELD_ON_TRIP.value
+                    if payload.failure_reason:
+                        item.notes = payload.failure_reason
+                else:
+                    item.status = ItemTransitStatus.DELIVERED.value
+                    item.notes = None
 
-            delivered_items_count += deliv_qty
-            undelivered_items_count += undeliv_qty
-            delivered_value += deliv_amt
-            remaining_value += in_transit_amt
-
-        point.status = target_status
+        point.status = clean_status
         point.actual_arrival_time = datetime.now(timezone.utc)
-        point.delivered_items_count = delivered_items_count
-        point.undelivered_items_count = undelivered_items_count
-        point.delivered_value = delivered_value
-        point.remaining_value = remaining_value
         point.completion_notes = payload.completion_notes
-        point.failure_reason = payload.failure_reason
+        point.failure_reason = payload.failure_reason if clean_status != PointStatus.DELIVERED.value else None
         point.hold_on_trip = True
 
+        point.delivered_items_count = sum(itm.delivered_quantity for itm in point.items)
+        point.undelivered_items_count = sum(itm.undelivered_quantity for itm in point.items)
+        point.delivered_value = sum(itm.delivered_amount for itm in point.items)
+        point.remaining_value = sum(itm.in_transit_amount for itm in point.items)
+
         # Đồng bộ lại tổng thể chuyến
-        trip_delivered_val = 0.0
-        trip_in_transit_val = 0.0
         delivered_pts = 0
         failed_pts = 0
         remaining_pts = 0
+        trip_delivered_val = 0.0
+        trip_in_transit_val = 0.0
 
         for pt in trip.points:
             trip_delivered_val += pt.delivered_value
             trip_in_transit_val += pt.remaining_value
+
             if pt.status == PointStatus.DELIVERED.value:
                 delivered_pts += 1
             elif pt.status in [PointStatus.FAILED.value, PointStatus.PARTIAL.value]:

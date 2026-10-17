@@ -58,6 +58,7 @@ import { RevenueReport } from '../pages/reports/RevenueReport';
 import { InventoryReport } from '../pages/reports/InventoryReport';
 import { SalesMultiDimReport } from '../pages/reports/SalesMultiDimReport';
 import { InventoryTurnoverReport } from '../pages/reports/InventoryTurnoverReport';
+import { AgencyDebtAgingReport } from '../pages/reports/AgencyDebtAgingReport';
 
 // Inventory & Stock Ledger & Stock Take Pages
 import { InventoryOverview } from '../pages/inventory/InventoryOverview';
@@ -508,6 +509,23 @@ export const AppRoutes: React.FC = () => {
           element={
             <ProtectedRoute allowedRoles={['Admin', 'WarehouseManager', 'WarehouseStaff', 'Director', 'Manager', 'Accountant']}>
               <InventoryTurnoverReport />
+            </ProtectedRoute>
+          }
+        />
+        {/* Sổ công nợ theo đại lý & Phân tích tuổi nợ (Story S7-03) */}
+        <Route
+          path="/reports/agency-debts"
+          element={
+            <ProtectedRoute allowedRoles={['Admin', 'SalesManager', 'Director', 'Accountant', 'Manager', 'SalesStaff']}>
+              <AgencyDebtAgingReport />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/reports/debt-aging"
+          element={
+            <ProtectedRoute allowedRoles={['Admin', 'SalesManager', 'Director', 'Accountant', 'Manager', 'SalesStaff']}>
+              <AgencyDebtAgingReport />
             </ProtectedRoute>
           }
         />

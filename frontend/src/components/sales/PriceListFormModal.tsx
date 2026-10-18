@@ -754,7 +754,7 @@ export const PriceListFormModal: React.FC<PriceListFormModalProps> = ({
                                 <input
                                   type="number"
                                   min={0}
-                                  step={10000}
+                                  step="any"
                                   value={item.sale_price}
                                   onChange={(e) =>
                                     handleUpdateItemSalePrice(idx, Number(e.target.value) || 0)

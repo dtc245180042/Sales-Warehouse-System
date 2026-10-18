@@ -26,6 +26,7 @@ import { stockTransferService } from '../../services/stockTransferService';
 import { StockTransfer, StockTransferItem } from '../../types/StockTransfer';
 import { formatCurrency, formatNumber, formatDate } from '../../utils/formatters';
 import { useToast } from '../../contexts/ToastContext';
+import { useAuth } from '../../contexts/AuthContext';
 import {
   StockTransferPrintModal,
   StockTransferPrintDoc,
@@ -42,6 +43,8 @@ export const StockTransferDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { showToast } = useToast();
+  const { role } = useAuth();
+  const canViewCostPrice = ['Admin', 'SalesManager', 'WarehouseManager', 'Accountant', 'Director'].includes(role);
 
   const [transfer, setTransfer] = useState<StockTransfer | null>(null);
   const [loading, setLoading] = useState(true);
@@ -413,8 +416,12 @@ export const StockTransferDetail: React.FC = () => {
                     <th className="py-3 px-4 text-center">SL Chuyển</th>
                     <th className="py-3 px-4 text-center">Thực nhận</th>
                     <th className="py-3 px-4 text-center">Chênh lệch</th>
-                    <th className="py-3 px-4 text-right">Đơn giá vốn</th>
-                    <th className="py-3 px-4 text-right">Thành tiền</th>
+                    {canViewCostPrice && (
+                      <>
+                        <th className="py-3 px-4 text-right">Đơn giá vốn</th>
+                        <th className="py-3 px-4 text-right">Thành tiền</th>
+                      </>
+                    )}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -467,13 +474,17 @@ export const StockTransferDetail: React.FC = () => {
                           )}
                         </td>
 
-                        <td className="py-3 px-4 text-right font-mono text-xs text-slate-600 dark:text-slate-400">
-                          {formatCurrency(item.cost_price || 0)}
-                        </td>
+                        {canViewCostPrice && (
+                          <>
+                            <td className="py-3 px-4 text-right font-mono text-xs text-slate-600 dark:text-slate-400">
+                              {formatCurrency(item.cost_price || 0)}
+                            </td>
 
-                        <td className="py-3 px-4 text-right font-semibold text-slate-900 dark:text-slate-100">
-                          {formatCurrency(subtotal)}
-                        </td>
+                            <td className="py-3 px-4 text-right font-semibold text-slate-900 dark:text-slate-100">
+                              {formatCurrency(subtotal)}
+                            </td>
+                          </>
+                        )}
                       </tr>
                     );
                   })}
@@ -494,17 +505,21 @@ export const StockTransferDetail: React.FC = () => {
                         ? `${(transfer.total_received_items - transfer.total_items) > 0 ? '+' : ''}${transfer.total_received_items - transfer.total_items}`
                         : '-'}
                     </td>
-                    <td className="py-3 px-4 text-right text-xs text-slate-400">
-                      Tổng giá trị
-                    </td>
-                    <td className="py-3 px-4 text-right text-blue-600 dark:text-blue-400 font-mono">
-                      {formatCurrency(
-                        transfer.items.reduce(
-                          (sum, itm) => sum + itm.transfer_quantity * (itm.cost_price || 0),
-                          0
-                        )
-                      )}
-                    </td>
+                    {canViewCostPrice && (
+                      <>
+                        <td className="py-3 px-4 text-right text-xs text-slate-400">
+                          Tổng giá trị
+                        </td>
+                        <td className="py-3 px-4 text-right text-blue-600 dark:text-blue-400 font-mono">
+                          {formatCurrency(
+                            transfer.items.reduce(
+                              (sum, itm) => sum + itm.transfer_quantity * (itm.cost_price || 0),
+                              0
+                            )
+                          )}
+                        </td>
+                      </>
+                    )}
                   </tr>
                 </tfoot>
               </table>
@@ -547,17 +562,19 @@ export const StockTransferDetail: React.FC = () => {
                 </span>
               </div>
 
-              <div className="flex justify-between items-center pt-2 border-t border-slate-100 dark:border-slate-800">
-                <span className="text-slate-500">Tổng giá trị vốn:</span>
-                <span className="font-mono font-bold text-base text-blue-600 dark:text-blue-400">
-                  {formatCurrency(
-                    transfer.items.reduce(
-                      (sum, itm) => sum + itm.transfer_quantity * (itm.cost_price || 0),
-                      0
-                    )
-                  )}
-                </span>
-              </div>
+              {canViewCostPrice && (
+                <div className="flex justify-between items-center pt-2 border-t border-slate-100 dark:border-slate-800">
+                  <span className="text-slate-500">Tổng giá trị vốn:</span>
+                  <span className="font-mono font-bold text-base text-blue-600 dark:text-blue-400">
+                    {formatCurrency(
+                      transfer.items.reduce(
+                        (sum, itm) => sum + itm.transfer_quantity * (itm.cost_price || 0),
+                        0
+                      )
+                    )}
+                  </span>
+                </div>
+              )}
 
               {transfer.note && (
                 <div className="pt-2 border-t border-slate-100 dark:border-slate-800">

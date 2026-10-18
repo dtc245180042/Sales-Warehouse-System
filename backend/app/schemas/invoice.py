@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Any
 from datetime import datetime
 from pydantic import BaseModel, Field, ConfigDict
 
@@ -6,10 +6,27 @@ from pydantic import BaseModel, Field, ConfigDict
 # ==============================================================================
 # SCHEMAS FOR CREATION
 # ==============================================================================
+class InvoiceItemInput(BaseModel):
+    product_id: Optional[str] = None
+    sku: Optional[str] = None
+    product_name: Optional[str] = None
+    unit: Optional[str] = "cái"
+    quantity: int = 1
+    unit_price: int = 0
+    discount_amount: int = 0
+    vat_amount: int = 0
+    subtotal: int = 0
+
+
 class InvoiceCreateRequest(BaseModel):
     client_request_id: Optional[str] = Field(None, description="ID định danh chống gửi trùng lặp")
-    dispatch_ids: List[str] = Field(..., min_length=1, description="Danh sách mã phiếu xuất kho cần lập hóa đơn")
+    dispatch_ids: Optional[List[str]] = Field(None, description="Danh sách mã phiếu xuất kho cần lập hóa đơn")
+    customer_id: Optional[str] = Field(None, description="Mã khách hàng")
+    customer_name: Optional[str] = None
+    customer_address: Optional[str] = None
+    customer_tax_code: Optional[str] = None
     notes: Optional[str] = Field(None, description="Ghi chú hóa đơn")
+    items: Optional[List[Any]] = None
 
 
 # ==============================================================================

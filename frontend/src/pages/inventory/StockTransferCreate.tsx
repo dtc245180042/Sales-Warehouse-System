@@ -24,6 +24,7 @@ import { Product } from '../../types/Product';
 import { StockTransferItem } from '../../types/StockTransfer';
 import { formatCurrency, formatNumber } from '../../utils/formatters';
 import { useToast } from '../../contexts/ToastContext';
+import { useAuth } from '../../contexts/AuthContext';
 
 const WAREHOUSE_OPTIONS = [
   'Kho Tổng Hà Nội',
@@ -134,6 +135,8 @@ const CostPriceInput: React.FC<{
 export const StockTransferCreate: React.FC = () => {
   const navigate = useNavigate();
   const { showToast } = useToast();
+  const { role } = useAuth();
+  const canViewCostPrice = ['Admin', 'SalesManager', 'WarehouseManager', 'Accountant', 'Director'].includes(role);
 
   const [sourceWarehouse, setSourceWarehouse] = useState<string>('Kho Tổng Hà Nội');
   const [destWarehouse, setDestWarehouse] = useState<string>('Kho Đà Nẵng');
@@ -545,9 +548,11 @@ export const StockTransferCreate: React.FC = () => {
                           >
                             Tồn tại kho: {avail} {p.unit}
                           </span>
-                          <p className="text-xs text-slate-400 mt-0.5 font-mono">
-                            Giá vốn: {formatCurrency(getInitialCostPrice(p, warehouseCostMap[p.id]))}
-                          </p>
+                          {canViewCostPrice && (
+                            <p className="text-xs text-slate-400 mt-0.5 font-mono">
+                              Giá vốn: {formatCurrency(getInitialCostPrice(p, warehouseCostMap[p.id]))}
+                            </p>
+                          )}
                         </div>
                       </div>
                     );
@@ -575,8 +580,12 @@ export const StockTransferCreate: React.FC = () => {
                       <th className="py-3 px-4">Sản phẩm</th>
                       <th className="py-3 px-4 text-center">Tồn kho nguồn</th>
                       <th className="py-3 px-4 text-center whitespace-nowrap min-w-[140px]">Số lượng chuyển</th>
-                      <th className="py-3 px-4 text-right min-w-[170px]">Đơn giá vốn</th>
-                      <th className="py-3 px-4 text-right min-w-[150px]">Thành tiền</th>
+                      {canViewCostPrice && (
+                        <>
+                          <th className="py-3 px-4 text-right min-w-[170px]">Đơn giá vốn</th>
+                          <th className="py-3 px-4 text-right min-w-[150px]">Thành tiền</th>
+                        </>
+                      )}
                       <th className="py-3 px-4 text-center w-12"></th>
                     </tr>
                   </thead>
@@ -617,6 +626,8 @@ export const StockTransferCreate: React.FC = () => {
                             )}
                           </td>
 
+                      {canViewCostPrice && (
+                        <>
                           <td className="py-3 px-4 text-right">
                             <div className="flex flex-col items-end">
                               <CostPriceInput
@@ -630,6 +641,8 @@ export const StockTransferCreate: React.FC = () => {
                           <td className="py-3 px-4 text-right font-semibold font-mono text-slate-900 dark:text-slate-100 text-sm">
                             {formatCurrency(subtotal)}
                           </td>
+                        </>
+                      )}
 
                           <td className="py-3 px-4 text-center">
                             <button
@@ -680,12 +693,14 @@ export const StockTransferCreate: React.FC = () => {
                 </span>
               </div>
 
-              <div className="flex justify-between items-center pt-3 border-t border-slate-100 dark:border-slate-800">
-                <span className="text-slate-500 dark:text-slate-400">Tổng giá trị vốn:</span>
-                <span className="text-lg font-bold text-slate-900 dark:text-slate-100">
-                  {formatCurrency(totalValue)}
-                </span>
-              </div>
+              {canViewCostPrice && (
+                <div className="flex justify-between items-center pt-3 border-t border-slate-100 dark:border-slate-800">
+                  <span className="text-slate-500 dark:text-slate-400">Tổng giá trị vốn:</span>
+                  <span className="text-lg font-bold text-slate-900 dark:text-slate-100">
+                    {formatCurrency(totalValue)}
+                  </span>
+                </div>
+              )}
             </div>
 
             {/* Quy trình điều chuyển minh họa */}

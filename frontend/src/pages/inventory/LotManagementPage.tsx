@@ -19,7 +19,9 @@ import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/common/Badge';
 import { Modal } from '../../components/common/Modal';
 import { lotService } from '../../services/lotService';
+import { productService } from '../../services/productService';
 import { ProductLot, FEFOSuggestionResponse } from '../../types/ProductLot';
+import { Product } from '../../types/Product';
 import { useToast } from '../../contexts/ToastContext';
 
 export const LotManagementPage: React.FC = () => {
@@ -28,6 +30,11 @@ export const LotManagementPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
+
+  // Products state for lot creation & FEFO
+  const [products, setProducts] = useState<Product[]>([]);
+  const [selectedProductId, setSelectedProductId] = useState<string>('');
+  const [selectedWarehouseId, setSelectedWarehouseId] = useState<number>(1);
 
   // FEFO Test Modal state
   const [isFefoModalOpen, setIsFefoModalOpen] = useState(false);
@@ -45,8 +52,15 @@ export const LotManagementPage: React.FC = () => {
   const loadData = async () => {
     try {
       setLoading(true);
-      const data = await lotService.getLots();
-      setLots(data);
+      const [lotsData, prodsData] = await Promise.all([
+        lotService.getLots(),
+        productService.getAll(),
+      ]);
+      setLots(lotsData);
+      setProducts(prodsData);
+      if (prodsData.length > 0 && !selectedProductId) {
+        setSelectedProductId(prodsData[0].id);
+      }
     } catch (err: any) {
       showToast(err.message || 'Lỗi tải danh sách lô hàng', 'error');
     } finally {
@@ -82,7 +96,8 @@ export const LotManagementPage: React.FC = () => {
   const handleTestFEFO = async () => {
     try {
       setIsSuggesting(true);
-      const res = await lotService.getFEFOSuggestions('PRD-001', 1, fefoQty);
+      const targetProdId = selectedProductId || (products.length > 0 ? products[0].id : 'PRD-001');
+      const res = await lotService.getFEFOSuggestions(targetProdId, selectedWarehouseId || 1, fefoQty);
       setFefoResult(res);
     } catch (err: any) {
       showToast(err.message, 'error');
@@ -96,18 +111,19 @@ export const LotManagementPage: React.FC = () => {
       showToast('Vui lòng nhập số lô', 'warning');
       return;
     }
+    const targetProdId = selectedProductId || (products.length > 0 ? products[0].id : 'PRD-001');
     try {
       await lotService.createLot({
-        lot_number: newLotNumber,
-        product_id: 'PRD-001',
-        warehouse_id: 1,
+        lot_number: newLotNumber.trim().toUpperCase(),
+        product_id: targetProdId,
+        warehouse_id: selectedWarehouseId || 1,
         mfg_date: newMfgDate,
         exp_date: newExpDate,
         initial_quantity: newQty,
         remaining_quantity: newQty,
         status: 'ACTIVE',
       });
-      showToast(`Tạo lô ${newLotNumber} thành công!`, 'success');
+      showToast(`Tạo lô ${newLotNumber.toUpperCase()} thành công!`, 'success');
       setIsAddLotOpen(false);
       setNewLotNumber('');
       loadData();
@@ -314,29 +330,47 @@ export const LotManagementPage: React.FC = () => {
         maxWidth="lg"
       >
         <div className="space-y-4 text-xs">
-          <div className="flex items-center gap-3 bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl">
-            <span className="font-medium text-slate-700 dark:text-slate-300">Số lượng cần xuất:</span>
-            <input
-              type="number"
-              min={1}
-              value={fefoQty === 0 ? '' : fefoQty}
-              placeholder="1"
-              onChange={(e) => {
-                const val = e.target.value;
-                setFefoQty(val === '' ? 0 : Math.max(0, parseInt(val, 10) || 0));
-              }}
-              onBlur={() => {
-                if (!fefoQty || fefoQty < 1) setFefoQty(1);
-              }}
-              className="w-24 p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-right font-bold"
-            />
-            <Button
-              variant="secondary"
-              onClick={handleTestFEFO}
-              isLoading={isSuggesting}
-            >
-              Phân bổ lại
-            </Button>
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl">
+            <div className="flex-1">
+              <label className="block text-[11px] font-medium text-slate-500 mb-1">Chọn sản phẩm test FEFO:</label>
+              <select
+                value={selectedProductId}
+                onChange={(e) => setSelectedProductId(e.target.value)}
+                className="w-full p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-medium"
+              >
+                {products.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name} ({p.sku})
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-[11px] font-medium text-slate-500 mb-1">Số lượng xuất:</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min={1}
+                  value={fefoQty === 0 ? '' : fefoQty}
+                  placeholder="1"
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setFefoQty(val === '' ? 0 : Math.max(0, parseInt(val, 10) || 0));
+                  }}
+                  onBlur={() => {
+                    if (!fefoQty || fefoQty < 1) setFefoQty(1);
+                  }}
+                  className="w-20 p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-right font-bold"
+                />
+                <Button
+                  variant="secondary"
+                  onClick={handleTestFEFO}
+                  isLoading={isSuggesting}
+                >
+                  Phân bổ lại
+                </Button>
+              </div>
+            </div>
           </div>
 
           {fefoResult && (
@@ -398,6 +432,36 @@ export const LotManagementPage: React.FC = () => {
         }
       >
         <div className="space-y-3.5 text-xs">
+          <div>
+            <label className="block font-medium text-slate-700 dark:text-slate-300 mb-1">
+              Sản phẩm áp dụng (*):
+            </label>
+            <select
+              value={selectedProductId}
+              onChange={(e) => setSelectedProductId(e.target.value)}
+              className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white"
+            >
+              {products.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name} ({p.sku}) - Tồn kho: {p.stock} {p.unit || 'đơn vị'}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block font-medium text-slate-700 dark:text-slate-300 mb-1">
+              Kho hàng lưu trữ (*):
+            </label>
+            <select
+              value={selectedWarehouseId}
+              onChange={(e) => setSelectedWarehouseId(Number(e.target.value))}
+              className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white"
+            >
+              <option value={1}>Kho Tổng Hà Nội (WH-01)</option>
+              <option value={2}>Kho Chi Nhánh Đà Nẵng (WH-02)</option>
+              <option value={3}>Kho Tổng TP.HCM (WH-03)</option>
+            </select>
+          </div>
           <div>
             <label className="block font-medium text-slate-700 dark:text-slate-300 mb-1">
               Số lô (Lot Number):

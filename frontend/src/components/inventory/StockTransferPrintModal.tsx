@@ -3,6 +3,7 @@ import { Printer, X } from 'lucide-react';
 import { Button } from '../common/Button';
 import { StockTransfer } from '../../types/StockTransfer';
 import { formatCurrency, formatNumber, formatDate, parseSafeDate } from '../../utils/formatters';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface StockTransferPrintModalProps {
   isOpen: boolean;
@@ -15,6 +16,8 @@ interface StockTransferPrintModalProps {
  * Mẫu 03 - XKNB ban hành theo Thông tư số 200/2014/TT-BTC
  */
 export const StockTransferPrintDoc: React.FC<{ transfer: StockTransfer }> = ({ transfer }) => {
+  const { role } = useAuth();
+  const canViewCostPrice = ['Admin', 'SalesManager', 'WarehouseManager', 'Accountant', 'Director'].includes(role);
   const totalTransferQty = transfer.items.reduce((sum, i) => sum + (i.transfer_quantity || 0), 0);
   const totalReceivedQty = transfer.items.reduce(
     (sum, i) => sum + (i.received_quantity ?? i.transfer_quantity ?? 0),
@@ -115,8 +118,12 @@ export const StockTransferPrintDoc: React.FC<{ transfer: StockTransfer }> = ({ t
             <th className="border border-black p-2 text-center w-14 font-bold">ĐVT</th>
             <th className="border border-black p-2 text-center w-20 font-bold">SL xuất</th>
             <th className="border border-black p-2 text-center w-20 font-bold">Thực nhận</th>
-            <th className="border border-black p-2 text-right w-24 font-bold">Đơn giá vốn</th>
-            <th className="border border-black p-2 text-right w-28 font-bold">Thành tiền</th>
+            {canViewCostPrice && (
+              <>
+                <th className="border border-black p-2 text-right w-24 font-bold">Đơn giá vốn</th>
+                <th className="border border-black p-2 text-right w-28 font-bold">Thành tiền</th>
+              </>
+            )}
           </tr>
         </thead>
         <tbody>
@@ -149,12 +156,16 @@ export const StockTransferPrintDoc: React.FC<{ transfer: StockTransfer }> = ({ t
                     '-'
                   )}
                 </td>
-                <td className="border border-black p-2 text-right">
-                  {formatCurrency(item.cost_price || 0)}
-                </td>
-                <td className="border border-black p-2 text-right font-semibold">
-                  {formatCurrency(subtotal)}
-                </td>
+                {canViewCostPrice && (
+                  <>
+                    <td className="border border-black p-2 text-right">
+                      {formatCurrency(item.cost_price || 0)}
+                    </td>
+                    <td className="border border-black p-2 text-right font-semibold">
+                      {formatCurrency(subtotal)}
+                    </td>
+                  </>
+                )}
               </tr>
             );
           })}
@@ -170,10 +181,14 @@ export const StockTransferPrintDoc: React.FC<{ transfer: StockTransfer }> = ({ t
             <td className="border border-black p-2 text-center font-bold">
               {transfer.status === 'completed' ? formatNumber(totalReceivedQty) : '-'}
             </td>
-            <td className="border border-black p-2 text-right">-</td>
-            <td className="border border-black p-2 text-right font-bold text-sm">
-              {formatCurrency(totalValue)}
-            </td>
+            {canViewCostPrice && (
+              <>
+                <td className="border border-black p-2 text-right">-</td>
+                <td className="border border-black p-2 text-right font-bold text-sm">
+                  {formatCurrency(totalValue)}
+                </td>
+              </>
+            )}
           </tr>
         </tbody>
       </table>

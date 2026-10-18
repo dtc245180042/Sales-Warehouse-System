@@ -25,8 +25,10 @@ import { PaymentPrintModal } from '../../components/payments/PaymentPrintModal';
 import { CurrencyInput } from '../../components/common/CurrencyInput';
 import { paymentService } from '../../services/paymentService';
 import { invoiceService } from '../../services/invoiceService';
+import { customerService } from '../../services/customerService';
 import { Payment, PaymentCreateRequest } from '../../types/Payment';
 import { Invoice } from '../../types/Invoice';
+import { Customer } from '../../types/Customer';
 import { useToast } from '../../contexts/ToastContext';
 import { formatCurrency } from '../../utils/formatters';
 import { initialCustomers } from '../../mock/customers';
@@ -35,6 +37,7 @@ export const PaymentListPage: React.FC = () => {
   const { showToast } = useToast();
   const [payments, setPayments] = useState<Payment[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>(() => customerService.getCached());
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [methodFilter, setMethodFilter] = useState<'ALL' | 'BANK_TRANSFER' | 'CASH' | 'DEBT_OFFSET'>('ALL');
@@ -66,12 +69,16 @@ export const PaymentListPage: React.FC = () => {
   const loadData = async () => {
     try {
       setLoading(true);
-      const [payList, invList] = await Promise.all([
+      const [payList, invList, custList] = await Promise.all([
         paymentService.getPayments(),
         invoiceService.getInvoices(),
+        customerService.getAll().catch(() => []),
       ]);
       setPayments(payList);
       setInvoices(invList);
+      if (Array.isArray(custList) && custList.length > 0) {
+        setCustomers(custList);
+      }
     } catch (err: any) {
       showToast(err.message || 'Lỗi tải danh sách phiếu thu', 'error');
     } finally {
@@ -97,13 +104,14 @@ export const PaymentListPage: React.FC = () => {
   }, []);
 
   const availableAgents = useMemo(() => {
-    return initialCustomers.map((c) => ({
+    const source = customers.length > 0 ? customers : initialCustomers;
+    return source.map((c) => ({
       id: c.id,
       name: c.name,
       code: c.code || c.id,
       phone: c.phone,
     }));
-  }, []);
+  }, [customers]);
 
   const filteredAgents = useMemo(() => {
     if (!customerSearch.trim()) return availableAgents;

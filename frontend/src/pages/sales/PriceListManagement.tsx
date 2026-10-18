@@ -631,13 +631,17 @@ export const PriceListManagement: React.FC = () => {
                             </>
                           )}
 
-                          {/* Approve (Only for authorized roles when pending) */}
-                          {pl.status === 'PENDING_APPROVAL' && canApprove && (
+                          {/* Approve (Only for authorized roles when pending or draft) */}
+                          {['PENDING_APPROVAL', 'DRAFT'].includes(pl.status) && canApprove && (
                             <button
                               type="button"
                               onClick={() => handleOpenApproveModal(pl)}
-                              className="p-1 rounded-lg text-amber-600 hover:text-amber-700 bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/60 dark:hover:bg-amber-900/60 transition-colors animate-pulse"
-                              title="Xét duyệt bảng giá dưới sàn"
+                              className={`p-1 rounded-lg transition-colors ${
+                                pl.status === 'PENDING_APPROVAL'
+                                  ? 'text-amber-600 hover:text-amber-700 bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/60 dark:hover:bg-amber-900/60 animate-pulse'
+                                  : 'text-emerald-600 hover:text-emerald-700 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:hover:bg-emerald-900/60'
+                              }`}
+                              title={pl.status === 'PENDING_APPROVAL' ? 'Xét duyệt bảng giá dưới sàn' : 'Phê duyệt & Áp dụng bảng giá'}
                             >
                               <ShieldCheck className="w-3.5 h-3.5" />
                             </button>

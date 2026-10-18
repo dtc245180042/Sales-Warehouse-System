@@ -58,7 +58,10 @@ export const POS: React.FC = () => {
   const [products, setProducts] = useState<Product[]>(() => productService.getCached());
   const [categories, setCategories] = useState<Category[]>(() => categoryService.getCachedList());
   const [customers, setCustomers] = useState<Customer[]>(() => customerService.getCached());
-  const [selectedCustomerId, setSelectedCustomerId] = useState<string>('CUS-010'); // Default Walk-in
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string>(() => {
+    const cached = customerService.getCached();
+    return cached.length > 0 ? cached[0].id : 'CUS-001';
+  });
   const [customerSearchQuery, setCustomerSearchQuery] = useState<string>('');
   const [isCustomerDropdownOpen, setIsCustomerDropdownOpen] = useState<boolean>(false);
   const customerSearchRef = useRef<HTMLDivElement>(null);
@@ -89,7 +92,17 @@ export const POS: React.FC = () => {
 
   useEffect(() => {
     productService.getAll().then(setProducts);
-    customerService.getAll().then(setCustomers);
+    customerService.getAll().then((custs) => {
+      if (Array.isArray(custs) && custs.length > 0) {
+        setCustomers(custs);
+        setSelectedCustomerId((prev) => {
+          if (!prev || prev === 'CUS-010' || !custs.some((c) => c.id === prev)) {
+            return custs[0].id;
+          }
+          return prev;
+        });
+      }
+    });
     categoryService.getList().then((cats) => {
       if (Array.isArray(cats)) {
         setCategories(cats);
@@ -357,11 +370,11 @@ export const POS: React.FC = () => {
 
     setIsPaying(true);
     try {
-      const customer = customers.find((c) => c.id === selectedCustomerId);
+      const customer = customers.find((c) => c.id === selectedCustomerId) || customers[0];
       const newOrder = await orderService.create({
-        customerId: customer?.id || 'CUS-010',
-        customerName: customer?.name || 'Khách Lẻ Tại Quầy',
-        customerPhone: customer?.phone || '0900000000',
+        customerId: customer?.id || 'CUS-001',
+        customerName: customer?.name || 'Khách Hàng',
+        customerPhone: customer?.phone || '0903112233',
         items: cart.map(({ image, stock, discountPct, discountAmt, neededForNext, nextTierPct, ...rest }) => rest),
         subtotal: rawSubtotal,
         discount: totalDiscount,
@@ -676,7 +689,7 @@ export const POS: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => {
-                    setSelectedCustomerId('CUS-010');
+                    setSelectedCustomerId(customers[0]?.id || 'CUS-001');
                     setCustomerSearchQuery('');
                     setIsCustomerDropdownOpen(false);
                   }}
@@ -881,7 +894,7 @@ export const POS: React.FC = () => {
               <input
                 type="number"
                 min={0}
-                step={10000}
+                step="any"
                 value={manualDiscount || ''}
                 onChange={(e) => setManualDiscount(Number(e.target.value))}
                 placeholder="0"

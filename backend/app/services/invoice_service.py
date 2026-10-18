@@ -131,12 +131,90 @@ class InvoiceService:
             )
 
         now_vn = datetime.now(TZ_VN)
-        clean_dispatch_ids = list(dict.fromkeys(d.strip() for d in payload.dispatch_ids if d and d.strip()))
+        clean_dispatch_ids = list(dict.fromkeys(d.strip() for d in payload.dispatch_ids if d and d.strip())) if payload.dispatch_ids else []
         if not clean_dispatch_ids:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Danh sách mã phiếu xuất kho không được rỗng.",
+            # Lập hóa đơn trực tiếp từ giao diện (không qua phiếu xuất kho)
+            cust_id = payload.customer_id or "CUS-001"
+            customer = db.query(Customer).filter(or_(Customer.id == cust_id, Customer.code == cust_id)).first()
+            invoice_id = cls._generate_invoice_id(db, now_vn)
+            invoice = Invoice(
+                id=invoice_id,
+                client_request_id=payload.client_request_id.strip() if payload.client_request_id else None,
+                customer_id=cust_id,
+                customer_name=payload.customer_name or (customer.name if customer else "Khách Hàng"),
+                customer_address=payload.customer_address or (customer.address if customer else None),
+                customer_tax_code=payload.customer_tax_code or getattr(customer, "tax_code", None),
+                subtotal_amount=0,
+                discount_amount=0,
+                vat_amount=0,
+                total_amount=0,
+                paid_amount=0,
+                remaining_amount=0,
+                status=InvoiceStatus.UNPAID.value,
+                issued_at=now_vn,
+                due_date=now_vn + timedelta(days=30),
+                issued_by=current_user.id,
+                notes=payload.notes,
+                payload_hash=None,
+                created_at=now_vn,
+                updated_at=now_vn,
             )
+            db.add(invoice)
+            db.flush()
+
+            total_subtotal = 0
+            total_discount = 0
+            total_vat = 0
+            total_amount = 0
+
+            raw_items = payload.items or []
+            for idx, itm in enumerate(raw_items, start=1):
+                qty = getattr(itm, 'quantity', None) if hasattr(itm, 'quantity') else (itm.get('quantity') if isinstance(itm, dict) else 1)
+                qty = qty or 1
+                u_price = getattr(itm, 'unit_price', None) if hasattr(itm, 'unit_price') else (itm.get('unit_price') if isinstance(itm, dict) else 0)
+                u_price = u_price or 0
+                disc = getattr(itm, 'discount_amount', None) if hasattr(itm, 'discount_amount') else (itm.get('discount_amount') if isinstance(itm, dict) else 0)
+                disc = disc or 0
+                vat = getattr(itm, 'vat_amount', None) if hasattr(itm, 'vat_amount') else (itm.get('vat_amount') if isinstance(itm, dict) else 0)
+                vat = vat or 0
+                line_sub = (qty * u_price) - disc + vat
+
+                total_subtotal += (qty * u_price)
+                total_discount += disc
+                total_vat += vat
+                total_amount += line_sub
+
+                p_id = getattr(itm, 'product_id', None) if hasattr(itm, 'product_id') else (itm.get('product_id') if isinstance(itm, dict) else None)
+                p_sku = getattr(itm, 'sku', None) if hasattr(itm, 'sku') else (itm.get('sku') if isinstance(itm, dict) else None)
+                p_name = getattr(itm, 'product_name', None) if hasattr(itm, 'product_name') else (itm.get('product_name') if isinstance(itm, dict) else None)
+                p_unit = getattr(itm, 'unit', None) if hasattr(itm, 'unit') else (itm.get('unit') if isinstance(itm, dict) else None)
+
+                inv_item = InvoiceItem(
+                    invoice_id=invoice.id,
+                    dispatch_id="DIRECT",
+                    dispatch_item_id=int(f"{invoice.id.replace('HD-', '').replace('-', '')}{idx}"),
+                    order_id="DIRECT",
+                    product_id=str(p_id or f"PROD-{idx}"),
+                    sku=str(p_sku or f"SKU-{idx}"),
+                    product_name=p_name or "Sản phẩm",
+                    unit=p_unit or "cái",
+                    quantity=qty,
+                    unit_price=int(u_price),
+                    discount_amount=int(disc),
+                    vat_amount=int(vat),
+                    subtotal=int(line_sub),
+                )
+                db.add(inv_item)
+
+            invoice.subtotal_amount = int(total_subtotal)
+            invoice.discount_amount = int(total_discount)
+            invoice.vat_amount = int(total_vat)
+            invoice.total_amount = int(total_amount)
+            invoice.remaining_amount = int(total_amount)
+            db.commit()
+            db.refresh(invoice)
+            hook_sau_khi_lap_hoa_don(db, invoice)
+            return invoice
 
         # 1. Kiểm tra Idempotency qua client_request_id (AC-7)
         payload_hash = hashlib.sha256(",".join(sorted(clean_dispatch_ids)).encode("utf-8")).hexdigest()

@@ -1110,43 +1110,6 @@ export const CreateOrder: React.FC = () => {
                 </div>
               )}
 
-              {/* Gợi ý chọn nhanh đại lý */}
-              <div className="flex items-center gap-1.5 flex-wrap pt-2">
-                <span className="text-[11px] text-slate-400 font-medium">Test nhanh:</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const match = customers.find((c) => c.id === 'CUS-ROLL-2' || c.code === 'CUS-ROLL-2');
-                    if (match) setSelectedCustomer(match);
-                  }}
-                  className="px-2 py-1 text-xs font-semibold rounded-lg bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 hover:bg-rose-100 active:scale-95 transition-all"
-                  title="Test kịch bản nợ quá hạn -> Bị chặn tạo đơn"
-                >
-                  CUS-ROLL-2 (Bị chặn quá hạn)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const match = customers.find((c) => c.id === 'CUS-ROLL-1' || c.code === 'CUS-ROLL-1');
-                    if (match) setSelectedCustomer(match);
-                  }}
-                  className="px-2 py-1 text-xs font-semibold rounded-lg bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 hover:bg-amber-100 active:scale-95 transition-all"
-                  title="Test kịch bản vượt hạn mức công nợ -> Cần duyệt"
-                >
-                  CUS-ROLL-1 (Vượt hạn mức)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const match = customers.find((c) => c.id === 'CUS-003' || c.code === 'KH-1003');
-                    if (match) setSelectedCustomer(match);
-                  }}
-                  className="px-2 py-1 text-xs font-semibold rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 active:scale-95 transition-all"
-                  title="Test kịch bản công nợ an toàn trong hạn mức"
-                >
-                  CUS-003 (F-Soft - An toàn)
-                </button>
-              </div>
 
               {/* Hướng dẫn khi chưa chọn đại lý */}
               <div className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-dashed border-slate-200 dark:border-slate-700 text-[11px] text-slate-500">
@@ -1426,25 +1389,6 @@ export const CreateOrder: React.FC = () => {
               )}
             </div>
 
-            {/* Gợi ý thêm nhanh sản phẩm (Quick-Add Chips) */}
-            <div className="flex flex-wrap items-center gap-1.5 pt-2">
-              <span className="text-[11px] font-semibold text-slate-500 shrink-0">Thêm nhanh:</span>
-              {[
-                { id: '1', name: 'iPhone 15 Pro', sku: 'IP15P-128-TI', price: 26990000, unit: 'cái', stock: 100 },
-                { id: '4', name: 'Tai nghe Sony', sku: 'SN-WH1000XM5-BK', price: 7990000, unit: 'cái', stock: 100 },
-              ].map((quick) => (
-                <button
-                  key={quick.id}
-                  type="button"
-                  onClick={() => handleAddProduct(quick as any)}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/80 hover:bg-blue-100 dark:hover:bg-blue-900 active:scale-95 transition-all shadow-2xs"
-                >
-                  <Plus className="w-3 h-3 text-blue-500" />
-                  <span>{quick.name}</span>
-                </button>
-              ))}
-            </div>
-
             {/* Product Suggestions Dropdown */}
             {isProductDropdownOpen && (
               <div className="absolute left-0 right-0 top-full mt-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl max-h-72 overflow-y-auto z-20 divide-y divide-slate-100 dark:divide-slate-800">
@@ -1522,31 +1466,15 @@ export const CreateOrder: React.FC = () => {
 
           {/* Items List */}
           {items.length === 0 ? (
-            <div className="py-8 px-4 text-center text-slate-400 dark:text-slate-500 border border-dashed border-slate-200 dark:border-slate-800 rounded-xl space-y-3">
+            <div className="py-8 px-4 text-center text-slate-400 dark:text-slate-500 border border-dashed border-slate-200 dark:border-slate-800 rounded-xl space-y-2">
               <Boxes className="w-9 h-9 mx-auto text-slate-300 dark:text-slate-600" />
               <div>
                 <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">
                   Chưa có mặt hàng nào trong đơn
                 </p>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  Bấm một trong các nút bên dưới để thêm nhanh sản phẩm vào đơn:
+                <p className="text-xs text-slate-400 mt-1">
+                  Vui lòng tìm kiếm sản phẩm theo tên hoặc mã SKU ở ô phía trên để thêm vào đơn hàng.
                 </p>
-              </div>
-              <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
-                {[
-                  { id: '1', name: 'iPhone 15 Pro 128GB', sku: 'IP15P-128-TI', price: 26990000, unit: 'cái', stock: 100 },
-                  { id: '4', name: 'Tai nghe Sony WH-1000XM5', sku: 'SN-WH1000XM5-BK', price: 7990000, unit: 'cái', stock: 100 },
-                ].map((quick) => (
-                  <button
-                    key={quick.id}
-                    type="button"
-                    onClick={() => handleAddProduct(quick as any)}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-blue-600 text-white shadow-xs hover:bg-blue-700 active:scale-95 transition-all"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>+ Thêm {quick.name}</span>
-                  </button>
-                ))}
               </div>
             </div>
           ) : (

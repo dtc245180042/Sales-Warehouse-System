@@ -31,7 +31,9 @@ import {
 } from 'recharts';
 import { categoryService } from '../../services/categoryService';
 import { orderService } from '../../services/orderService';
+import { productService } from '../../services/productService';
 import { Order } from '../../types/Order';
+import { Product } from '../../types/Product';
 import { formatCurrency, formatNumber } from '../../utils/formatters';
 import { exportToCSV } from '../../utils/csvExporter';
 import { Category, CategoryTree, CategoryProduct } from '../../types/Category';
@@ -58,6 +60,7 @@ export const CategoryManagement: React.FC = () => {
   const cachedTree = useMemo(() => categoryService.getCachedTree(), []);
   const cachedFlat = useMemo(() => categoryService.getCachedList(), []);
   const cachedOrders = useMemo(() => orderService.getCached(), []);
+  const cachedProducts = useMemo(() => productService.getCached(), []);
 
   const [categoriesTree, setCategoriesTree] = useState<CategoryTree[]>(() => cachedTree);
   const [flatCategories, setFlatCategories] = useState<Category[]>(() => cachedFlat);
@@ -79,6 +82,7 @@ export const CategoryManagement: React.FC = () => {
   // Tab chuyển đổi chế độ xem: 'products' (quản lý sản phẩm & chuyển nhóm) | 'analytics' (phân tích doanh số ngành hàng)
   const [activeTab, setActiveTab] = useState<'products' | 'analytics'>('products');
   const [orders, setOrders] = useState<Order[]>(() => cachedOrders);
+  const [products, setProducts] = useState<Product[]>(() => cachedProducts);
 
   // Nhóm hàng đang được chọn để xem danh sách sản phẩm
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
@@ -111,14 +115,18 @@ export const CategoryManagement: React.FC = () => {
     if (showSpinner) setIsLoading(true);
     setIsSyncing(true);
     try {
-      const [treeData, flatData, ordersData] = await Promise.all([
+      const [treeData, flatData, ordersData, productsData] = await Promise.all([
         categoryService.getTree(),
         categoryService.getList(),
         orderService.getAll().catch(() => []),
+        productService.getAll().catch(() => []),
       ]);
       setCategoriesTree(treeData);
       setFlatCategories(flatData);
       setOrders(ordersData);
+      if (productsData && productsData.length > 0) {
+        setProducts(productsData);
+      }
 
       // Tự động mở rộng các cấp 1 và 2 để hiển thị cấu trúc 3 cấp
       if (expandAll || expandedNodeIds.size === 0) {
@@ -200,7 +208,7 @@ export const CategoryManagement: React.FC = () => {
       directMap.set(c.id, { revenue: 0, soldQty: 0 });
     });
 
-    initialProducts.forEach((p) => {
+    products.forEach((p) => {
       const catId = p.categoryId;
       if (!catId) return;
       const realSales =
@@ -270,7 +278,7 @@ export const CategoryManagement: React.FC = () => {
     });
 
     return { map: resultMap, salesByCatId: resultMap, totalRevenue: totalCompanyRevenue };
-  }, [flatCategories, categoriesTree, productSalesMap]);
+  }, [flatCategories, categoriesTree, productSalesMap, products]);
 
   const toggleExpand = (id: number) => {
     setExpandedNodeIds((prev) => {
@@ -1464,7 +1472,7 @@ export const CategoryManagement: React.FC = () => {
                     </div>
                   </div>
                   <div className="mt-1.5 text-base sm:text-lg font-black text-slate-800 dark:text-slate-200">
-                    {initialProducts.length} Mặt hàng
+                    {products.length} Mặt hàng
                   </div>
                   <div className="text-[10px] text-slate-500 mt-0.5">
                     Đã gán vào cấu trúc cây ngành hàng

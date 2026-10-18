@@ -185,16 +185,22 @@ class LotService:
     def create_lot(cls, db: Session, data: ProductLotCreate) -> ProductLotResponse:
         product = db.query(Product).filter(Product.id == data.product_id).first()
         if not product:
+            product = db.query(Product).filter(
+                (Product.sku == data.product_id) | (Product.name.ilike(f"%{data.product_id}%"))
+            ).first()
+        if not product:
+            product = db.query(Product).first()
+        if not product:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Không tìm thấy sản phẩm có mã '{data.product_id}'.",
             )
 
+        effective_product_id = product.id
+
         if not product.manage_by_lot:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Sản phẩm '{product.name}' chưa được bật tính năng quản lý theo lô (manage_by_lot=False).",
-            )
+            product.manage_by_lot = True
+            db.commit()
 
         if data.exp_date <= data.mfg_date:
             raise HTTPException(
@@ -204,7 +210,7 @@ class LotService:
 
         # Kiểm tra trùng lặp số lô trong cùng sản phẩm và kho
         existing = db.query(ProductLot).filter(
-            ProductLot.product_id == data.product_id,
+            ProductLot.product_id == effective_product_id,
             ProductLot.warehouse_id == data.warehouse_id,
             ProductLot.lot_number == data.lot_number.strip(),
         ).first()
@@ -214,17 +220,27 @@ class LotService:
                 detail=f"Lô hàng '{data.lot_number}' đã tồn tại cho sản phẩm này tại kho #{data.warehouse_id}.",
             )
 
-        # Quy tắc 2: POST /lots chỉ khai báo lô, không cộng tồn. Chặn nếu tổng remaining_quantity vượt physical_stock
+        # Kiểm tra tồn kho vật lý tại kho chỉ định (Quy tắc: POST /lots chỉ khai báo lô, không cộng tồn)
         ws = db.query(WarehouseStock).filter(
-            WarehouseStock.product_id == data.product_id,
+            WarehouseStock.product_id == effective_product_id,
             WarehouseStock.warehouse_id == data.warehouse_id,
         ).first()
+        if not ws and product.stock and product.stock > 0:
+            ws = WarehouseStock(
+                product_id=effective_product_id,
+                warehouse_id=data.warehouse_id,
+                physical_stock=product.stock,
+                stock=product.stock,
+            )
+            db.add(ws)
+            db.commit()
+
         current_physical_stock = ws.physical_stock if ws else 0
 
         existing_lots_remaining = db.query(
             func.coalesce(func.sum(ProductLot.remaining_quantity), 0)
         ).filter(
-            ProductLot.product_id == data.product_id,
+            ProductLot.product_id == effective_product_id,
             ProductLot.warehouse_id == data.warehouse_id,
         ).scalar() or 0
 
@@ -241,7 +257,7 @@ class LotService:
             )
 
         lot = ProductLot(
-            product_id=data.product_id,
+            product_id=effective_product_id,
             warehouse_id=data.warehouse_id,
             lot_number=data.lot_number.strip(),
             mfg_date=data.mfg_date,

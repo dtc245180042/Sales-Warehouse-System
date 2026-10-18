@@ -28,6 +28,8 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { returnService } from '../../services/returnService';
 import { creditNoteService } from '../../services/creditNoteService';
+import { invoiceService } from '../../services/invoiceService';
+import { Invoice } from '../../types/Invoice';
 import {
   ReturnOrder,
   ReturnStatus,
@@ -69,7 +71,8 @@ export const ReturnListPage: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Create form state
-  const [createInvoiceId, setCreateInvoiceId] = useState('HD-2026-0000001');
+  const [availableInvoices, setAvailableInvoices] = useState<Invoice[]>([]);
+  const [createInvoiceId, setCreateInvoiceId] = useState('');
   const [createReason, setCreateReason] = useState<ReturnReason>('DEFECTIVE_PRODUCT');
   const [createNotes, setCreateNotes] = useState('');
   const [createItems, setCreateItems] = useState<
@@ -84,36 +87,52 @@ export const ReturnListPage: React.FC = () => {
       unit_price: number;
       subtotal: number;
     }[]
-  >([
-    {
-      invoice_item_id: 101,
-      product_name: 'iPhone 15 Pro Max 256GB Titan Tự Nhiên',
-      sku: 'IP15PM-256-TI',
-      lot_id: 10,
-      lot_number: 'LOT-2026-IP15P-01',
-      quantity: 1,
-      condition: 'GOOD',
-      unit_price: 26990000,
-      subtotal: 26990000,
-    },
-    {
-      invoice_item_id: 102,
-      product_name: 'Tai nghe Chống Ồn Sony WH-1000XM5 Đen',
-      sku: 'SNY-WH1000XM5',
-      lot_id: null,
-      lot_number: 'N/A',
-      quantity: 1,
-      condition: 'DAMAGED',
-      unit_price: 7990000,
-      subtotal: 7990000,
-    },
-  ]);
+  >([]);
+
+  const handleSelectInvoice = async (invId: string) => {
+    setCreateInvoiceId(invId);
+    if (!invId.trim()) {
+      setCreateItems([]);
+      return;
+    }
+    try {
+      const inv = await invoiceService.getInvoiceById(invId.trim());
+      if (inv && Array.isArray(inv.items) && inv.items.length > 0) {
+        setCreateItems(
+          inv.items.map((it, idx) => ({
+            invoice_item_id: it.id || it.dispatch_item_id || idx + 1,
+            product_name: it.product_name || it.sku || `Sản phẩm #${it.product_id}`,
+            sku: it.sku || 'N/A',
+            lot_id: null,
+            lot_number: 'N/A',
+            quantity: Math.min(it.quantity || 1, 1),
+            condition: 'GOOD',
+            unit_price: it.unit_price || 0,
+            subtotal: (it.unit_price || 0) * Math.min(it.quantity || 1, 1),
+          }))
+        );
+      } else {
+        setCreateItems([]);
+      }
+    } catch {
+      setCreateItems([]);
+    }
+  };
 
   const loadData = async () => {
     try {
       setLoading(true);
-      const data = await returnService.getReturns();
+      const [data, invs] = await Promise.all([
+        returnService.getReturns(),
+        invoiceService.getInvoices().catch(() => []),
+      ]);
       setReturns(data);
+      if (Array.isArray(invs) && invs.length > 0) {
+        setAvailableInvoices(invs);
+        if (invs[0]?.id) {
+          handleSelectInvoice(invs[0].id);
+        }
+      }
     } catch (err: any) {
       showToast(err.message || 'Lỗi tải danh sách phiếu trả hàng', 'error');
     } finally {
@@ -727,13 +746,28 @@ export const ReturnListPage: React.FC = () => {
               <label className="block font-medium text-slate-700 dark:text-slate-300 mb-1">
                 Mã hóa đơn gốc:
               </label>
-              <input
-                type="text"
-                value={createInvoiceId}
-                onChange={(e) => setCreateInvoiceId(e.target.value)}
-                placeholder="VD: HD-2026-0000001"
-                className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white font-mono"
-              />
+              {availableInvoices.length > 0 ? (
+                <select
+                  value={createInvoiceId}
+                  onChange={(e) => handleSelectInvoice(e.target.value)}
+                  className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white font-mono text-xs"
+                >
+                  <option value="">-- Chọn hóa đơn gốc --</option>
+                  {availableInvoices.map((inv) => (
+                    <option key={inv.id} value={inv.id}>
+                      {inv.id} - {inv.customer_name || inv.customer_id} ({formatCurrency(inv.total_amount)})
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type="text"
+                  value={createInvoiceId}
+                  onChange={(e) => handleSelectInvoice(e.target.value)}
+                  placeholder="VD: HD-2026-0000001"
+                  className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white font-mono"
+                />
+              )}
             </div>
             <div>
               <label className="block font-medium text-slate-700 dark:text-slate-300 mb-1">
@@ -782,12 +816,21 @@ export const ReturnListPage: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {createItems.map((item, idx) => (
-                    <tr key={idx}>
-                      <td className="py-2 px-3">
-                        <p className="font-medium text-slate-900 dark:text-white">{item.product_name}</p>
-                        <p className="text-[10px] text-slate-400">SKU: {item.sku}</p>
+                  {createItems.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="py-6 text-center text-slate-400">
+                        {createInvoiceId
+                          ? 'Hóa đơn đã chọn không có dòng mặt hàng nào khả dụng để trả.'
+                          : 'Vui lòng chọn hóa đơn gốc ở trên để xem danh sách sản phẩm.'}
                       </td>
+                    </tr>
+                  ) : (
+                    createItems.map((item, idx) => (
+                      <tr key={idx}>
+                        <td className="py-2 px-3">
+                          <p className="font-medium text-slate-900 dark:text-white">{item.product_name}</p>
+                          <p className="text-[10px] text-slate-400">SKU: {item.sku}</p>
+                        </td>
                       <td className="py-2 px-3 font-mono text-xs text-indigo-600 dark:text-indigo-400">
                         {item.lot_number}
                       </td>
@@ -838,8 +881,9 @@ export const ReturnListPage: React.FC = () => {
                         {formatCurrency(item.unit_price)}
                       </td>
                     </tr>
-                  ))}
-                </tbody>
+                  ))
+                )}
+              </tbody>
               </table>
             </div>
           </div>

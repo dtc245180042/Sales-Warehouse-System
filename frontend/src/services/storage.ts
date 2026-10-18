@@ -63,8 +63,41 @@ export function purgeLegacyMockStorage(): void {
         localStorage.removeItem(k);
       }
     });
-  } catch (err) {
+} catch (err) {
     console.error('Error purging legacy mock storage:', err);
+  }
+}
+
+/**
+ * Xóa sạch dữ liệu nghiệp vụ đã lưu tạm trong LocalStorage khi đăng xuất / chuyển phiên
+ */
+export function purgeSessionBusinessStorage(): void {
+  try {
+    const businessKeys = [
+      'kv_orders',
+      'kv_customers',
+      'kv_invoices',
+      'kv_payments',
+      'kv_stock_dispatches',
+      'kv_return_orders',
+      'kv_credit_notes',
+      'kv_debt_invoices',
+      'kv_delivery_trackings',
+      'kv_stock_transfers',
+      'kv_stock_adjustments',
+      'kv_sales_targets',
+      'kv_sales_target_audits',
+      'kv_stock_balances',
+      'kv_stock_in_receipts',
+      'kv_stock_out_receipts',
+      'kv_inventory_history',
+      'kv_product_lots',
+      'kv_agents',
+      'kv_users',
+    ];
+    businessKeys.forEach((key) => localStorage.removeItem(key));
+  } catch (err) {
+    console.error('Error purging session business storage:', err);
   }
 }
 

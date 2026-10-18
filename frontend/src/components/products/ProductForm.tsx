@@ -6,11 +6,13 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '../common/Button';
 import { CurrencyInput } from '../common/CurrencyInput';
 import { Product } from '../../types/Product';
+import { Supplier } from '../../types/Supplier';
 import { productCategories } from '../../mock/products';
 import { initialSuppliers } from '../../mock/suppliers';
 
 import { productService } from '../../services/productService';
 import { categoryService } from '../../services/categoryService';
+import { supplierService } from '../../services/supplierService';
 import { CategoryTree } from '../../types/Category';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
@@ -180,8 +182,13 @@ export const ProductForm: React.FC<ProductFormProps> = ({
   const [categoryOptions, setCategoryOptions] = React.useState<CategoryOption[]>([]);
   const [selectedCatId, setSelectedCatId] = React.useState<number | undefined>(initialValues?.categoryId);
   const [isLeafSelected, setIsLeafSelected] = React.useState<boolean>(true);
+  const [suppliers, setSuppliers] = React.useState<Supplier[]>(() => supplierService.getCached());
 
   React.useEffect(() => {
+    supplierService.getAll().then((data) => {
+      if (data && data.length > 0) setSuppliers(data);
+    });
+
     productService.getAll().then((products) => {
       const currentId = initialValues?.id !== undefined ? String(initialValues.id).trim() : undefined;
       const currentSku = initialValues?.sku ? initialValues.sku.trim().toUpperCase() : undefined;
@@ -267,9 +274,9 @@ export const ProductForm: React.FC<ProductFormProps> = ({
       name: initialValues?.name || '',
       sku: initialValues?.sku || '',
       barcode: initialValues?.barcode || `893850${Math.floor(100000 + Math.random() * 900000)}`,
-      category: initialValues?.category || productCategories[0]?.name || '',
+      category: initialValues?.category || productCategories[0]?.name || 'Khác',
       categoryId: initialValues?.categoryId,
-      supplierId: initialValues?.supplierId || initialSuppliers[0]?.id || '',
+      supplierId: initialValues?.supplierId || suppliers[0]?.id || initialSuppliers[0]?.id || '',
       costPrice: initialValues?.costPrice ?? 0,
       salePrice: initialValues?.salePrice ?? 0,
       stock: initialValues?.stock ?? 0,
@@ -288,9 +295,9 @@ export const ProductForm: React.FC<ProductFormProps> = ({
         name: initialValues.name || '',
         sku: initialValues.sku || '',
         barcode: initialValues.barcode || '',
-        category: initialValues.category || productCategories[0].name,
+        category: initialValues.category || productCategories[0]?.name || 'Khác',
         categoryId: initialValues.categoryId,
-        supplierId: initialValues.supplierId || initialSuppliers[0].id,
+        supplierId: initialValues.supplierId || suppliers[0]?.id || initialSuppliers[0]?.id || '',
         costPrice: initialValues.costPrice ?? 0,
         salePrice: initialValues.salePrice ?? 0,
         stock: initialValues.stock ?? 0,
@@ -304,7 +311,7 @@ export const ProductForm: React.FC<ProductFormProps> = ({
         setSelectedCatId(initialValues.categoryId);
       }
     }
-  }, [initialValues, isEdit, reset]);
+  }, [initialValues, isEdit, reset, suppliers]);
 
   const watchedSku = watch('sku');
 
@@ -335,7 +342,7 @@ export const ProductForm: React.FC<ProductFormProps> = ({
     const name = watch('name') || '';
     const cat = watch('category') || '';
     const supplierId = watch('supplierId') || '';
-    const supplier = initialSuppliers.find((s) => s.id === supplierId)?.name || '';
+    const supplier = (suppliers.find((s) => s.id === supplierId) || initialSuppliers.find((s) => s.id === supplierId))?.name || '';
     const unit = watch('unit') || '';
     const spec = watch('packagingSpecification') || '';
 
@@ -659,7 +666,7 @@ export const ProductForm: React.FC<ProductFormProps> = ({
                 className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
               >
                 <option value="">-- Chọn nhà cung cấp --</option>
-                {initialSuppliers.map((s) => (
+                {(suppliers.length > 0 ? suppliers : initialSuppliers).map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.name}
                   </option>

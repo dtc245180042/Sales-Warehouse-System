@@ -17,5 +17,6 @@ class InventoryAdjustment(Base):
     created_by = Column(String, nullable=False) # Người lập
     approved_by = Column(String, nullable=True) # Người duyệt
     status = Column(String, nullable=False, default="PENDING") # PENDING, APPROVED, REJECTED
+    details = Column(Text, nullable=True) # Dữ liệu chi tiết items & JSON
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

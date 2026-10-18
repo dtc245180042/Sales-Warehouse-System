@@ -189,59 +189,13 @@ export const orderService = {
       setStorageItem(STORAGE_KEY, memoryCacheOrders);
       return created;
     } catch (err: any) {
-      console.warn('[orderService] Backend error, creating locally:', err);
-      // Nếu có thông điệp lỗi cụ thể từ API (vd: 400 Bad Request), ném lỗi để UI hiển thị thông báo
-      if (err.response?.data?.detail) {
-        throw new Error(err.response.data.detail);
-      }
-      const orders = getStorageItem<Order[]>(STORAGE_KEY, initialOrders);
-      const newCode = `DH-2026-${String(orders.length + 1).padStart(3, '0')}`;
-      const now = new Date();
-      const dateFormatted = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-
-      const newOrder: Order = {
-        id: `ORD-${String(orders.length + 1).padStart(3, '0')}`,
-        code: newCode,
-        customerId: orderData.customerId,
-        customerName: orderData.customerName,
-        customerPhone: orderData.customerPhone || '',
-        customerAddress: orderData.customerAddress,
-        items: orderData.items,
-        subtotal: orderData.subtotal || 0,
-        discount: orderData.discount || 0,
-        tax: orderData.tax || 0,
-        total: orderData.total || 0,
-        paidAmount: orderData.paidAmount || 0,
-        changeAmount: orderData.changeAmount || 0,
-        paymentMethod: orderData.paymentMethod || 'cash',
-        paymentStatus: orderData.paymentStatus || 'paid',
-        status: orderData.status || 'pending',
-        staffId: orderData.staffId || 'NV-001',
-        staffName: orderData.staffName || 'Nhân viên kinh doanh',
-        note: orderData.note,
-        deliveryAddressId: orderData.deliveryAddressId,
-        deliveryAddressName: orderData.deliveryAddressName,
-        deliveryReceiverName: orderData.deliveryReceiverName,
-        deliveryPhone: orderData.deliveryPhone,
-        deliveryAddress: orderData.deliveryAddress,
-        deliveryNotes: orderData.deliveryNotes,
-        expectedDeliveryDate: orderData.expectedDeliveryDate,
-        createdAt: dateFormatted,
-        updatedAt: dateFormatted,
-      };
-
-      if (newOrder.status !== 'draft') {
-        for (const item of newOrder.items) {
-          try {
-            await productService.updateStock(item.productId, -item.quantity);
-          } catch (e) {
-            console.warn(e);
-          }
-        }
-      }
-
-      setStorageItem(STORAGE_KEY, [newOrder, ...orders]);
-      return newOrder;
+      console.warn('[orderService] Backend error on order creation:', err);
+      const errorMsg =
+        err.data?.detail ||
+        err.response?.data?.detail ||
+        err.message ||
+        (typeof err === 'string' ? err : 'Lỗi khi tạo đơn hàng');
+      throw new Error(errorMsg);
     }
   },
 

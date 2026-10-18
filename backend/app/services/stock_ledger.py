@@ -552,25 +552,42 @@ def get_ledger_pagination(
     limit: int = 50,
 ) -> Dict[str, Any]:
     """Lấy danh sách sổ tồn kho 3 cột có phân trang và bộ lọc tối ưu bằng SQL."""
-    target_wh_id = warehouse_id if warehouse_id and warehouse_id > 0 else 1
-    wh_code, wh_name = resolve_warehouse(db, target_wh_id)
-
-    # 1. Subquery tính tổng reserved_stock đang active theo warehouse
-    res_sub = (
-        db.query(
-            StockReservation.product_id.label("prod_id"),
-            func.coalesce(func.sum(StockReservation.reserved_quantity), 0).label("reserved_qty"),
+    if warehouse_id and warehouse_id > 0:
+        target_wh_id = warehouse_id
+        wh_code, wh_name = resolve_warehouse(db, target_wh_id)
+        res_sub = (
+            db.query(
+                StockReservation.product_id.label("prod_id"),
+                func.coalesce(func.sum(StockReservation.reserved_quantity), 0).label("reserved_qty"),
+            )
+            .filter(
+                StockReservation.status == "active",
+                StockReservation.warehouse == wh_name,
+            )
+            .group_by(StockReservation.product_id)
+            .subquery()
         )
-        .filter(
-            StockReservation.status == "active",
-            StockReservation.warehouse == wh_name,
+        wh_stock_filter = and_(
+            WarehouseStock.product_id == Product.id,
+            WarehouseStock.warehouse_id == target_wh_id,
         )
-        .group_by(StockReservation.product_id)
-        .subquery()
-    )
+    else:
+        target_wh_id = 0
+        wh_code = "ALL"
+        wh_name = "Tất cả kho"
+        res_sub = (
+            db.query(
+                StockReservation.product_id.label("prod_id"),
+                func.coalesce(func.sum(StockReservation.reserved_quantity), 0).label("reserved_qty"),
+            )
+            .filter(StockReservation.status == "active")
+            .group_by(StockReservation.product_id)
+            .subquery()
+        )
+        wh_stock_filter = (WarehouseStock.product_id == Product.id)
 
     # 2. Các biểu thức tính toán chuẩn mực
-    physical_expr = func.coalesce(WarehouseStock.physical_stock, 0)
+    physical_expr = func.coalesce(WarehouseStock.physical_stock, Product.stock, 0)
     reserved_expr = func.coalesce(res_sub.c.reserved_qty, 0)
     avail_diff = physical_expr - reserved_expr
     available_expr = case(
@@ -590,16 +607,13 @@ def get_ledger_pagination(
         )
         .outerjoin(
             WarehouseStock,
-            and_(
-                WarehouseStock.product_id == Product.id,
-                WarehouseStock.warehouse_id == target_wh_id,
-            ),
+            wh_stock_filter,
         )
         .outerjoin(
             res_sub,
             res_sub.c.prod_id == Product.id,
         )
-        .filter(Product.status == "ACTIVE")
+        .filter(or_(Product.is_active == True, func.upper(Product.status).in_(["ACTIVE", "LOW_STOCK", "IN_STOCK"])))
     )
 
     if category_id:
@@ -620,18 +634,22 @@ def get_ledger_pagination(
     rows = query.order_by(Product.name.asc()).offset((page - 1) * limit).limit(limit).all()
 
     items = []
+    seen_prod_ids = set()
     for prod, ws, res_qty, avail_qty, min_val in rows:
-        phys_qty = int(ws.physical_stock if ws and ws.physical_stock is not None else 0)
+        if prod.id in seen_prod_ids and target_wh_id == 0:
+            continue
+        seen_prod_ids.add(prod.id)
+        phys_qty = int(ws.physical_stock if ws and ws.physical_stock is not None else (prod.stock or 0))
         res_int = int(res_qty or 0)
-        avail_int = int(avail_qty or 0)
-        min_int = int(min_val or 10)
+        avail_int = max(0, phys_qty - res_int)
+        min_int = int(min_val or prod.min_stock or 10)
         is_low = bool(min_int > 0 and avail_int < min_int)
         items.append({
             "product_id": prod.id,
             "sku": prod.sku,
             "product_name": prod.name,
             "unit": prod.unit or "cái",
-            "warehouse_id": target_wh_id,
+            "warehouse_id": target_wh_id or (ws.warehouse_id if ws else 1),
             "warehouse_code": wh_code,
             "warehouse_name": wh_name,
             "physical_stock": phys_qty,

@@ -38,8 +38,9 @@ export const SalesReport: React.FC = () => {
   }, []);
 
   const totalSales = orders.reduce((s, o) => (o.status !== 'cancelled' ? s + o.total : s), 0);
-  const totalCompleted = orders.filter((o) => o.status === 'completed').length;
+  const totalCompleted = orders.filter((o) => o.status === 'completed' || o.status === 'closed').length;
   const totalCancelled = orders.filter((o) => o.status === 'cancelled').length;
+  const successRate = orders.length > 0 ? Math.round((totalCompleted / orders.length) * 100) : 0;
 
   const topCategories = React.useMemo(() => {
     // Bản đồ tra cứu ngành hàng / nhóm hàng từ danh mục sản phẩm
@@ -139,7 +140,7 @@ export const SalesReport: React.FC = () => {
           <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-2">
             {totalCompleted} <span className="text-sm font-normal text-slate-400">/ {orders.length} đơn</span>
           </p>
-          <span className="text-xs text-slate-400 mt-1 block">Tỷ lệ thành công 95%</span>
+          <span className="text-xs text-slate-400 mt-1 block">Tỷ lệ thành công {successRate}%</span>
         </div>
 
         <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-card">

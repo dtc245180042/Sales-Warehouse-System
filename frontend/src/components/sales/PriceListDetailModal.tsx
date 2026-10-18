@@ -293,7 +293,7 @@ export const PriceListDetailModal: React.FC<PriceListDetailModalProps> = ({
         {/* Footer Actions */}
         <div className="flex items-center justify-between px-6 py-4 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-100 dark:border-slate-800">
           <div className="flex items-center gap-2">
-            {priceList.status === 'PENDING_APPROVAL' && canApprove && (
+            {['PENDING_APPROVAL', 'DRAFT'].includes(priceList.status) && canApprove && (
               <Button
                 variant="primary"
                 size="sm"
@@ -303,7 +303,7 @@ export const PriceListDetailModal: React.FC<PriceListDetailModalProps> = ({
                 }}
                 className="bg-amber-500 hover:bg-amber-600 border-none text-xs gap-1.5"
               >
-                <ShieldCheck className="w-4 h-4" /> Xét duyệt bảng giá này
+                <ShieldCheck className="w-4 h-4" /> {priceList.status === 'DRAFT' ? 'Phê duyệt & Áp dụng' : 'Xét duyệt bảng giá này'}
               </Button>
             )}
             <Button

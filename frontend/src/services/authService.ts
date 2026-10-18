@@ -1,6 +1,6 @@
 import { User, UserRole } from '../types/User';
 import { apiClient } from '../api/client';
-import { getStorageItem, setStorageItem, removeStorageItem } from './storage';
+import { getStorageItem, setStorageItem, removeStorageItem, purgeSessionBusinessStorage } from './storage';
 import { validateVNPhoneNumber } from '../utils/phoneUtils';
 
 const STORAGE_KEYS = {
@@ -133,6 +133,7 @@ export const authService = {
       removeStorageItem(STORAGE_KEYS.AUTH_TOKEN);
       localStorage.removeItem('access_token');
       localStorage.removeItem('kv_session_expires_at');
+      purgeSessionBusinessStorage();
     }
   },
 

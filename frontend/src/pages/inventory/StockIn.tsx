@@ -23,9 +23,11 @@ import { formatCurrency } from '../../utils/formatters';
 import { initialSuppliers } from '../../mock/suppliers';
 import { unitConfigService } from '../../mock/unitConversions';
 import { productService } from '../../services/productService';
+import { supplierService } from '../../services/supplierService';
 import { inventoryService } from '../../services/inventoryService';
 import { stockReceiptService } from '../../services/stockReceiptService';
 import { Product, UnitConversion } from '../../types/Product';
+import { Supplier } from '../../types/Supplier';
 import { StockInItem } from '../../types/Inventory';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
@@ -76,9 +78,21 @@ export const StockIn: React.FC = () => {
   const { user } = useAuth();
   const { showToast } = useToast();
 
+  const getDefaultWarehouseId = (wh?: string) => {
+    if (!wh) return 1;
+    const norm = wh.toLowerCase();
+    if (norm.includes('đà nẵng') || norm.includes('da nang')) return 2;
+    if (norm.includes('hồ chí minh') || norm.includes('tp. hcm') || norm.includes('hcm')) return 3;
+    return 1;
+  };
+
   const [products, setProducts] = useState<Product[]>(() => productService.getCached());
-  const [supplierId, setSupplierId] = useState(initialSuppliers[0]?.id || '');
-  const [warehouseId, setWarehouseId] = useState<number>(1);
+  const [suppliers, setSuppliers] = useState<Supplier[]>(() => supplierService.getCached());
+  const [supplierId, setSupplierId] = useState<string>(() => {
+    const cached = supplierService.getCached();
+    return cached.length > 0 ? cached[0].id : (initialSuppliers[0]?.id || 'SUP-001');
+  });
+  const [warehouseId, setWarehouseId] = useState<number>(() => getDefaultWarehouseId(user?.warehouse));
   const [receiptCode, setReceiptCode] = useState(`PNK-${Date.now().toString().slice(-6)}`);
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [note, setNote] = useState('');
@@ -91,9 +105,21 @@ export const StockIn: React.FC = () => {
   const [submitMode, setSubmitMode] = useState<'draft' | 'confirm'>('confirm');
 
   useEffect(() => {
+    if (user?.warehouse) {
+      setWarehouseId(getDefaultWarehouseId(user.warehouse));
+    }
+  }, [user?.warehouse]);
+
+  useEffect(() => {
     productService.getAll().then((data) => {
       setProducts(data);
       setItems((prev) => (prev.length === 0 && data.length > 0 ? [buildItemState(data[0])] : prev));
+    });
+    supplierService.getAll().then((data) => {
+      if (data && data.length > 0) {
+        setSuppliers(data);
+        setSupplierId((prev) => (!prev || !data.some((s) => s.id === prev) ? data[0].id : prev));
+      }
     });
   }, []);
 
@@ -178,12 +204,12 @@ export const StockIn: React.FC = () => {
 
     setIsSubmitting(true);
     try {
-      const supplier = initialSuppliers.find((s) => s.id === supplierId);
+      const supplier = suppliers.find((s) => s.id === supplierId) || initialSuppliers.find((s) => s.id === supplierId);
       const whName = getWarehouseName(warehouseId);
 
       // 1. Gọi backend API: /api/v1/stock-receipts
       const apiPayload = {
-        supplier_id: parseInt(supplierId.replace(/\D/g, '') || '1', 10),
+        supplier_id: supplierId || suppliers[0]?.id || 'SUP-001',
         warehouse_id: warehouseId,
         receipt_code: receiptCode.trim() || `PNK-${Date.now().toString().slice(-6)}`,
         receipt_date: date,
@@ -207,40 +233,13 @@ export const StockIn: React.FC = () => {
         } else {
           showToast(`Đã lưu phiếu nhập kho nháp ${createdReceipt.receipt_code}! Tồn kho chưa thay đổi.`, 'info');
         }
+        navigate('/inventory');
       } catch (backendErr: any) {
-        console.warn('Backend API stock-receipts error, sync local state:', backendErr);
-        // Fallback local storage để đảm bảo trải nghiệm offline mượt mà
-        const stockInItems: StockInItem[] = items.map((it) => ({
-          productId: it.productId,
-          sku: it.sku,
-          name: it.name,
-          quantity: it.baseQty,
-          unitName: it.unitName,
-          unitRatio: it.unitRatio,
-          baseQty: it.baseQty,
-          costPrice: it.costPrice,
-          subtotal: it.subtotal,
-        }));
-
-        await inventoryService.createStockInReceipt({
-          supplierId,
-          supplierName: supplier?.name || 'Nhà cung cấp',
-          warehouse: whName,
-          date,
-          items: stockInItems,
-          totalQuantity: totalBaseQty,
-          totalAmount,
-          note,
-          status: mode === 'confirm' ? 'completed' : 'draft',
-          createdBy: user?.name || 'Thủ kho',
-        });
-        showToast(
-          mode === 'confirm' ? 'Tạo phiếu nhập kho thành công! Đã tăng tồn kho.' : 'Đã lưu phiếu nhập kho ở trạng thái nháp.',
-          'success'
-        );
+        console.warn('Backend API stock-receipts error:', backendErr);
+        const errMsg = backendErr?.data?.detail || backendErr?.response?.data?.detail || backendErr?.message || 'Có lỗi xảy ra khi tạo phiếu nhập kho';
+        showToast(errMsg, 'error');
+        return;
       }
-
-      navigate('/inventory');
     } catch (err: any) {
       showToast(err.response?.data?.detail || err.message || 'Có lỗi xảy ra', 'error');
     } finally {
@@ -440,7 +439,7 @@ export const StockIn: React.FC = () => {
                 className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 id="stockin-supplier"
               >
-                {initialSuppliers.map((s) => (
+                {(suppliers.length > 0 ? suppliers : initialSuppliers).map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.name}
                   </option>

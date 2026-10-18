@@ -81,8 +81,10 @@ import { StockTransferList } from '../pages/inventory/StockTransferList';
 import { StockTransferCreate } from '../pages/inventory/StockTransferCreate';
 import { StockTransferDetail } from '../pages/inventory/StockTransferDetail';
 
-// Quản lý lô hàng & Xuất kho điều phối
+// Quản lý lô hàng & Xuất kho điều phối & Soạn hàng
 import { LotManagementPage } from '../pages/inventory/LotManagementPage';
+import { PickingListsPage } from '../pages/inventory/PickingListsPage';
+import { PickingDetailPage } from '../pages/inventory/PickingDetailPage';
 import { StockDispatchListPage } from '../pages/inventory/StockDispatchListPage';
 import { BackorderListPage } from '../pages/inventory/BackorderListPage';
 
@@ -769,6 +771,22 @@ export const AppRoutes: React.FC = () => {
           element={
             <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
               <LotManagementPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/inventory/picking-lists"
+          element={
+            <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
+              <PickingListsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/inventory/picking-lists/:id"
+          element={
+            <ProtectedRoute allowedRoles={ALL_BACKOFFICE_ROLES}>
+              <PickingDetailPage />
             </ProtectedRoute>
           }
         />

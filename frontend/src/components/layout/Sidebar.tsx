@@ -320,6 +320,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
               allowedRoles: ALL_ROLES,
             },
             {
+              title: 'Phiếu soạn hàng',
+              path: '/inventory/picking-lists',
+              icon: <ClipboardList className="w-3.5 h-3.5" />,
+              allowedRoles: ALL_ROLES,
+            },
+            {
               title: 'Phiếu xuất kho điều phối',
               path: '/inventory/dispatches',
               icon: <Truck className="w-3.5 h-3.5" />,

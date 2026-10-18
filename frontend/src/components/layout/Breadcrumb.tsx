@@ -31,6 +31,7 @@ const routeNames: Record<string, string> = {
   returns: 'Phiếu Trả Hàng',
   'credit-notes': 'Chứng Từ Giảm Nợ',
   lots: 'Quản Lý Lô Hàng',
+  'picking-lists': 'Phiếu Soạn Hàng',
   dispatches: 'Điều Phối Xuất Kho',
   backorders: 'Nợ Hàng & Giao Bù',
   adjustments: 'Điều Chỉnh Tồn Kho',

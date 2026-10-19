@@ -1,26 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import {
-  ShieldAlert,
-  Sliders,
-  CheckCircle2,
-  AlertTriangle,
-  Ban,
-  Clock,
-  Play,
-  RefreshCw,
-  Save,
-  History,
-  Users,
-  TrendingDown,
-  FileCheck2,
-  Info,
-  DollarSign,
-  ChevronRight,
-  ShieldCheck,
-  Search,
-  Filter,
-} from 'lucide-react';
+
 import { PageContainer } from '../../components/layout/PageContainer';
 import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/common/Badge';
@@ -126,7 +106,6 @@ const renderLogTimestamp = (dateString?: string | null) => {
   return (
     <div>
       <div className="font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5 font-mono text-xs">
-        <Clock className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
         <span>{hours}:{minutes}:{seconds}</span>
       </div>
       <div className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1.5 mt-0.5 font-mono">
@@ -381,8 +360,7 @@ export const DebtRiskConfigPage: React.FC = () => {
           disabled={isRunningJob}
           className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-md shadow-emerald-500/20"
         >
-          <Play className={`w-4 h-4 mr-2 ${isRunningJob ? 'animate-spin' : ''}`} />
-          {isRunningJob ? 'Đang quét...' : '⚡ Chạy quét công nợ ngay'}
+          {isRunningJob ? 'Đang quét...' : ' ▶ Chạy quét công nợ ngay'}
         </Button>
       }
       breadcrumbs={[
@@ -392,8 +370,8 @@ export const DebtRiskConfigPage: React.FC = () => {
             activeTab === 'flagged'
               ? 'Đại lý bị gắn cờ'
               : activeTab === 'history'
-              ? 'Nhật ký Cảnh báo & Khóa/Mở bán'
-              : 'Cấu hình Cảnh báo & Khóa bán',
+                ? 'Nhật ký Cảnh báo & Khóa/Mở bán'
+                : 'Cấu hình Cảnh báo & Khóa bán',
           path: `/settings/debt-risk${activeTab !== 'config' ? `?tab=${activeTab}` : ''}`,
         },
       ]}
@@ -408,7 +386,6 @@ export const DebtRiskConfigPage: React.FC = () => {
                 <span className="text-2xl font-black text-slate-900 dark:text-slate-100">
                   {summary.total_customers}
                 </span>
-                <Users className="w-5 h-5 text-slate-400" />
               </div>
               <span className="text-[11px] text-slate-400 mt-1">Toàn bộ danh bạ</span>
             </div>
@@ -419,7 +396,6 @@ export const DebtRiskConfigPage: React.FC = () => {
                 <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400">
                   {summary.safe_count}
                 </span>
-                <CheckCircle2 className="w-5 h-5 text-emerald-500" />
               </div>
               <span className="text-[11px] text-emerald-600/80 dark:text-emerald-400/80 mt-1">Đúng hạn & trong mức</span>
             </div>
@@ -430,7 +406,6 @@ export const DebtRiskConfigPage: React.FC = () => {
                 <span className="text-2xl font-black text-amber-600 dark:text-amber-400">
                   {flaggedCustomers.filter((f) => f.is_flagged).length}
                 </span>
-                <ShieldAlert className="w-5 h-5 text-amber-500" />
               </div>
               <span className="text-[11px] text-amber-600/80 dark:text-amber-400/80 mt-1">Quá hạn hoặc vượt mức</span>
             </div>
@@ -441,7 +416,6 @@ export const DebtRiskConfigPage: React.FC = () => {
                 <span className="text-2xl font-black text-rose-600 dark:text-rose-400">
                   {summary.overdue_count + summary.high_risk_count}
                 </span>
-                <Clock className="w-5 h-5 text-rose-500" />
               </div>
               <span className="text-[11px] text-rose-600/80 dark:text-rose-400/80 mt-1">Quá ngày nợ cho phép</span>
             </div>
@@ -452,7 +426,6 @@ export const DebtRiskConfigPage: React.FC = () => {
                 <span className="text-2xl font-black text-red-600 dark:text-red-400">
                   {summary.blocked_count}
                 </span>
-                <Ban className="w-5 h-5 text-red-600" />
               </div>
               <span className="text-[11px] text-red-600/80 dark:text-red-400/80 mt-1">Từ chối tạo đơn mới</span>
             </div>
@@ -463,7 +436,6 @@ export const DebtRiskConfigPage: React.FC = () => {
                 <span className="text-2xl font-black text-purple-600 dark:text-purple-400">
                   {summary.requires_approval_count}
                 </span>
-                <FileCheck2 className="w-5 h-5 text-purple-600 dark:text-purple-400" />
               </div>
               <span className="text-[11px] text-purple-600/80 dark:text-purple-400/80 mt-1">Chuyển sang chờ duyệt</span>
             </div>
@@ -475,37 +447,31 @@ export const DebtRiskConfigPage: React.FC = () => {
           <nav className="flex space-x-6">
             <button
               onClick={() => setActiveTab('config')}
-              className={`pb-4 px-1 text-sm font-bold border-b-2 transition-colors flex items-center gap-2 ${
-                activeTab === 'config'
-                  ? 'border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400'
-                  : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400'
-              }`}
+              className={`pb-4 px-1 text-sm font-bold border-b-2 transition-colors flex items-center gap-2 ${activeTab === 'config'
+                ? 'border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400'
+                : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400'
+                }`}
             >
-              <Sliders className="w-4 h-4" />
               <span>Cấu hình Cảnh báo & Khóa bán</span>
             </button>
 
             <button
               onClick={() => setActiveTab('flagged')}
-              className={`pb-4 px-1 text-sm font-bold border-b-2 transition-colors flex items-center gap-2 ${
-                activeTab === 'flagged'
-                  ? 'border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400'
-                  : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400'
-              }`}
+              className={`pb-4 px-1 text-sm font-bold border-b-2 transition-colors flex items-center gap-2 ${activeTab === 'flagged'
+                ? 'border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400'
+                : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400'
+                }`}
             >
-              <ShieldAlert className="w-4 h-4" />
               <span>Đại lý bị gắn cờ ({flaggedCustomers.filter((f) => f.is_flagged).length})</span>
             </button>
 
             <button
               onClick={() => setActiveTab('history')}
-              className={`pb-4 px-1 text-sm font-bold border-b-2 transition-colors flex items-center gap-2 ${
-                activeTab === 'history'
-                  ? 'border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400'
-                  : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400'
-              }`}
+              className={`pb-4 px-1 text-sm font-bold border-b-2 transition-colors flex items-center gap-2 ${activeTab === 'history'
+                ? 'border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400'
+                : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400'
+                }`}
             >
-              <History className="w-4 h-4" />
               <span>Nhật ký Cảnh báo & Khóa/Mở bán</span>
             </button>
           </nav>
@@ -546,7 +512,6 @@ export const DebtRiskConfigPage: React.FC = () => {
             {/* Quy tắc 1: Khi Nợ Quá Hạn */}
             <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm space-y-5">
               <div className="flex items-center gap-2.5 border-b border-slate-100 dark:border-slate-800 pb-4">
-                <Clock className="w-5 h-5 text-rose-500" />
                 <div>
                   <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
                     Quy tắc xử lý khi Đại lý có Nợ Quá Hạn
@@ -561,21 +526,17 @@ export const DebtRiskConfigPage: React.FC = () => {
                 {/* Option 1: BLOCK */}
                 <div
                   onClick={() => canEditConfig && setActionOnOverdue('BLOCK')}
-                  className={`cursor-pointer rounded-2xl p-5 border-2 transition-all duration-200 flex flex-col justify-between ${
-                    actionOnOverdue === 'BLOCK'
-                      ? 'border-rose-500 bg-rose-50/50 dark:bg-rose-950/20 shadow-md shadow-rose-500/10'
-                      : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
-                  }`}
+                  className={`cursor-pointer rounded-2xl p-5 border-2 transition-all duration-200 flex flex-col justify-between ${actionOnOverdue === 'BLOCK'
+                    ? 'border-rose-500 bg-rose-50/50 dark:bg-rose-950/20 shadow-md shadow-rose-500/10'
+                    : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
+                    }`}
                 >
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
-                      <div className="p-2.5 rounded-xl bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-400">
-                        <Ban className="w-5 h-5" />
-                      </div>
                       <span className="text-xs font-bold text-rose-600 dark:text-rose-400">Nghiêm ngặt</span>
                     </div>
                     <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">
-                      🔒 Khóa Bán Hoàn Toàn
+                      Khóa Bán Hoàn Toàn
                     </h4>
                     <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
                       Từ chối tạo đơn mới. Nút tạo đơn bị vô hiệu hóa kèm cảnh báo đỏ. Nhân viên không thể gửi đơn cho đến
@@ -590,21 +551,17 @@ export const DebtRiskConfigPage: React.FC = () => {
                 {/* Option 2: REQUIRE_APPROVAL */}
                 <div
                   onClick={() => canEditConfig && setActionOnOverdue('REQUIRE_APPROVAL')}
-                  className={`cursor-pointer rounded-2xl p-5 border-2 transition-all duration-200 flex flex-col justify-between ${
-                    actionOnOverdue === 'REQUIRE_APPROVAL'
-                      ? 'border-amber-500 bg-amber-50/50 dark:bg-amber-950/20 shadow-md shadow-amber-500/10'
-                      : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
-                  }`}
+                  className={`cursor-pointer rounded-2xl p-5 border-2 transition-all duration-200 flex flex-col justify-between ${actionOnOverdue === 'REQUIRE_APPROVAL'
+                    ? 'border-amber-500 bg-amber-50/50 dark:bg-amber-950/20 shadow-md shadow-amber-500/10'
+                    : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
+                    }`}
                 >
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
-                      <div className="p-2.5 rounded-xl bg-amber-100 text-amber-600 dark:bg-amber-900/40 dark:text-amber-400">
-                        <FileCheck2 className="w-5 h-5" />
-                      </div>
                       <span className="text-xs font-bold text-amber-600 dark:text-amber-400">Linh hoạt</span>
                     </div>
                     <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">
-                      📝 Chuyển Sang Chờ Duyệt
+                      Chuyển Sang Chờ Duyệt
                     </h4>
                     <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
                       Vẫn cho phép tạo đơn nhưng trạng thái tự động chuyển sang "Chờ duyệt" (pending_approval). Bắt buộc
@@ -619,21 +576,19 @@ export const DebtRiskConfigPage: React.FC = () => {
                 {/* Option 3: WARNING_ONLY */}
                 <div
                   onClick={() => canEditConfig && setActionOnOverdue('WARNING_ONLY')}
-                  className={`cursor-pointer rounded-2xl p-5 border-2 transition-all duration-200 flex flex-col justify-between ${
-                    actionOnOverdue === 'WARNING_ONLY'
-                      ? 'border-blue-500 bg-blue-50/50 dark:bg-blue-950/20 shadow-md shadow-blue-500/10'
-                      : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
-                  }`}
+                  className={`cursor-pointer rounded-2xl p-5 border-2 transition-all duration-200 flex flex-col justify-between ${actionOnOverdue === 'WARNING_ONLY'
+                    ? 'border-blue-500 bg-blue-50/50 dark:bg-blue-950/20 shadow-md shadow-blue-500/10'
+                    : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
+                    }`}
                 >
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <div className="p-2.5 rounded-xl bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-400">
-                        <Info className="w-5 h-5" />
                       </div>
                       <span className="text-xs font-bold text-blue-600 dark:text-blue-400">Nhắc nhở</span>
                     </div>
                     <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">
-                      ⚠️ Chỉ Cảnh Báo
+                      Chỉ Cảnh Báo
                     </h4>
                     <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
                       Hiển thị thông báo nhắc nhở nợ quá hạn trên màn hình tạo đơn và hồ sơ đại lý, nhưng vẫn cho phép
@@ -650,7 +605,6 @@ export const DebtRiskConfigPage: React.FC = () => {
             {/* Quy tắc 2: Khi Vượt Hạn Mức Tiền */}
             <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm space-y-5">
               <div className="flex items-center gap-2.5 border-b border-slate-100 dark:border-slate-800 pb-4">
-                <TrendingDown className="w-5 h-5 text-purple-500" />
                 <div>
                   <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
                     Quy tắc xử lý khi Vượt Hạn Mức Tiền
@@ -665,21 +619,19 @@ export const DebtRiskConfigPage: React.FC = () => {
                 {/* Option 1: BLOCK */}
                 <div
                   onClick={() => canEditConfig && setActionOnCreditLimitExceeded('BLOCK')}
-                  className={`cursor-pointer rounded-2xl p-5 border-2 transition-all duration-200 flex flex-col justify-between ${
-                    actionOnCreditLimitExceeded === 'BLOCK'
-                      ? 'border-rose-500 bg-rose-50/50 dark:bg-rose-950/20 shadow-md shadow-rose-500/10'
-                      : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
-                  }`}
+                  className={`cursor-pointer rounded-2xl p-5 border-2 transition-all duration-200 flex flex-col justify-between ${actionOnCreditLimitExceeded === 'BLOCK'
+                    ? 'border-rose-500 bg-rose-50/50 dark:bg-rose-950/20 shadow-md shadow-rose-500/10'
+                    : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
+                    }`}
                 >
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <div className="p-2.5 rounded-xl bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-400">
-                        <Ban className="w-5 h-5" />
                       </div>
                       <span className="text-xs font-bold text-rose-600 dark:text-rose-400">Nghiêm ngặt</span>
                     </div>
                     <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">
-                      🔒 Khóa Bán Hoàn Toàn
+                      Khóa Bán Hoàn Toàn
                     </h4>
                     <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
                       Chặn tạo đơn ngay khi tổng nợ vượt hạn mức. Bắt buộc thu bớt nợ cũ hoặc thanh toán đơn mới trước
@@ -694,21 +646,17 @@ export const DebtRiskConfigPage: React.FC = () => {
                 {/* Option 2: REQUIRE_APPROVAL */}
                 <div
                   onClick={() => canEditConfig && setActionOnCreditLimitExceeded('REQUIRE_APPROVAL')}
-                  className={`cursor-pointer rounded-2xl p-5 border-2 transition-all duration-200 flex flex-col justify-between ${
-                    actionOnCreditLimitExceeded === 'REQUIRE_APPROVAL'
-                      ? 'border-amber-500 bg-amber-50/50 dark:bg-amber-950/20 shadow-md shadow-amber-500/10'
-                      : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
-                  }`}
+                  className={`cursor-pointer rounded-2xl p-5 border-2 transition-all duration-200 flex flex-col justify-between ${actionOnCreditLimitExceeded === 'REQUIRE_APPROVAL'
+                    ? 'border-amber-500 bg-amber-50/50 dark:bg-amber-950/20 shadow-md shadow-amber-500/10'
+                    : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
+                    }`}
                 >
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
-                      <div className="p-2.5 rounded-xl bg-amber-100 text-amber-600 dark:bg-amber-900/40 dark:text-amber-400">
-                        <FileCheck2 className="w-5 h-5" />
-                      </div>
                       <span className="text-xs font-bold text-amber-600 dark:text-amber-400">Khuyên dùng</span>
                     </div>
                     <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">
-                      📝 Chuyển Sang Chờ Duyệt
+                      Chuyển Sang Chờ Duyệt
                     </h4>
                     <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
                       Đơn hàng vượt hạn mức chuyển sang trạng thái "Chờ duyệt" (pending_approval). Hệ thống ghi rõ số tiền
@@ -723,21 +671,17 @@ export const DebtRiskConfigPage: React.FC = () => {
                 {/* Option 3: WARNING_ONLY */}
                 <div
                   onClick={() => canEditConfig && setActionOnCreditLimitExceeded('WARNING_ONLY')}
-                  className={`cursor-pointer rounded-2xl p-5 border-2 transition-all duration-200 flex flex-col justify-between ${
-                    actionOnCreditLimitExceeded === 'WARNING_ONLY'
-                      ? 'border-blue-500 bg-blue-50/50 dark:bg-blue-950/20 shadow-md shadow-blue-500/10'
-                      : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
-                  }`}
+                  className={`cursor-pointer rounded-2xl p-5 border-2 transition-all duration-200 flex flex-col justify-between ${actionOnCreditLimitExceeded === 'WARNING_ONLY'
+                    ? 'border-blue-500 bg-blue-50/50 dark:bg-blue-950/20 shadow-md shadow-blue-500/10'
+                    : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
+                    }`}
                 >
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
-                      <div className="p-2.5 rounded-xl bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-400">
-                        <Info className="w-5 h-5" />
-                      </div>
                       <span className="text-xs font-bold text-blue-600 dark:text-blue-400">Nhắc nhở</span>
                     </div>
                     <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">
-                      ⚠️ Chỉ Cảnh Báo
+                      Chỉ Cảnh Báo
                     </h4>
                     <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
                       Hiển thị cảnh báo số tiền vượt hạn mức trên luồng tạo đơn để nhân viên kinh doanh biết, nhưng không
@@ -869,7 +813,6 @@ export const DebtRiskConfigPage: React.FC = () => {
                   disabled={isSaving}
                   className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-8 shadow-lg shadow-blue-500/20"
                 >
-                  <Save className={`w-4 h-4 mr-2 ${isSaving ? 'animate-spin' : ''}`} />
                   {isSaving ? 'Đang lưu cấu hình...' : 'Lưu Thay Đổi Quy Tắc'}
                 </Button>
               </div>
@@ -883,18 +826,16 @@ export const DebtRiskConfigPage: React.FC = () => {
             {/* Filter toolbar */}
             <div className="p-4 sm:p-5 border-b border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row gap-4 justify-between items-center">
               <div className="relative w-full sm:w-96">
-                <Search className="w-4 h-4 absolute left-3.5 top-3 text-slate-400" />
                 <input
                   type="text"
                   placeholder="Tìm đại lý theo mã hoặc tên..."
                   value={searchFlagged}
                   onChange={(e) => setSearchFlagged(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-2.5 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
 
               <div className="flex items-center gap-2.5 w-full sm:w-auto">
-                <Filter className="w-4 h-4 text-slate-400" />
                 <select
                   value={filterRiskLevel}
                   onChange={(e) => setFilterRiskLevel(e.target.value)}
@@ -936,9 +877,8 @@ export const DebtRiskConfigPage: React.FC = () => {
                       return (
                         <tr
                           key={item.id}
-                          className={`hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors ${
-                            item.is_blocked ? 'bg-rose-50/20 dark:bg-rose-950/10' : ''
-                          }`}
+                          className={`hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors ${item.is_blocked ? 'bg-rose-50/20 dark:bg-rose-950/10' : ''
+                            }`}
                         >
                           <td className="py-4 px-6">
                             <div className="font-bold text-slate-900 dark:text-slate-100">
@@ -986,12 +926,10 @@ export const DebtRiskConfigPage: React.FC = () => {
                           <td className="py-4 px-6">
                             {item.is_blocked ? (
                               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-50 text-red-700 border border-red-200 dark:bg-red-950/40 dark:text-red-300 dark:border-red-900 font-bold text-xs">
-                                <Ban className="w-3.5 h-3.5 text-red-600" />
                                 <span>Khóa bán (Chặn đơn)</span>
                               </span>
                             ) : item.requires_approval ? (
                               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 text-amber-800 border border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900 font-bold text-xs">
-                                <FileCheck2 className="w-3.5 h-3.5 text-amber-600" />
                                 <span>Cần duyệt đơn</span>
                               </span>
                             ) : (
@@ -1005,7 +943,6 @@ export const DebtRiskConfigPage: React.FC = () => {
                               className="px-3 py-1.5 rounded-lg text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/40 text-xs font-bold transition"
                               title="Đánh giá lại ngay"
                             >
-                              <RefreshCw className="w-3.5 h-3.5 inline mr-1" />
                               Đánh giá lại
                             </button>
                           </td>
@@ -1040,20 +977,18 @@ export const DebtRiskConfigPage: React.FC = () => {
             {/* Filter Toolbar cho Tab 3 */}
             <div className="p-4 sm:p-5 border-b border-slate-100 dark:border-slate-800 flex flex-col lg:flex-row gap-4 justify-between items-stretch lg:items-center bg-slate-50/50 dark:bg-slate-800/30">
               <div className="relative w-full lg:w-96">
-                <Search className="w-4 h-4 absolute left-3.5 top-3 text-slate-400" />
                 <input
                   type="text"
                   placeholder="Tìm theo đại lý, mã hoặc lý do..."
                   value={searchHistory}
                   onChange={(e) => setSearchHistory(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-2.5 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
 
               <div className="flex flex-wrap items-center gap-2.5 w-full lg:w-auto">
                 {/* Bộ lọc Loại sự kiện */}
                 <div className="flex items-center gap-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3.5 py-2 rounded-xl text-xs shadow-sm">
-                  <Filter className="w-4 h-4 text-slate-400 flex-shrink-0" />
                   <span className="text-slate-500 dark:text-slate-400 font-medium text-xs whitespace-nowrap">Sự kiện:</span>
                   <select
                     value={historyEventTypeFilter}
@@ -1105,15 +1040,14 @@ export const DebtRiskConfigPage: React.FC = () => {
                         </td>
                         <td className="py-4 px-6">
                           <span
-                            className={`inline-flex items-center px-2.5 py-0.5 rounded-full font-bold text-xs border ${
-                              h.event_type === 'AUTO_LOCKED' || h.event_type === 'FLAGGED'
-                                ? 'bg-rose-100 text-rose-800 border-rose-300 dark:bg-rose-950 dark:text-rose-300'
-                                : h.event_type === 'AUTO_UNLOCKED' || h.event_type === 'UNFLAGGED'
+                            className={`inline-flex items-center px-2.5 py-0.5 rounded-full font-bold text-xs border ${h.event_type === 'AUTO_LOCKED' || h.event_type === 'FLAGGED'
+                              ? 'bg-rose-100 text-rose-800 border-rose-300 dark:bg-rose-950 dark:text-rose-300'
+                              : h.event_type === 'AUTO_UNLOCKED' || h.event_type === 'UNFLAGGED'
                                 ? 'bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950 dark:text-emerald-300'
                                 : h.event_type === 'REEVALUATED'
-                                ? 'bg-blue-100 text-blue-800 border-blue-300 dark:bg-blue-950 dark:text-blue-300'
-                                : 'bg-slate-100 text-slate-700 border-slate-300 dark:bg-slate-800 dark:text-slate-300'
-                            }`}
+                                  ? 'bg-blue-100 text-blue-800 border-blue-300 dark:bg-blue-950 dark:text-blue-300'
+                                  : 'bg-slate-100 text-slate-700 border-slate-300 dark:bg-slate-800 dark:text-slate-300'
+                              }`}
                           >
                             {getEventTypeLabel(h.event_type)}
                           </span>
@@ -1123,7 +1057,7 @@ export const DebtRiskConfigPage: React.FC = () => {
                             <span className="text-slate-400 font-medium">
                               {h.previous_risk_level ? getRiskLevelBadge(h.previous_risk_level).label : 'Chưa có'}
                             </span>
-                            <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+                            <span className="text-slate-400">→</span>
                             <span className="font-bold text-slate-900 dark:text-slate-100">
                               {getRiskLevelBadge(h.new_risk_level).label}
                             </span>

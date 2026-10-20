@@ -81,9 +81,28 @@ def dang_nhap(
             detail=f"Thiết bị này đã bị tạm khóa do nhập sai mật khẩu quá 5 lần để tránh mất và lộ thông tin. Vui lòng thử lại sau {phut_con_lai} phút."
         )
 
-    # Tìm kiếm theo username hoặc email
+    # Ánh xạ bí danh tài khoản demo tương thích ngược
+    ALIAS_MAP = {
+        "admin@warehouse.local": "admin",
+        "admin@khovanpro.vn": "admin",
+        "admin_pro": "admin",
+        "sales_mgr_pro": "sales_mgr",
+        "salesmanager@khovanpro.vn": "sales_mgr",
+        "sales_rep_pro": "sales_rep",
+        "salesstaff@khovanpro.vn": "sales_rep",
+        "wh_mgr_pro": "wh_mgr",
+        "whmanager@khovanpro.vn": "wh_mgr",
+        "wh_staff_pro": "warehouse",
+        "whstaff@khovanpro.vn": "warehouse",
+        "accountant_pro": "accountant",
+        "accountant@khovanpro.vn": "accountant",
+    }
+    dinh_danh_alias = ALIAS_MAP.get(dinh_danh.lower(), dinh_danh)
+
+    # Tìm kiếm theo username hoặc email (kèm bí danh nếu có)
     nguoi_dung = phien_db.query(User).filter(
-        (User.username == dinh_danh) | (User.email == dinh_danh)
+        (User.username == dinh_danh) | (User.email == dinh_danh) |
+        (User.username == dinh_danh_alias) | (User.email == dinh_danh_alias)
     ).first()
 
     # Nếu người dùng tồn tại trong hệ thống

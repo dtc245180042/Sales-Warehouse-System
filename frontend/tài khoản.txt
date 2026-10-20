@@ -1,16 +1,24 @@
-# DANH SÁCH TÀI KHOẢN HỆ THỐNG CHUẨN XÁC (ĐÃ KIỂM THỬ TRỰC TIẾP TRÊN CSDL VÀ API)
+# DANH SÁCH TÀI KHOẢN HỆ THỐNG CHUẨN XÁC (ĐÃ CẬP NHẬT & KIỂM THỬ THÀNH CÔNG)
 
-Đăng nhập tại: http://localhost:5173/login
+Link đăng nhập: http://localhost:5173/login
 (Có thể đăng nhập bằng Tên đăng nhập HOẶC Email)
 
-------------------------------------------------------------------------------------------------------------------------
-| STT | Tên đăng nhập | Mật khẩu        | Email                     | Họ và tên                     | Vai trò (Role)   | Kho phụ trách    |
-|-----|---------------|-----------------|---------------------------|-------------------------------|------------------|------------------|
-| 1   | admin         | Admin@123456    | admin@saleswarehouse.com  | Trần Quản Trị Hệ Thống        | Admin            | Toàn hệ thống    |
-| 2   | sales_mgr     | SalesMgr@1234   | sales_mgr@warehouse.local | Nguyễn Văn Giám Đốc Kinh Doanh| Sales Manager    | Toàn hệ thống    |
-| 3   | sales_rep     | SalesRep@1234   | sales_rep@warehouse.local | Lê Thị Nhân Viên Kinh Doanh   | Sales Rep        | Toàn hệ thống    |
-| 4   | wh_mgr        | WhMgr@1234      | wh_mgr@warehouse.local    | Phạm Văn Trưởng Kho           | WH Manager       | Kho Tổng Hà Nội  |
-| 5   | warehouse     | Warehouse@1234  | warehouse@warehouse.local | Hoàng Văn Thủ Kho             | Warehouse        | Kho Đà Nẵng      |
-| 6   | accountant    | Accountant@1234 | accountant@warehouse.local| Đỗ Thị Kế Toán Trưởng         | Accountant       | Toàn hệ thống    |
-| 7   | customer      | Customer@1234   | customer@warehouse.local  | Công ty TNHH Đại Lý Tuấn Phương | Customer       | Đại lý B2B       |
-------------------------------------------------------------------------------------------------------------------------
+* MẬT KHẨU CHUNG DỄ NHỚ CHO TẤT CẢ TÀI KHOẢN: 123456
+(Hệ thống hỗ trợ đồng thời mật khẩu chung 123456 và mật khẩu theo vai trò)
+
+---------------------------------------------------------------------------------------------------------------------------------
+| STT | Tên đăng nhập | Mật khẩu chung | Mật khẩu theo vai trò | Email chính                  | Email dự phòng             | Vai trò (Role)   | Kho phụ trách    |
+|-----|---------------|----------------|-----------------------|------------------------------|----------------------------|------------------|------------------|
+| 1   | admin         | 123456         | Admin@123456          | admin@saleswarehouse.com     | admin@warehouse.local      | Admin            | Toàn hệ thống    |
+| 2   | sales_mgr     | 123456         | SalesMgr@1234         | sales_mgr@warehouse.local    | salesmanager@khovanpro.vn  | Sales Manager    | Toàn hệ thống    |
+| 3   | sales_rep     | 123456         | SalesRep@1234         | sales_rep@warehouse.local    | salesstaff@khovanpro.vn    | Sales Rep        | Toàn hệ thống    |
+| 4   | wh_mgr        | 123456         | WhMgr@1234            | wh_mgr@warehouse.local       | whmanager@khovanpro.vn     | WH Manager       | Kho Tổng Hà Nội  |
+| 5   | warehouse     | 123456         | Warehouse@1234        | warehouse@warehouse.local    | whstaff@khovanpro.vn       | Warehouse        | Kho Đà Nẵng      |
+| 6   | accountant    | 123456         | Accountant@1234       | accountant@warehouse.local   | accountant@khovanpro.vn    | Accountant       | Toàn hệ thống    |
+| 7   | customer      | 123456         | Customer@1234         | customer@warehouse.local     | customer@warehouse.local   | Customer         | Đại lý B2B       |
+---------------------------------------------------------------------------------------------------------------------------------
+
+* Hướng dẫn nhanh khi đăng nhập:
+1. Nhập Tên đăng nhập (ví dụ: admin)
+2. Nhập Mật khẩu: 123456 (hoặc Admin@123456)
+3. Nhấn "Đăng nhập hệ thống"

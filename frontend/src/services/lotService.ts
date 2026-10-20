@@ -14,11 +14,10 @@ export const lotService = {
     search?: string;
   }): Promise<ProductLot[]> => {
     try {
-      const res = await apiClient.get<ProductLot[]>('/lots', { params });
-      if (Array.isArray(res.data)) {
-        setStorageItem(STORAGE_KEY, res.data);
-        return res.data;
-      }
+      const res = await apiClient.get<any>('/lots', { params });
+      const items = Array.isArray(res.data) ? res.data : (res.data?.items || []);
+      setStorageItem(STORAGE_KEY, items);
+      return items;
     } catch (err) {
       console.warn('[lotService] Fallback to demo lots:', err);
     }

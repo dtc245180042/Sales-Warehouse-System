@@ -37,6 +37,7 @@ import { Agent } from '../../types/Agent';
 import { useToast } from '../../contexts/ToastContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { OrderPrintModal } from '../../components/orders/OrderPrintModal';
+import { DeliveryConfirmationModal } from '../../components/delivery/DeliveryConfirmationModal';
 
 const REGION_OPTIONS = ['all', 'Miền Nam', 'Miền Bắc', 'Miền Trung'];
 
@@ -82,6 +83,7 @@ export const Orders: React.FC = () => {
   const [endDate, setEndDate] = useState<string>(urlEndDate);
   const [cancelOrderId, setCancelOrderId] = useState<string | null>(null);
   const [printOrder, setPrintOrder] = useState<Order | null>(null);
+  const [podOrder, setPodOrder] = useState<Order | null>(null);
 
   // SCRUM-613: Nhân viên kinh doanh (SalesStaff) chỉ xem đơn của các đại lý được phân công hoặc do mình tạo
   const isSalesStaff = role === 'SalesStaff';
@@ -683,6 +685,16 @@ export const Orders: React.FC = () => {
       className: 'text-right',
       render: (o) => (
         <div className="flex items-center justify-end gap-1.5">
+          {['shipping', 'DISPATCHED'].includes(o.status) && (
+            <button
+              onClick={() => setPodOrder(o)}
+              className="px-2 py-1 rounded-lg text-emerald-700 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/50 dark:text-emerald-300 dark:hover:bg-emerald-900/60 transition-colors flex items-center gap-1 text-xs font-semibold"
+              title="Cập nhật giao hàng & Upload chứng từ POD (S6-08)"
+            >
+              <Truck className="w-3.5 h-3.5" />
+              <span>Giao hàng (POD)</span>
+            </button>
+          )}
           <Link
             to={`/orders/${o.id}`}
             className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
@@ -1143,6 +1155,16 @@ export const Orders: React.FC = () => {
         onClose={() => setPrintOrder(null)}
         orderId={printOrder?.id || null}
         orderCode={printOrder?.code}
+      />
+
+      <DeliveryConfirmationModal
+        isOpen={!!podOrder}
+        onClose={() => setPodOrder(null)}
+        order={podOrder}
+        onSuccess={() => {
+          setPodOrder(null);
+          loadOrders(false, true);
+        }}
       />
     </PageContainer>
   );

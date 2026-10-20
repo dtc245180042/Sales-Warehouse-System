@@ -30,6 +30,7 @@ export const Login: React.FC = () => {
   const {
     register,
     handleSubmit,
+    setValue,
     formState: { errors },
   } = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
@@ -39,6 +40,11 @@ export const Login: React.FC = () => {
       rememberMe: false,
     },
   });
+
+  const handleQuickLogin = (username: string) => {
+    setValue('email', username, { shouldValidate: true });
+    setValue('password', '123456', { shouldValidate: true });
+  };
 
   const onSubmit = async (data: LoginFormData) => {
     setIsLoading(true);
@@ -184,6 +190,7 @@ export const Login: React.FC = () => {
         {/* Submit button */}
         <Button
           type="submit"
+          id="login-submit-button"
           variant="primary"
           size="lg"
           isLoading={isLoading}
@@ -192,6 +199,71 @@ export const Login: React.FC = () => {
         >
           Đăng nhập hệ thống
         </Button>
+
+        {/* Quick Demo Accounts */}
+        <div className="pt-5 border-t border-slate-100 dark:border-slate-800">
+          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2.5">
+            ⚡ Tài khoản kiểm thử nhanh (Mật khẩu: 123456):
+          </p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 text-xs">
+            <button
+              type="button"
+              id="quick-admin"
+              onClick={() => handleQuickLogin('admin')}
+              className="px-2 py-1.5 rounded-lg bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 font-semibold hover:bg-purple-100 text-left border border-purple-200 dark:border-purple-800"
+            >
+              👑 Admin
+            </button>
+            <button
+              type="button"
+              id="quick-sales-mgr"
+              onClick={() => handleQuickLogin('sales_mgr')}
+              className="px-2 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 font-semibold hover:bg-blue-100 text-left border border-blue-200 dark:border-blue-800"
+            >
+              💼 QL Bán Hàng
+            </button>
+            <button
+              type="button"
+              id="quick-sales-rep"
+              onClick={() => handleQuickLogin('sales_rep')}
+              className="px-2 py-1.5 rounded-lg bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 font-semibold hover:bg-sky-100 text-left border border-sky-200 dark:border-sky-800"
+            >
+              🎯 Sales Rep
+            </button>
+            <button
+              type="button"
+              id="quick-wh-mgr"
+              onClick={() => handleQuickLogin('wh_mgr')}
+              className="px-2 py-1.5 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 font-semibold hover:bg-amber-100 text-left border border-amber-200 dark:border-amber-800"
+            >
+              📦 QL Kho (HN)
+            </button>
+            <button
+              type="button"
+              id="quick-warehouse"
+              onClick={() => handleQuickLogin('warehouse')}
+              className="px-2 py-1.5 rounded-lg bg-orange-50 dark:bg-orange-950/40 text-orange-700 dark:text-orange-300 font-semibold hover:bg-orange-100 text-left border border-orange-200 dark:border-orange-800"
+            >
+              🏷️ Thủ Kho (ĐN)
+            </button>
+            <button
+              type="button"
+              id="quick-accountant"
+              onClick={() => handleQuickLogin('accountant')}
+              className="px-2 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 font-semibold hover:bg-emerald-100 text-left border border-emerald-200 dark:border-emerald-800"
+            >
+              💰 Kế Toán
+            </button>
+            <button
+              type="button"
+              id="quick-customer"
+              onClick={() => handleQuickLogin('customer')}
+              className="px-2 py-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 font-semibold hover:bg-indigo-100 text-left border border-indigo-200 dark:border-indigo-800"
+            >
+              🤝 Đại Lý B2B
+            </button>
+          </div>
+        </div>
       </form>
     </div>
   );

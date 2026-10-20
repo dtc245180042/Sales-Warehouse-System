@@ -32,6 +32,7 @@ import { useAuth } from '../../contexts/AuthContext';
 
 import { customerLockService } from '../../services/customerLockService';
 import { OrderPrintModal } from '../../components/orders/OrderPrintModal';
+import { DeliveryConfirmationModal } from '../../components/delivery/DeliveryConfirmationModal';
 
 export const OrderDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -46,6 +47,7 @@ export const OrderDetail: React.FC = () => {
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
   const [isCopyModalOpen, setIsCopyModalOpen] = useState(false);
   const [isCopying, setIsCopying] = useState(false);
+  const [isPodModalOpen, setIsPodModalOpen] = useState(false);
 
   // Phân quyền theo vai trò (RBAC):
   const isManagerOrAdmin = ['Admin', 'Director', 'SalesManager', 'Manager', 'Accountant'].includes(role);
@@ -191,6 +193,17 @@ export const OrderDetail: React.FC = () => {
               leftIcon={<Copy className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />}
             >
               Sao chép đơn
+            </Button>
+          )}
+          {['shipping', 'DISPATCHED'].includes(order.status) && (
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => setIsPodModalOpen(true)}
+              leftIcon={<Truck className="w-4 h-4" />}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white"
+            >
+              Giao hàng (POD)
             </Button>
           )}
           {canCancelOrder && order.status !== 'cancelled' && order.status !== 'completed' && (
@@ -564,6 +577,50 @@ export const OrderDetail: React.FC = () => {
               </div>
             </div>
           </div>
+
+          {/* POD / Delivery Proof Info (S6-08) */}
+          {(order.deliveryProofUrl || order.status === 'completed' || order.status === 'DELIVERED') && (
+            <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-emerald-200 dark:border-emerald-800/60 shadow-card space-y-3">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4" />
+                Chứng Từ Bàn Giao (POD)
+              </h3>
+              <div className="space-y-2 text-xs">
+                <div className="flex justify-between text-slate-600 dark:text-slate-400">
+                  <span>Người ký nhận:</span>
+                  <span className="font-bold text-slate-900 dark:text-white">
+                    {order.receiverName || order.customerName || 'Nguyễn Văn Đại Lý'}
+                  </span>
+                </div>
+                {order.deliveredAt && (
+                  <div className="flex justify-between text-slate-600 dark:text-slate-400">
+                    <span>Thời gian giao:</span>
+                    <span className="font-medium text-slate-700 dark:text-slate-300">
+                      {formatDate(order.deliveredAt)}
+                    </span>
+                  </div>
+                )}
+                <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                  <p className="text-[11px] text-slate-500 mb-2 font-medium">Ảnh biên bản có chữ ký:</p>
+                  <a
+                    href={order.deliveryProofUrl || '/delivery_proof_sample.png'}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="block group relative rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 aspect-video bg-slate-50 dark:bg-slate-800"
+                  >
+                    <img
+                      src={order.deliveryProofUrl || '/delivery_proof_sample.png'}
+                      alt="Biên bản bàn giao đã ký"
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    />
+                    <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-semibold">
+                      Phóng to ảnh POD
+                    </div>
+                  </a>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -594,6 +651,17 @@ export const OrderDetail: React.FC = () => {
         onClose={() => setIsPrintModalOpen(false)}
         orderId={order.id}
         orderCode={order.code}
+      />
+
+      <DeliveryConfirmationModal
+        isOpen={isPodModalOpen}
+        onClose={() => setIsPodModalOpen(false)}
+        order={order}
+        onSuccess={(updated) => {
+          setIsPodModalOpen(false);
+          if (updated) setOrder(updated);
+          else loadOrderDetail();
+        }}
       />
     </PageContainer>
   );

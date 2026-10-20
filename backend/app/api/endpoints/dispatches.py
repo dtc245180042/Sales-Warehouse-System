@@ -5,6 +5,8 @@ from sqlalchemy.orm import Session
 from app.core.database import lay_phien_db
 from app.core.dependencies import lay_nguoi_dung_hien_tai
 from app.models.auth import User
+from app.models.stock_dispatch import StockDispatch, StockDispatchItem
+from app.models.order import Order
 from app.schemas.dispatch import (
     StockDispatchCreate,
     StockDispatchResponse,
@@ -39,6 +41,42 @@ def tao_va_xac_nhan_phieu_xuat(
         payload=data,
         current_user=current_user,
     )
+
+
+@router.get(
+    "/backorders",
+    status_code=status.HTTP_200_OK,
+    summary="Danh sách hàng nợ / cần giao bù (Backorders - S6-05)",
+)
+def danh_sach_no_hang(
+    current_user: User = Depends(lay_nguoi_dung_hien_tai),
+    db: Session = Depends(lay_phien_db),
+):
+    items = (
+        db.query(StockDispatchItem, StockDispatch)
+        .join(StockDispatch, StockDispatchItem.dispatch_id == StockDispatch.id)
+        .filter(StockDispatchItem.shortfall_quantity > 0)
+        .all()
+    )
+    res = []
+    for it, disp in items:
+        order = db.query(Order).filter(Order.id == disp.order_id).first()
+        res.append({
+            "id": f"BO-{it.id}",
+            "dispatch_id": disp.id,
+            "order_id": disp.order_id,
+            "order_code": order.code if order else disp.order_id,
+            "customer_name": disp.customer_name or (order.customer_name if order else "Đại lý"),
+            "product_id": it.product_id,
+            "product_name": it.product_name,
+            "sku": it.sku,
+            "ordered_quantity": it.ordered_quantity,
+            "dispatched_quantity": it.dispatched_quantity,
+            "shortfall_quantity": it.shortfall_quantity,
+            "status": "PENDING_RESTOCK",
+            "created_at": disp.created_at.isoformat() if disp.created_at else None,
+        })
+    return res
 
 
 @router.get(

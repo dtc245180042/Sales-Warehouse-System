@@ -83,10 +83,10 @@ import { StockTransferDetail } from '../pages/inventory/StockTransferDetail';
 
 // Quản lý lô hàng & Xuất kho điều phối & Soạn hàng
 import { LotManagementPage } from '../pages/inventory/LotManagementPage';
-import { PickingListsPage } from '../pages/inventory/PickingListsPage';
-import { PickingDetailPage } from '../pages/inventory/PickingDetailPage';
 import { StockDispatchListPage } from '../pages/inventory/StockDispatchListPage';
 import { BackorderListPage } from '../pages/inventory/BackorderListPage';
+import { PickingListsPage } from '../pages/inventory/PickingListsPage';
+import { PickingDetailPage } from '../pages/inventory/PickingDetailPage';
 
 // Hóa đơn VAT & Phiếu thu công nợ
 import { InvoiceListPage } from '../pages/invoices/InvoiceListPage';
@@ -797,6 +797,10 @@ export const AppRoutes: React.FC = () => {
               <StockDispatchListPage />
             </ProtectedRoute>
           }
+        />
+        <Route
+          path="/inventory/dispatch"
+          element={<Navigate to="/inventory/dispatches" replace />}
         />
         <Route
           path="/inventory/backorders"

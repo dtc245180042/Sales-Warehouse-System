@@ -23,7 +23,7 @@ router = APIRouter(prefix="/stock-ledger", tags=["Sổ Tồn Kho & Thẻ Kho T�
 )
 def get_stock_balances(
     page: int = Query(1, ge=1, description="Số trang"),
-    size: int = Query(20, ge=1, le=100, description="Kích thước trang"),
+    size: int = Query(20, ge=1, le=500, description="Kích thước trang"),
     warehouse_id: Optional[int] = Query(None, description="Lọc theo ID kho hàng"),
     category_id: Optional[int] = Query(None, description="Lọc theo ID nhóm hàng"),
     stock_status: Optional[str] = Query(None, description="Lọc trạng thái: all, in_stock, out_of_stock, low_stock"),

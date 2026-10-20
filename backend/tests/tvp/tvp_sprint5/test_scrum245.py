@@ -1,5 +1,8 @@
 import pytest
-from backend.app.api import warehouse_api, location_api, warehouse_validation, agency_warehouse_api
+try:
+    from app.api import warehouse_api, location_api, warehouse_validation, agency_warehouse_api
+except ImportError:
+    from backend.app.api import warehouse_api, location_api, warehouse_validation, agency_warehouse_api
 
 def test_scrum_534_create_and_list_warehouse():
     wh_data = warehouse_api.WarehouseCreate(

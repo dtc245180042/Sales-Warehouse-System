@@ -3,7 +3,7 @@ from fastapi import APIRouter, Query
 from typing import List, Optional
 from app.schemas.inventory_turnover import InventoryTurnoverResponse
 
-router = APIRouter(prefix="/reports/inventory-turnover", tags=["Inventory Turnover Reports"])
+router = APIRouter(prefix="/reports", tags=["Inventory Turnover Reports"])
 
 mock_data = [
     {
@@ -32,12 +32,14 @@ mock_data = [
     }
 ]
 
-@router.get("", response_model=List[InventoryTurnoverResponse])
+@router.get("/inventory-turnover", response_model=List[InventoryTurnoverResponse])
+@router.get("/inventory/turnover", response_model=List[InventoryTurnoverResponse])
 def get_inventory_turnover_report(
     warehouse_id: Optional[str] = None,
     product_id: Optional[str] = None,
     from_date: Optional[str] = None,
-    to_date: Optional[str] = None
+    to_date: Optional[str] = None,
+    search: Optional[str] = None
 ):
     results = []
     

@@ -13,7 +13,13 @@ echo [1/2] Dang khoi chay Backend FastAPI (Port 8001)...
 start "Backend API (Port 8001)" cmd /k "cd /d %~dp0backend && python main.py"
 
 echo [2/2] Dang khoi chay Frontend Vite (Port 5173)...
-start "Frontend Web (Port 5173)" cmd /k "cd /d %~dp0frontend && npm run dev"
+if exist "%~dp0..\Sales-Warehouse-System_Frontend" (
+    start "Frontend Web (Port 5173)" cmd /k "cd /d %~dp0..\Sales-Warehouse-System_Frontend && npm run dev"
+) else if exist "%~dp0frontend" (
+    start "Frontend Web (Port 5173)" cmd /k "cd /d %~dp0frontend && npm run dev"
+) else (
+    echo [Frontend] Khong tim thay thu muc Frontend!
+)
 
 echo.
 echo ======================================================================
